@@ -12,7 +12,7 @@ function getCompressor(::Type{BloscCompressor},d::Dict)
     BloscCompressor(d["blocksize"],d["clevel"],d["cname"],d["shuffle"]>0)
 end
 function read_uncompress!(a,f,::BloscCompressor)
-  r=read(filename)
+  r=read(f)
   Blosc.decompress!(reshape(a,length(a)),r);
 end
 

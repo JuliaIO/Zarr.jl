@@ -1,5 +1,6 @@
-module ZArray.jl
-import .Compressors: Compressor, read_uncompress
+module ZArrays
+import JSON
+import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor
 
 ztype2jltype = Dict(
   "<f4"=>Float32,
@@ -25,6 +26,10 @@ struct ZArray{T,N,C<:Compressor}
     fillval::T
     compressor::C
 end
+Base.eltype(::ZArray{T}) where T =  T
+Base.ndims(::ZArray{<:Any,N}) where N = N
+Base.size(z::ZArray)=z.size
+Base.size(z::ZArray,i)=s.size[i]
 
 function ZArray(folder::String)
     files = readdir(folder)
@@ -40,11 +45,63 @@ function ZArray(folder::String)
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
     ZArray{dt,length(shape),typeof(compressor)}(folder,shape,order(),chunks,fillval,compressor)
 end
+convert_index(i,s::Int)=i
+convert_index(::Colon,s::Int)=Base.OneTo(s)
+trans_ind(r::UnitRange,bs) = ((first(r)-1)÷bs):((last(r)-1)÷bs)
+trans_ind(r::Integer,bs)   = (r-1)÷bs
+function inds_in_block(r::CartesianIndices{N}, #Outer Array indices to read
+        bI::CartesianIndex{N}, #Index of the current block to read
+        blockAll::CartesianIndices{N}, # All blocks to read
+        c::NTuple{N,Int}, # Chunks
+        enumI::CartesianIndices{N}, # Idices of all block to read
+        offsfirst::NTuple{N,Int} # Offset of the first block to read
+        ) where N
+
+    sI=size(enumI)
+    map(r.indices,bI.I,blockAll.indices,reverse(c),enumI.indices,sI,offsfirst) do iouter, iblock, ablock, chunk, enu , senu, o0
+
+        if iblock==first(ablock)
+            i1=mod1(first(iouter),chunk)
+            io1=1
+        else
+            i1=1
+            io1=o0+(iblock-first(ablock)-1)*chunk+1
+        end
+        if iblock==last(ablock)
+            i2=mod1(last(iouter),chunk)
+            io2=length(iouter)
+        else
+            i2=chunk
+            io2=(iblock-first(ablock))*chunk+o0
+        end
+        i1:i2,io1:io2
+    end
+end
+
+function Base.getindex(z::ZArray,i...)
+  ii=CartesianIndices(map(convert_index,i,size(z)))
+  aout=zeros(size(ii))
+  readblock!(aout,z,ii)
+end
 function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
     length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    i=CartesianIndex((1,1,1))
-    filename=joinpath(z.folder,join(map(i->i-1,i.I),'.'))
+    filename=joinpath(z.folder,join(reverse(i.I),'.'))
+    read_uncompress!(a,filename,z.compressor)
     a
+end
+function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N}) where N
+    blockr = CartesianIndices(map(trans_ind,r.indices,reverse(z.chunks)))
+    enumI = CartesianIndices(blockr)
+    offsfirst = map((a,bs)->mod(first(a)-1,bs)+1,r.indices,reverse(z.chunks))
+    a = zeros(eltype(z),reverse(z.chunks))
+    for bI in blockr
+        readchunk!(a,z,bI)
+        ii = inds_in_block(r,bI,blockr,z.chunks,enumI,offsfirst)
+        i_in_a = CartesianIndices(map(i->i[1],ii))
+        i_in_out = CartesianIndices(map(i->i[2],ii))
+        aout[i_in_out]=a[i_in_a]
+    end
+    aout
 end
 
 end
