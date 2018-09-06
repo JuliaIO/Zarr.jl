@@ -1,6 +1,8 @@
 module ZArrays
 import JSON
+import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk
 import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor
+export ZArray
 
 ztype2jltype = Dict(
   "<f4"=>Float32,
@@ -15,21 +17,24 @@ const StorageOrder = Union{C,F}
 
 zorder2order(x) = x=="C" ? C : x=="F" ? F : error("Unknown storage order")
 
-getfillval(target::Type{T},t::String) where T<: Number =parse(T,t)
-getfillval(target::Type{T},t::T) where T = t
 
-struct ZArray{T,N,C<:Compressor}
-    folder::String
+getfillval(target::Type{T},t::String) where T<: Number =parse(T,t)
+getfillval(target::Type{T},t::Union{T,Nothing}) where T = t
+
+struct ZArray{T,N,C<:Compressor,S<:ZStorage}
+    folder::S
     size::NTuple{N,Int}
     order::StorageOrder
     chunks::NTuple{N,Int}
-    fillval::T
+    fillval::Union{T,Nothing}
     compressor::C
+    attrs::Dict
 end
 Base.eltype(::ZArray{T}) where T =  T
 Base.ndims(::ZArray{<:Any,N}) where N = N
 Base.size(z::ZArray)=z.size
 Base.size(z::ZArray,i)=s.size[i]
+zname(z::ZArray)=zname(z.folder)
 
 function ZArray(folder::String)
     files = readdir(folder)
@@ -43,11 +48,12 @@ function ZArray(folder::String)
     fillval = getfillval(dt,arrayinfo["fill_value"])
     compdict = arrayinfo["compressor"]
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
-    ZArray{dt,length(shape),typeof(compressor)}(folder,shape,order(),chunks,fillval,compressor)
+    attrs = getattrs(DiskStorage(folder))
+    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),shape,order(),chunks,fillval,compressor,attrs)
 end
 convert_index(i,s::Int)=i
 convert_index(::Colon,s::Int)=Base.OneTo(s)
-trans_ind(r::UnitRange,bs) = ((first(r)-1)÷bs):((last(r)-1)÷bs)
+trans_ind(r::AbstractUnitRange,bs) = ((first(r)-1)÷bs):((last(r)-1)÷bs)
 trans_ind(r::Integer,bs)   = (r-1)÷bs
 function inds_in_block(r::CartesianIndices{N}, #Outer Array indices to read
         bI::CartesianIndex{N}, #Index of the current block to read
@@ -83,13 +89,23 @@ function Base.getindex(z::ZArray,i...)
   aout=zeros(size(ii))
   readblock!(aout,z,ii)
 end
+function Base.getindex(z::ZArray,v,i...)
+  ii=CartesianIndices(map(convert_index,i,size(z)))
+  readblock!(v,z,ii,readmode=false)
+end
 function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
     length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    filename=joinpath(z.folder,join(reverse(i.I),'.'))
-    read_uncompress!(a,filename,z.compressor)
+    curchunk=getchunk(z.folder,i)
+    read_uncompress!(a,curchunk,z.compressor)
     a
 end
-function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N}) where N
+function writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
+    length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+    curchunk=getchunk(z.folder,i)
+    write_compress!(a,curchunk,z.compressor)
+    a
+end
+function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N};readmode=true) where N
     blockr = CartesianIndices(map(trans_ind,r.indices,reverse(z.chunks)))
     enumI = CartesianIndices(blockr)
     offsfirst = map((a,bs)->mod(first(a)-1,bs)+1,r.indices,reverse(z.chunks))
@@ -99,7 +115,12 @@ function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N}) where N
         ii = inds_in_block(r,bI,blockr,z.chunks,enumI,offsfirst)
         i_in_a = CartesianIndices(map(i->i[1],ii))
         i_in_out = CartesianIndices(map(i->i[2],ii))
-        aout[i_in_out]=a[i_in_a]
+        if readmode
+          aout[i_in_out]=a[i_in_a]
+        else
+          a[i_in_a]=aout[i_in_out]
+          writechunk!(a,z,bI)
+        end
     end
     aout
 end
