@@ -3,6 +3,7 @@ import JSON
 import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk
 import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor
 export ZArray
+using Dates
 
 ztype2jltype = Dict(
   "<f4"=>Float32,
@@ -34,6 +35,7 @@ Base.eltype(::ZArray{T}) where T =  T
 Base.ndims(::ZArray{<:Any,N}) where N = N
 Base.size(z::ZArray)=z.size
 Base.size(z::ZArray,i)=s.size[i]
+Base.length(z::ZArray)=prod(z.size)
 zname(z::ZArray)=zname(z.folder)
 
 function ZArray(folder::String)
@@ -51,7 +53,8 @@ function ZArray(folder::String)
     attrs = getattrs(DiskStorage(folder))
     ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),shape,order(),chunks,fillval,compressor,attrs)
 end
-convert_index(i,s::Int)=i
+convert_index(i,s::Int)=i:i
+convert_index(i::AbstractUnitRange,s::Int)=i
 convert_index(::Colon,s::Int)=Base.OneTo(s)
 trans_ind(r::AbstractUnitRange,bs) = ((first(r)-1)÷bs):((last(r)-1)÷bs)
 trans_ind(r::Integer,bs)   = (r-1)÷bs
@@ -89,7 +92,7 @@ function Base.getindex(z::ZArray,i...)
   aout=zeros(size(ii))
   readblock!(aout,z,ii)
 end
-function Base.getindex(z::ZArray,v,i...)
+function Base.setindex!(z::ZArray,v,i...)
   ii=CartesianIndices(map(convert_index,i,size(z)))
   readblock!(v,z,ii,readmode=false)
 end
