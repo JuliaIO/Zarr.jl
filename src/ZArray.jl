@@ -3,7 +3,6 @@ import JSON
 import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk
 import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor
 export ZArray
-using Dates
 
 ztype2jltype = Dict(
   "<f4"=>Float32,
@@ -30,6 +29,7 @@ struct ZArray{T,N,C<:Compressor,S<:ZStorage}
     fillval::Union{T,Nothing}
     compressor::C
     attrs::Dict
+    writeable::Bool
 end
 Base.eltype(::ZArray{T}) where T =  T
 Base.ndims(::ZArray{<:Any,N}) where N = N
@@ -38,7 +38,7 @@ Base.size(z::ZArray,i)=s.size[i]
 Base.length(z::ZArray)=prod(z.size)
 zname(z::ZArray)=zname(z.folder)
 
-function ZArray(folder::String)
+function ZArray(folder::String,mode="r")
     files = readdir(folder)
     @assert in(".zarray",files)
     arrayinfo = JSON.parsefile(joinpath(folder,".zarray"))
@@ -51,7 +51,8 @@ function ZArray(folder::String)
     compdict = arrayinfo["compressor"]
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
     attrs = getattrs(DiskStorage(folder))
-    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),shape,order(),chunks,fillval,compressor,attrs)
+    writeable= mode=="w"
+    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),shape,order(),chunks,fillval,compressor,attrs,writeable)
 end
 convert_index(i,s::Int)=i:i
 convert_index(i::AbstractUnitRange,s::Int)=i
@@ -103,12 +104,16 @@ function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where 
     a
 end
 function writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
-    length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk=getchunk(z.folder,i)
-    write_compress!(a,curchunk,z.compressor)
-    a
+  z.writeable || error("ZArray not in write mode")
+  length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  curchunk=getchunk(z.folder,i)
+  write_compress!(a,curchunk,z.compressor)
+  a
 end
 function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N};readmode=true) where N
+    if !readmode && !z.writeable
+      error("Trying to write to read-only ZArray")
+    end
     blockr = CartesianIndices(map(trans_ind,r.indices,reverse(z.chunks)))
     enumI = CartesianIndices(blockr)
     offsfirst = map((a,bs)->mod(first(a)-1,bs)+1,r.indices,reverse(z.chunks))

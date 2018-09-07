@@ -46,7 +46,7 @@ function zopen(p::String)
   elseif isfile(joinpath(p,".zgroup"))
     return ZGroup(p)
   else
-    throw(ArgumentError("Specified path is neither a ZArray nor a ZGroup"))
+    throw(ArgumentError("Specified path $p is neither a ZArray nor a ZGroup"))
   end
 end
 
