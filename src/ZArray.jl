@@ -1,8 +1,9 @@
 module ZArrays
 import JSON
-import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk
-import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor
-export ZArray
+import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk, MemStorage
+import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor,
+  write_compress, NoCompressor, areltype
+export ZArray, zzeros
 
 ztype2jltype = Dict(
   "<f4"=>Float32,
@@ -23,9 +24,9 @@ getfillval(target::Type{T},t::Union{T,Nothing}) where T = t
 
 struct ZArray{T,N,C<:Compressor,S<:ZStorage}
     folder::S
-    size::NTuple{N,Int}
+    size::NTuple{N,Int} # Stored in Julia order
     order::StorageOrder
-    chunks::NTuple{N,Int}
+    chunks::NTuple{N,Int} # Stored in Julia order
     fillval::Union{T,Nothing}
     compressor::C
     attrs::Dict
@@ -52,7 +53,7 @@ function ZArray(folder::String,mode="r")
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
     attrs = getattrs(DiskStorage(folder))
     writeable= mode=="w"
-    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),shape,order(),chunks,fillval,compressor,attrs,writeable)
+    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
 end
 convert_index(i,s::Int)=i:i
 convert_index(i::AbstractUnitRange,s::Int)=i
@@ -68,7 +69,7 @@ function inds_in_block(r::CartesianIndices{N}, #Outer Array indices to read
         ) where N
 
     sI=size(enumI)
-    map(r.indices,bI.I,blockAll.indices,reverse(c),enumI.indices,sI,offsfirst) do iouter, iblock, ablock, chunk, enu , senu, o0
+    map(r.indices,bI.I,blockAll.indices,c,enumI.indices,sI,offsfirst) do iouter, iblock, ablock, chunk, enu , senu, o0
 
         if iblock==first(ablock)
             i1=mod1(first(iouter),chunk)
@@ -88,9 +89,9 @@ function inds_in_block(r::CartesianIndices{N}, #Outer Array indices to read
     end
 end
 
-function Base.getindex(z::ZArray,i...)
+function Base.getindex(z::ZArray{T},i...) where T
   ii=CartesianIndices(map(convert_index,i,size(z)))
-  aout=zeros(size(ii))
+  aout=zeros(T,size(ii))
   readblock!(aout,z,ii)
 end
 function Base.setindex!(z::ZArray,v,i...)
@@ -100,37 +101,85 @@ end
 function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
     length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk=getchunk(z.folder,i)
-    read_uncompress!(a,curchunk,z.compressor)
+    if curchunk==nothing
+      fill!(a,z.fillval)
+    else
+      read_uncompress!(a,curchunk,z.compressor)
+    end
     a
 end
 function writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
   z.writeable || error("ZArray not in write mode")
   length(a)==prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   curchunk=getchunk(z.folder,i)
-  write_compress!(a,curchunk,z.compressor)
+  write_compress(a,curchunk,z.compressor)
   a
 end
 function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N};readmode=true) where N
     if !readmode && !z.writeable
       error("Trying to write to read-only ZArray")
     end
-    blockr = CartesianIndices(map(trans_ind,r.indices,reverse(z.chunks)))
+    blockr = CartesianIndices(map(trans_ind,r.indices,z.chunks))
     enumI = CartesianIndices(blockr)
-    offsfirst = map((a,bs)->mod(first(a)-1,bs)+1,r.indices,reverse(z.chunks))
-    a = zeros(eltype(z),reverse(z.chunks))
+    offsfirst = map((a,bs)->mod(first(a)-1,bs)+1,r.indices,z.chunks)
+    a = zeros(eltype(z),z.chunks)
+    linoutinds = LinearIndices(r)
     for bI in blockr
-        readchunk!(a,z,bI)
+        readchunk!(a,z,bI+one(bI))
         ii = inds_in_block(r,bI,blockr,z.chunks,enumI,offsfirst)
         i_in_a = CartesianIndices(map(i->i[1],ii))
         i_in_out = CartesianIndices(map(i->i[2],ii))
         if readmode
           aout[i_in_out]=a[i_in_a]
         else
-          a[i_in_a]=aout[i_in_out]
-          writechunk!(a,z,bI)
+          i_in_out2 = linoutinds[i_in_out]
+          a[i_in_a]=aout[i_in_out2]
+          writechunk!(a,z,bI+one(bI))
         end
     end
     aout
 end
+
+function zzeros(::Type{T},
+        dims...;
+        path="",
+        name="",
+        chunks=dims,
+        fillval=nothing,
+        compressor=NoCompressor(),
+        attrs=Dict(),
+        writeable=true,
+        ) where T
+    length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
+    N=length(dims)
+    nsubs = map((s,c)->ceil(Int,s/c),dims,chunks)
+    et    = areltype(compressor,T)
+    if isempty(path)
+        isempty(name) && (name="data")
+        a=Array{et}(undef,nsubs...)
+        for i in eachindex(a)
+            a[i]=T[]
+        end
+        folder=MemStorage(name,a)
+    else
+      # Assume that we write to disk, no S3 yet
+      if isempty(name)
+        name = splitdir(path)[2]
+      else
+        path = joinpath(path,name)
+      end
+      isdir(path) && error("Directory $path already exists")
+      mkpath(path)
+      #Generate JSON file
+
+    end
+    z=ZArray{T,N,typeof(compressor),typeof(folder)}(folder,dims,F(),chunks,fillval,compressor,attrs,writeable)
+    as = zeros(T,chunks...)
+    for i in CartesianIndices(a)
+        writechunk!(as,z,i)
+    end
+    z
+end
+
 
 end
