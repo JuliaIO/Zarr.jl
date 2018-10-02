@@ -8,6 +8,8 @@ struct BloscCompressor <: Compressor
     cname::String
     shuffle::Bool
 end
+BloscCompressor(;blocksize=0,clevel=5,cname="lz4",shuffle=true)=
+  BloscCompressor(blocksize,clevel,cname,shuffle)
 function getCompressor(::Type{BloscCompressor},d::Dict)
     BloscCompressor(d["blocksize"],d["clevel"],d["cname"],d["shuffle"]>0)
 end
@@ -28,6 +30,8 @@ function write_compress(a,f::AbstractArray,c::BloscCompressor)
   append!(f,r)
 end
 areltype(::BloscCompressor,_)=Vector{UInt8}
+tojson(c::BloscCompressor)=Dict("id"=>"blosc","cname"=>c.cname,
+  "clevel"=>c.clevel,"shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
 struct NoCompressor <: Compressor end
 
@@ -43,5 +47,5 @@ function write_compress(a,f::AbstractArray,::NoCompressor)
   append!(f,a)
 end
 areltype(::NoCompressor,T)=Vector{T}
-
+tojson(::NoCompressor)=nothing
 end
