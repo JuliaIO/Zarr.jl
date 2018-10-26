@@ -15,6 +15,10 @@ function getchunk(s::DiskStorage, i::CartesianIndex)
   end
   f
 end
+function adddir(s::DiskStorage,i::String)
+  f = joinpath(s.folder,i)
+  mkpath(f)
+end
 zname(z::DiskStorage)=splitdir(z.folder)[2]
 
 struct MemStorage{T} <: ZStorage

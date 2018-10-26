@@ -50,4 +50,24 @@ function zopen(p::String)
   end
 end
 
+function zgroup(p::String;attrs=Dict())
+  d = Dict("zarr_format"=>2)
+  isdir(p) && throw(ArgumentError("Path $p already exists."))
+  mkpath(p)
+  open(joinpath(p,".zgroup"),"w") do f
+    JSON.print(f,d)
+  end
+  ZGroup(DiskStorage(p),Dict{String,ZArray}(),Dict{String,ZGroup}(),attrs)
+end
+
+function zzeros(g::ZGroup,addargs...;kwargs...)
+  :name in keys(kwargs) || throw(ArgumentError("You must provide a name"))
+  if isa(g.folder,MemStorage)
+    error("Not implemented")
+  elseif isa(g.folder,DiskStorage)
+    zzeros(addargs...;kwargs...,path=joinpath(g.folder.folder,"name"))
+
+  end
+end
+
 end #module

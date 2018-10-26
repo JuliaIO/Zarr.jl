@@ -12,6 +12,17 @@ ztype2jltype = Dict(
   "<i4"=>Int32,
   "<i8"=>Int64
 )
+struct FixedLengthUTF8String{L} end
+jltype(a::Type{T}) where T<:Number = T
+jltype(a::Type{FixedLengthUTF8String}) = String
+
+function tostore(t)
+  if startswith(t,"<U")
+    return FixedLengthUTF8String{parse(Int,t[3:end])}
+  else
+    ztype2jltype[t]
+  end
+end
 zshape2shape(x) = ntuple(i->x[i],length(x))
 struct C end
 struct F end
@@ -23,7 +34,7 @@ zorder2order(x) = x=="C" ? C : x=="F" ? F : error("Unknown storage order")
 getfillval(target::Type{T},t::String) where T<: Number =parse(T,t)
 getfillval(target::Type{T},t::Union{T,Nothing}) where T = t
 
-struct ZArray{T,N,C<:Compressor,S<:ZStorage}
+struct ZArray{T,N,C<:Compressor,S<:ZStorage,T2}
     folder::S
     size::NTuple{N,Int} # Stored in Julia order
     order::StorageOrder
@@ -48,7 +59,7 @@ function ZArray(folder::String,mode="r")
     files = readdir(folder)
     @assert in(".zarray",files)
     arrayinfo = JSON.parsefile(joinpath(folder,".zarray"))
-    dt = ztype2jltype[arrayinfo["dtype"]]
+    dt = tostore(arrayinfo["dtype"])
     shape = zshape2shape(arrayinfo["shape"])
     order = zorder2order(arrayinfo["order"])
     arrayinfo["zarr_format"] != 2 && error("Expecting Zarr format version 2")
@@ -58,7 +69,7 @@ function ZArray(folder::String,mode="r")
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
     attrs = getattrs(DiskStorage(folder))
     writeable= mode=="w"
-    ZArray{dt,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
+    ZArray{jltype(dt),length(shape),typeof(compressor),DiskStorage,dt}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
 end
 convert_index(i::Integer,s::Int)=i:i
 convert_index(i::AbstractUnitRange,s::Int)=i
@@ -162,7 +173,7 @@ function readblock!(aout,z::ZArray{<:Any,N},r::CartesianIndices{N};readmode=true
         i_in_a = CartesianIndices(map(i->i[1],ii))
         i_in_out = CartesianIndices(map(i->i[2],ii))
         if readmode
-          aout[i_in_out]=a[i_in_a]
+          aout[i_in_out.indices...].=view(a,i_in_a)
         else
           a[i_in_a].=extractreadinds(aout,linoutinds,i_in_out)
           writechunk!(a,z,bI+one(bI))
