@@ -1,7 +1,10 @@
+#Defines different storages for zarr arrays. Currently only refular files (DIskStorage)
+#and Dictionaries are supported
 module Storage
 abstract type ZStorage end
 import JSON
 
+# Stores files in a regular file system
 struct DiskStorage <: ZStorage
   folder::String
 end
@@ -21,6 +24,8 @@ function adddir(s::DiskStorage,i::String)
 end
 zname(z::DiskStorage)=splitdir(z.folder)[2]
 
+
+#Stores data in a simple dict in memory
 struct MemStorage{T} <: ZStorage
   name::String
   a::T

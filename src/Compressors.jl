@@ -18,6 +18,7 @@ function read_uncompress!(a,f::String,c::BloscCompressor)
   read_uncompress!(a,r,c)
 end
 read_uncompress!(a,r::AbstractArray,::BloscCompressor)=copyto!(a,Blosc.decompress(eltype(a),r));
+
 function write_compress(a,f::String,c::BloscCompressor)
   Blosc.set_compressor(c.cname)
   r=Blosc.compress(a; level=c.clevel, shuffle=c.shuffle)
