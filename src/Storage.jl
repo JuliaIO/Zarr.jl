@@ -4,9 +4,17 @@ module Storage
 abstract type ZStorage end
 import JSON
 
+"Normalize logical storage path"
+function normalize_path(p::AbstractString)
+    p = normpath(p)
+    p = replace(p, '\\'=>'/')
+    strip(p, '/')
+end
+
 # Stores files in a regular file system
 struct DiskStorage <: ZStorage
   folder::String
+  DiskStorage(p) = new(normalize_path(p))
 end
 getattrs(p::DiskStorage)=isfile(joinpath(p.folder,".zattrs")) ? JSON.parsefile(joinpath(p.folder,".zattrs")) : Dict()
 function getchunk(s::DiskStorage, i::CartesianIndex)

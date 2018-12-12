@@ -1,34 +1,11 @@
 module ZArrays
 import JSON
+import ZarrNative: typestr
 import ..Compressors
 import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk, MemStorage
 import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor,
   write_compress, NoCompressor, areltype
 export ZArray, zzeros
-
-# Some function to parse metadata and translate between julia and zarr datatypes
-ztype2jltype = Dict(
-  "<f4"=>Float32,
-  "<f8"=>Float64,
-  "<i4"=>Int32,
-  "<i8"=>Int64
-)
-
-#String handling is quite complicated see this https://zarr.readthedocs.io/en/stable/tutorial.html#string-arrays
-#for different options that would have to be suported
-#This is an initial take on fixed-length UTF8 Strings
-struct FixedLengthUTF8String{L} end
-jltype(a::Type{T}) where T<:Number = T
-jltype(a::Type{FixedLengthUTF8String}) = String
-
-#Translates JSON entry to a julia data type
-function tostore(t)
-  if startswith(t,"<U")
-    return FixedLengthUTF8String{parse(Int,t[3:end])}
-  else
-    ztype2jltype[t]
-  end
-end
 
 zshape2shape(x) = ntuple(i->x[i],length(x))
 
@@ -46,7 +23,7 @@ getfillval(target::Type{T},t::Union{T,Nothing}) where T = t
 #chunks(chunk size) and size are always in Julia column-major order
 #Currently this is not an AbstractArray, because indexing single elements is
 #would be really slow, although most AbstractArray interface functions are implemented
-struct ZArray{T,N,C<:Compressor,S<:ZStorage,T2}
+struct ZArray{T,N,C<:Compressor,S<:ZStorage}
     folder::S
     size::NTuple{N,Int} # Stored in Julia order
     order::StorageOrder
@@ -74,7 +51,7 @@ function ZArray(folder::String,mode="r")
     files = readdir(folder)
     @assert in(".zarray",files)
     arrayinfo = JSON.parsefile(joinpath(folder,".zarray"))
-    dt = tostore(arrayinfo["dtype"])
+    T = typestr(arrayinfo["dtype"])
     shape = zshape2shape(arrayinfo["shape"])
     order = zorder2order(arrayinfo["order"])
     arrayinfo["zarr_format"] != 2 && error("Expecting Zarr format version 2")
@@ -84,7 +61,7 @@ function ZArray(folder::String,mode="r")
     compressor = getCompressor(compressortypes[compdict["id"]],compdict)
     attrs = getattrs(DiskStorage(folder))
     writeable= mode=="w"
-    ZArray{jltype(dt),length(shape),typeof(compressor),DiskStorage,dt}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
+    ZArray{T,length(shape),typeof(compressor),DiskStorage}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
 end
 
 """
@@ -293,7 +270,7 @@ function zzeros(::Type{T},
       jsondict = Dict()
       jsondict["chunks"] = reverse(chunks)
       jsondict["compressor"] = Compressors.tojson(compressor)
-      jsondict["dtype"] = findfirst(isequal(T),ztype2jltype)
+      jsondict["dtype"] = typestr(T)
       jsondict["fill_value"] = fillval
       jsondict["filters"] = nothing
       jsondict["order"] = "C"
@@ -307,14 +284,13 @@ function zzeros(::Type{T},
       end
       folder = DiskStorage(path)
     end
-    z=ZArray{jltype(T),N,typeof(compressor),typeof(folder),T}(folder,dims,F(),chunks,fillval,compressor,attrs,writeable)
+    z=ZArray{T,N,typeof(compressor),typeof(folder)}(folder,dims,F(),chunks,fillval,compressor,attrs,writeable)
     as = zeros(T,chunks...)
     for i in CartesianIndices(map(i->1:i,nsubs))
         writechunk!(as,z,i)
     end
     z
 end
-#ZArray{jltype(dt),length(shape),typeof(compressor),DiskStorage,dt}(DiskStorage(folder),reverse(shape),order(),reverse(chunks),fillval,compressor,attrs,writeable)
 
 
 end
