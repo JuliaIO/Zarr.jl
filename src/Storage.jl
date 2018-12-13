@@ -1,6 +1,5 @@
-#Defines different storages for zarr arrays. Currently only refular files (DIskStorage)
-#and Dictionaries are supported
-module Storage
+# Defines different storages for zarr arrays. Currently only regular files (DiskStorage)
+# and Dictionaries are supported
 abstract type ZStorage end
 import JSON
 
@@ -43,6 +42,4 @@ zname(s::MemStorage)=s.name
 "Returns the chunk at index i if present"
 function getchunk(s::MemStorage,  i::CartesianIndex)
   s.a[i]
-end
-
 end

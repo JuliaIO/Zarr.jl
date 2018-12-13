@@ -1,4 +1,3 @@
-module Compressors
 import Blosc
 
 abstract type Compressor end
@@ -49,4 +48,3 @@ function write_compress(a,f::AbstractArray,::NoCompressor)
 end
 areltype(::NoCompressor,T)=Vector{T}
 tojson(::NoCompressor)=nothing
-end

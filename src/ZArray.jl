@@ -1,11 +1,4 @@
-module ZArrays
 import JSON
-import ZarrNative: typestr
-import ..Compressors
-import ..Storage: ZStorage, getattrs, DiskStorage, zname, getchunk, MemStorage
-import ..Compressors: Compressor, read_uncompress!, compressortypes, getCompressor,
-  write_compress, NoCompressor, areltype
-export ZArray, zzeros
 
 zshape2shape(x) = ntuple(i->x[i],length(x))
 
@@ -242,7 +235,7 @@ function zzeros(::Type{T},
         name="",
         chunks=dims,
         fillval=nothing,
-        compressor=Compressors.BloscCompressor(),
+        compressor=BloscCompressor(),
         attrs=Dict(),
         writeable=true,
         ) where T
@@ -269,7 +262,7 @@ function zzeros(::Type{T},
       #Generate JSON file
       jsondict = Dict()
       jsondict["chunks"] = reverse(chunks)
-      jsondict["compressor"] = Compressors.tojson(compressor)
+      jsondict["compressor"] = tojson(compressor)
       jsondict["dtype"] = typestr(T)
       jsondict["fill_value"] = fillval
       jsondict["filters"] = nothing
@@ -290,7 +283,4 @@ function zzeros(::Type{T},
         writechunk!(as,z,i)
     end
     z
-end
-
-
 end

@@ -7,18 +7,18 @@ using JSON
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int, 2, 3)
-        @test z isa ZArray{Int, 2, ZarrNative.Compressors.BloscCompressor,
-            ZarrNative.Storage.MemStorage{Matrix{Vector{UInt8}}}}
+        @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
+            ZarrNative.MemStorage{Matrix{Vector{UInt8}}}}
 
         @test z.folder.name === "data"
         @test length(z.folder.a) === 1
         @test length(z.folder.a[1]) === 64
         @test eltype(z.folder.a[1]) === UInt8
         @test z.size === (2, 3)
-        @test z.order === ZarrNative.ZArrays.F()
+        @test z.order === ZarrNative.F()
         @test z.chunks === (2, 3)
         @test z.fillval === nothing
-        @test z.compressor isa ZarrNative.Compressors.BloscCompressor
+        @test z.compressor isa ZarrNative.BloscCompressor
         @test z.compressor.blocksize === 0
         @test z.compressor.clevel === 5
         @test z.compressor.cname === "lz4"
@@ -29,8 +29,8 @@ using JSON
 
     @testset "methods" begin
         z = zzeros(Int, 2, 3)
-        @test z isa ZArray{Int, 2, ZarrNative.Compressors.BloscCompressor,
-            ZarrNative.Storage.MemStorage{Matrix{Vector{UInt8}}}}
+        @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
+            ZarrNative.MemStorage{Matrix{Vector{UInt8}}}}
 
         @test eltype(z) === Int
         @test ndims(z) === 2
@@ -38,17 +38,17 @@ using JSON
         @test size(z, 2) === 3
         @test length(z) === 2 * 3
         @test lastindex(z, 2) === 3
-        @test ZarrNative.Storage.zname(z) === "data"
+        @test ZarrNative.zname(z) === "data"
     end
 
     @testset "NoCompressor DiskStorage" begin
         mktempdir(@__DIR__) do dir
             name = "nocompressor"
             z = zzeros(Int, 2, 3, path="$dir/$name",
-                compressor=ZarrNative.Compressors.NoCompressor())
+                compressor=ZarrNative.NoCompressor())
 
-            @test z.compressor === ZarrNative.Compressors.NoCompressor()
-            @test z.folder === ZarrNative.Storage.DiskStorage("$dir/$name")
+            @test z.compressor === ZarrNative.NoCompressor()
+            @test z.folder === ZarrNative.DiskStorage("$dir/$name")
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -123,8 +123,8 @@ end
 @testset "Storage" begin
     mixed_path = ".\\\\path///to\\a\\place/..\\///"
     norm_path = "path/to/a"
-    @test ZarrNative.Storage.normalize_path(mixed_path) == norm_path
-    @test ZarrNative.Storage.DiskStorage(mixed_path).folder == norm_path
+    @test ZarrNative.normalize_path(mixed_path) == norm_path
+    @test ZarrNative.DiskStorage(mixed_path).folder == norm_path
 end
 
 end  # @testset "ZarrNative"

@@ -1,8 +1,3 @@
-module ZGroups
-import ..Storage: ZStorage, DiskStorage, getattrs, zname
-import ..ZArrays: ZArray
-export zopen, ZGroup
-
 struct ZGroup{S<:ZStorage}
   folder::S
   arrays::Dict{String,ZArray}
@@ -69,5 +64,3 @@ function zzeros(g::ZGroup,addargs...;kwargs...)
 
   end
 end
-
-end #module
