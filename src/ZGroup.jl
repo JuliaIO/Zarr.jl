@@ -1,4 +1,4 @@
-struct ZGroup{S<:ZStorage}
+struct ZGroup{S<:AbstractStore}
     storage::S
     arrays::Dict{String, ZArray}
     groups::Dict{String, ZGroup}
@@ -18,8 +18,8 @@ function ZGroup(p::String)
             groups[d] = m
         end
     end
-    attrs = getattrs(DiskStorage(p))
-    ZGroup(DiskStorage(p), arrays, groups, attrs)
+    attrs = getattrs(DirectoryStore(p))
+    ZGroup(DirectoryStore(p), arrays, groups, attrs)
 end
 
 function Base.show(io::IO, g::ZGroup)
@@ -56,14 +56,14 @@ function zgroup(p::String; attrs=Dict())
     open(joinpath(p, ".zgroup"), "w") do f
        JSON.print(f, d)
     end
-    ZGroup(DiskStorage(p), Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
+    ZGroup(DirectoryStore(p), Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
 end
 
 function zzeros(g::ZGroup, addargs...; kwargs...)
     :name in keys(kwargs) || throw(ArgumentError("You must provide a name"))
-    if isa(g.storage, MemStorage)
+    if isa(g.storage, DictStore)
         error("Not implemented")
-    elseif isa(g.storage, DiskStorage)
+    elseif isa(g.storage, DirectoryStore)
         zzeros(addargs...; kwargs..., path=joinpath(g.storage.folder, "name"))
     end
 end

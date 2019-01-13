@@ -8,7 +8,7 @@ using JSON
     @testset "fields" begin
         z = zzeros(Int, 2, 3)
         @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
-            ZarrNative.MemStorage{Matrix{Vector{UInt8}}}}
+            ZarrNative.DictStore{Matrix{Vector{UInt8}}}}
 
         @test z.storage.name === "data"
         @test length(z.storage.a) === 1
@@ -30,7 +30,7 @@ using JSON
     @testset "methods" begin
         z = zzeros(Int, 2, 3)
         @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
-            ZarrNative.MemStorage{Matrix{Vector{UInt8}}}}
+            ZarrNative.DictStore{Matrix{Vector{UInt8}}}}
 
         @test eltype(z) === Int
         @test ndims(z) === 2
@@ -41,14 +41,14 @@ using JSON
         @test ZarrNative.zname(z) === "data"
     end
 
-    @testset "NoCompressor DiskStorage" begin
+    @testset "NoCompressor DirectoryStore" begin
         mktempdir(@__DIR__) do dir
             name = "nocompressor"
             z = zzeros(Int, 2, 3, path="$dir/$name",
                 compressor=ZarrNative.NoCompressor())
 
             @test z.metadata.compressor === ZarrNative.NoCompressor()
-            @test z.storage === ZarrNative.DiskStorage("$dir/$name")
+            @test z.storage === ZarrNative.DirectoryStore("$dir/$name")
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -124,7 +124,7 @@ end
     mixed_path = ".\\\\path///to\\a\\place/..\\///"
     norm_path = "path/to/a"
     @test ZarrNative.normalize_path(mixed_path) == norm_path
-    @test ZarrNative.DiskStorage(mixed_path).folder == norm_path
+    @test ZarrNative.DirectoryStore(mixed_path).folder == norm_path
 end
 
 end  # @testset "ZarrNative"

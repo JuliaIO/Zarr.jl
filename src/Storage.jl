@@ -1,8 +1,8 @@
-# Defines different storages for zarr arrays. Currently only regular files (DiskStorage)
+# Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
 import JSON
 
-abstract type ZStorage end
+abstract type AbstractStore end
 
 "Normalize logical storage path"
 function normalize_path(p::AbstractString)
@@ -12,12 +12,12 @@ function normalize_path(p::AbstractString)
 end
 
 # Stores files in a regular file system
-struct DiskStorage <: ZStorage
+struct DirectoryStore <: AbstractStore
     folder::String
-    DiskStorage(p) = new(normalize_path(p))
+    DirectoryStore(p) = new(normalize_path(p))
 end
 
-function getattrs(s::DiskStorage)
+function getattrs(s::DirectoryStore)
     if isfile(joinpath(s.folder, ".zattrs"))
         JSON.parsefile(joinpath(s.folder, ".zattrs"))
     else
@@ -25,7 +25,7 @@ function getattrs(s::DiskStorage)
     end
 end
 
-function getchunk(s::DiskStorage, i::CartesianIndex)
+function getchunk(s::DirectoryStore, i::CartesianIndex)
     f = joinpath(s.folder, join(reverse((i - one(i)).I), '.'))
     if !isfile(f)
         open(f, "w") do _
@@ -35,23 +35,23 @@ function getchunk(s::DiskStorage, i::CartesianIndex)
     f
 end
 
-function adddir(s::DiskStorage, i::String)
+function adddir(s::DirectoryStore, i::String)
     f = joinpath(s.folder, i)
     mkpath(f)
 end
 
-zname(s::DiskStorage) = splitdir(s.folder)[2]
+zname(s::DirectoryStore) = splitdir(s.folder)[2]
 
 
 # Stores data in a simple dict in memory
-struct MemStorage{T} <: ZStorage
+struct DictStore{T} <: AbstractStore
     name::String
     a::T
 end
 
-zname(s::MemStorage) = s.name
+zname(s::DictStore) = s.name
 
 "Returns the chunk at index i if present"
-function getchunk(s::MemStorage,  i::CartesianIndex)
+function getchunk(s::DictStore,  i::CartesianIndex)
     s.a[i]
 end

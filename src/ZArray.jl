@@ -7,7 +7,7 @@ getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 # chunks(chunk size) and size are always in Julia column-major order
 # Currently this is not an AbstractArray, because indexing single elements is
 # would be really slow, although most AbstractArray interface functions are implemented
-struct ZArray{T, N, C<:Compressor, S<:ZStorage}
+struct ZArray{T, N, C<:Compressor, S<:AbstractStore}
     metadata::Metadata{T, N, C}
     storage::S
     attrs::Dict
@@ -35,11 +35,11 @@ function ZArray(folder::String, mode="r")
     @assert in(".zarray", files)
     jsonstr = read(joinpath(folder, ".zarray"), String)
     metadata = Metadata(jsonstr)
-    storage = DiskStorage(folder)
-    attrs = getattrs(DiskStorage(folder))
+    storage = DirectoryStore(folder)
+    attrs = getattrs(DirectoryStore(folder))
     writeable = mode == "w"
-    ZArray{T, length(shape), typeof(compressor), DiskStorage}(
-        DiskStorage(folder), reverse(shape), order(), reverse(chunks), fillval,
+    ZArray{T, length(shape), typeof(compressor), DirectoryStore}(
+        DirectoryStore(folder), reverse(shape), order(), reverse(chunks), fillval,
         compressor, attrs, writeable)
     # z = ZArray{T, N, typeof(compressor), typeof(storage)}(
     z = ZArray(
@@ -242,7 +242,7 @@ function zzeros(::Type{T},
         for i in eachindex(a)
             a[i] = T[]
         end
-        storage = MemStorage(name, a)
+        storage = DictStore(name, a)
     else
         # Assume that we write to disk, no S3 yet
         if isempty(name)
@@ -268,7 +268,7 @@ function zzeros(::Type{T},
         open(joinpath(path, ".zattrs"), "w") do f
             JSON.print(f, attrs)
         end
-        storage = DiskStorage(path)
+        storage = DirectoryStore(path)
     end
     metadata = Metadata{T, N, C}(
         2,
