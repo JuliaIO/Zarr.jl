@@ -17,9 +17,9 @@ struct DiskStorage <: ZStorage
     DiskStorage(p) = new(normalize_path(p))
 end
 
-function getattrs(p::DiskStorage)
-    if isfile(joinpath(p.folder, ".zattrs"))
-        JSON.parsefile(joinpath(p.folder, ".zattrs"))
+function getattrs(s::DiskStorage)
+    if isfile(joinpath(s.folder, ".zattrs"))
+        JSON.parsefile(joinpath(s.folder, ".zattrs"))
     else
         Dict()
     end
@@ -40,7 +40,7 @@ function adddir(s::DiskStorage, i::String)
     mkpath(f)
 end
 
-zname(z::DiskStorage) = splitdir(z.folder)[2]
+zname(s::DiskStorage) = splitdir(s.folder)[2]
 
 
 # Stores data in a simple dict in memory

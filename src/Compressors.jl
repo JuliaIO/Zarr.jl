@@ -37,7 +37,7 @@ function write_compress(a, f::AbstractArray, c::BloscCompressor)
 end
 
 areltype(::BloscCompressor, _) = Vector{UInt8}
-tojson(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
+JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
 struct NoCompressor <: Compressor end
@@ -55,4 +55,4 @@ function write_compress(a, f::AbstractArray, ::NoCompressor)
 end
 
 areltype(::NoCompressor,T) = Vector{T}
-tojson(::NoCompressor) = nothing
+JSON.lower(::NoCompressor) = nothing

@@ -1,21 +1,5 @@
 import JSON
 
-zshape2shape(x) = ntuple(i -> x[i], length(x))
-
-struct C end
-struct F end
-const StorageOrder = Union{C, F}
-
-function zorder2order(x)
-    if x == "C"
-        C
-    elseif x == "F"
-        F
-    else
-        error("Unknown storage order")
-    end
-end
-
 getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 
@@ -24,28 +8,24 @@ getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 # Currently this is not an AbstractArray, because indexing single elements is
 # would be really slow, although most AbstractArray interface functions are implemented
 struct ZArray{T, N, C<:Compressor, S<:ZStorage}
-    folder::S
-    size::NTuple{N, Int} # Stored in Julia order
-    order::StorageOrder
-    chunks::NTuple{N, Int} # Stored in Julia order
-    fillval::Union{T, Nothing}
-    compressor::C
+    metadata::Metadata{T, N, C}
+    storage::S
     attrs::Dict
     writeable::Bool
 end
 
 Base.eltype(::ZArray{T}) where {T} = T
 Base.ndims(::ZArray{<:Any,N}) where {N} = N
-Base.size(z::ZArray) = z.size
-Base.size(z::ZArray,i) = z.size[i]
-Base.length(z::ZArray) = prod(z.size)
+Base.size(z::ZArray) = z.metadata.shape
+Base.size(z::ZArray,i) = z.metadata.shape[i]
+Base.length(z::ZArray) = prod(z.metadata.shape)
 Base.lastindex(z::ZArray,n) = size(z,n)
 
 function Base.show(io::IO,z::ZArray)
     print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
-zname(z::ZArray) = zname(z.folder)
+zname(z::ZArray) = zname(z.storage)
 
 # Construction of a ZArray given a folder on a regular drive
 # A lot of the JSON parsing should be moved to a function, since
@@ -53,20 +33,17 @@ zname(z::ZArray) = zname(z.folder)
 function ZArray(folder::String, mode="r")
     files = readdir(folder)
     @assert in(".zarray", files)
-    arrayinfo = JSON.parsefile(joinpath(folder, ".zarray"))
-    T = typestr(arrayinfo["dtype"])
-    shape = zshape2shape(arrayinfo["shape"])
-    order = zorder2order(arrayinfo["order"])
-    arrayinfo["zarr_format"] != 2 && error("Expecting Zarr format version 2")
-    chunks = zshape2shape(arrayinfo["chunks"])
-    fillval = getfillval(dt, arrayinfo["fill_value"])
-    compdict = arrayinfo["compressor"]
-    compressor = getCompressor(compressortypes[compdict["id"]], compdict)
+    jsonstr = read(joinpath(folder, ".zarray"), String)
+    metadata = Metadata(jsonstr)
+    storage = DiskStorage(folder)
     attrs = getattrs(DiskStorage(folder))
     writeable = mode == "w"
     ZArray{T, length(shape), typeof(compressor), DiskStorage}(
         DiskStorage(folder), reverse(shape), order(), reverse(chunks), fillval,
         compressor, attrs, writeable)
+    # z = ZArray{T, N, typeof(compressor), typeof(storage)}(
+    z = ZArray(
+        metadata, storage, attrs, writeable)
 end
 
 """
@@ -133,12 +110,12 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
         error("Trying to write to read-only ZArray")
     end
     # Determines which chunks are affected
-    blockr = CartesianIndices(map(trans_ind, r.indices, z.chunks))
+    blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
     enumI = CartesianIndices(blockr)
     # Get the offset of the first index in each dimension
-    offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.chunks)
+    offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.metadata.chunks)
     # Allocate array of the size of a chunks where uncompressed data can be held
-    a = zeros(eltype(z), z.chunks)
+    a = zeros(eltype(z), z.metadata.chunks)
     # Get linear indices from user array. This is a workaround to make something
     # like z[:] = 1:10 work, because a unit range can not be accessed through
     # CartesianIndices
@@ -150,7 +127,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
         # Uncompress a chunk
         readchunk!(a, z, bI + one(bI))
         # Get indices to extract and to write to for the current chunk
-        ii = inds_in_block(r, bI, blockr, z.chunks, enumI, offsfirst)
+        ii = inds_in_block(r, bI, blockr, z.metadata.chunks, enumI, offsfirst)
         # Extract them as CartesianIndices objects
         i_in_a = CartesianIndices(map(i -> i[1], ii))
         i_in_out = CartesianIndices(map(i -> i[2], ii))
@@ -214,12 +191,12 @@ end
 Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
-    length(a) == prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = getchunk(z.folder, i)
+    length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+    curchunk = getchunk(z.storage, i)
     if curchunk == nothing
         fill!(a, z.fillval)
     else
-        read_uncompress!(a, curchunk, z.compressor)
+        read_uncompress!(a, curchunk, z.metadata.compressor)
     end
     a
 end
@@ -231,9 +208,9 @@ Write the data from the array `a` to the chunk `i` in the ZArray `z`
 """
 function writechunk!(a::DenseArray{T}, z::ZArray{T,N}, i::CartesianIndex{N}) where {T,N}
     z.writeable || error("ZArray not in write mode")
-    length(a) == prod(z.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = getchunk(z.folder, i)
-    write_compress(a, curchunk, z.compressor)
+    length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+    curchunk = getchunk(z.storage, i)
+    write_compress(a, curchunk, z.metadata.compressor)
     a
 end
 
@@ -249,13 +226,14 @@ function zzeros(::Type{T},
         path="",
         name="",
         chunks=dims,
-        fillval=nothing,
+        fill_value=nothing,
         compressor=BloscCompressor(),
         attrs=Dict(),
         writeable=true,
         ) where T
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
+    C = typeof(compressor)
     nsubs = map((s, c) -> ceil(Int, s/c), dims, chunks)
     et = areltype(compressor, T)
     if isempty(path)
@@ -264,7 +242,7 @@ function zzeros(::Type{T},
         for i in eachindex(a)
             a[i] = T[]
         end
-        folder = MemStorage(name, a)
+        storage = MemStorage(name, a)
     else
         # Assume that we write to disk, no S3 yet
         if isempty(name)
@@ -277,9 +255,9 @@ function zzeros(::Type{T},
         # Generate JSON file
         jsondict = Dict()
         jsondict["chunks"] = reverse(chunks)
-        jsondict["compressor"] = tojson(compressor)
+        jsondict["compressor"] = JSON.lower(compressor)
         jsondict["dtype"] = typestr(T)
-        jsondict["fill_value"] = fillval
+        jsondict["fill_value"] = fill_value
         jsondict["filters"] = nothing
         jsondict["order"] = "C"
         jsondict["shape"] = reverse(dims)
@@ -290,10 +268,20 @@ function zzeros(::Type{T},
         open(joinpath(path, ".zattrs"), "w") do f
             JSON.print(f, attrs)
         end
-        folder = DiskStorage(path)
+        storage = DiskStorage(path)
     end
-    z = ZArray{T, N, typeof(compressor), typeof(folder)}(
-        folder, dims, F(), chunks, fillval, compressor, attrs, writeable)
+    metadata = Metadata{T, N, C}(
+        2,
+        dims,
+        chunks,
+        typestr(T),
+        compressor,
+        fill_value,
+        'F',
+        nothing
+    )
+    z = ZArray{T, N, typeof(compressor), typeof(storage)}(
+        metadata, storage, attrs, writeable)
     as = zeros(T, chunks...)
     for i in CartesianIndices(map(i -> 1:i, nsubs))
         writechunk!(as, z, i)

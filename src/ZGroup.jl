@@ -1,11 +1,11 @@
 struct ZGroup{S<:ZStorage}
-    folder::S
+    storage::S
     arrays::Dict{String, ZArray}
     groups::Dict{String, ZGroup}
     attrs::Dict
 end
 
-zname(z::ZGroup) = zname(z.folder)
+zname(g::ZGroup) = zname(g.storage)
 
 function ZGroup(p::String)
     arrays = Dict{String, ZArray}()
@@ -22,8 +22,8 @@ function ZGroup(p::String)
     ZGroup(DiskStorage(p), arrays, groups, attrs)
 end
 
-function Base.show(io::IO,g::ZGroup)
-    print(io, "ZarrGroup at ", g.folder)
+function Base.show(io::IO, g::ZGroup)
+    print(io, "ZarrGroup at ", g.storage)
     !isempty(g.arrays) && print(io, "\nVariables: ", map(i -> string(zname(i), " "), values(g.arrays))...)
     !isempty(g.groups) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(g.groups))...)
     nothing
@@ -61,9 +61,9 @@ end
 
 function zzeros(g::ZGroup, addargs...; kwargs...)
     :name in keys(kwargs) || throw(ArgumentError("You must provide a name"))
-    if isa(g.folder, MemStorage)
+    if isa(g.storage, MemStorage)
         error("Not implemented")
-    elseif isa(g.folder, DiskStorage)
-        zzeros(addargs...; kwargs..., path=joinpath(g.folder.folder, "name"))
+    elseif isa(g.storage, DiskStorage)
+        zzeros(addargs...; kwargs..., path=joinpath(g.storage.folder, "name"))
     end
 end

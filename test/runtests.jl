@@ -10,19 +10,19 @@ using JSON
         @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
             ZarrNative.MemStorage{Matrix{Vector{UInt8}}}}
 
-        @test z.folder.name === "data"
-        @test length(z.folder.a) === 1
-        @test length(z.folder.a[1]) === 64
-        @test eltype(z.folder.a[1]) === UInt8
-        @test z.size === (2, 3)
-        @test z.order === ZarrNative.F()
-        @test z.chunks === (2, 3)
-        @test z.fillval === nothing
-        @test z.compressor isa ZarrNative.BloscCompressor
-        @test z.compressor.blocksize === 0
-        @test z.compressor.clevel === 5
-        @test z.compressor.cname === "lz4"
-        @test z.compressor.shuffle === true
+        @test z.storage.name === "data"
+        @test length(z.storage.a) === 1
+        @test length(z.storage.a[1]) === 64
+        @test eltype(z.storage.a[1]) === UInt8
+        @test z.metadata.shape === (2, 3)
+        @test z.metadata.order === 'F'
+        @test z.metadata.chunks === (2, 3)
+        @test z.metadata.fill_value === nothing
+        @test z.metadata.compressor isa ZarrNative.BloscCompressor
+        @test z.metadata.compressor.blocksize === 0
+        @test z.metadata.compressor.clevel === 5
+        @test z.metadata.compressor.cname === "lz4"
+        @test z.metadata.compressor.shuffle === true
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
     end
@@ -47,8 +47,8 @@ using JSON
             z = zzeros(Int, 2, 3, path="$dir/$name",
                 compressor=ZarrNative.NoCompressor())
 
-            @test z.compressor === ZarrNative.NoCompressor()
-            @test z.folder === ZarrNative.DiskStorage("$dir/$name")
+            @test z.metadata.compressor === ZarrNative.NoCompressor()
+            @test z.storage === ZarrNative.DiskStorage("$dir/$name")
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -93,7 +93,7 @@ end
         @test metadata.shape === size(A)
         @test metadata.chunks === chunks
         @test metadata.dtype === "<f8"
-        @test metadata.compressor === nothing
+        @test metadata.compressor === ZarrNative.BloscCompressor(0, 5, "lz4", true)
         @test metadata.fill_value === -1.5
         @test metadata.order === 'F'
         @test metadata.filters === nothing

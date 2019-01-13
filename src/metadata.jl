@@ -50,12 +50,12 @@ value of the “.zarray” key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-struct Metadata{T, N}
+struct Metadata{T, N, C}
     zarr_format::Int
     shape::NTuple{N, Int}
     chunks::NTuple{N, Int}
     dtype::String  # structured data types not yet supported
-    compressor::Nothing  # not yet supported
+    compressor::C
     fill_value::Union{T, Nothing}
     order::Char
     filters::Nothing  # not yet supported
@@ -64,12 +64,12 @@ end
 "Construct Metadata based on your data"
 function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         zarr_format::Integer=2,
-        compressor::Nothing=nothing,
+        compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='F',
         filters::Nothing=nothing
-    ) where {T, N}
-    Metadata{T, N}(
+    ) where {T, N, C}
+    Metadata{T, N, C}(
         zarr_format,
         size(A),
         chunks,
@@ -87,15 +87,19 @@ function Metadata(s::Union{AbstractString, IO})
     d = JSON.parse(s)
     # create a Metadata struct from it
 
-    N = length(d["shape"])
-    T = typestr(d["dtype"])
+    compdict = d["compressor"]
+    compressor = getCompressor(compressortypes[compdict["id"]], compdict)
 
-    Metadata{T, N}(
+    T = typestr(d["dtype"])
+    N = length(d["shape"])
+    C = typeof(compressor)
+
+    Metadata{T, N, C}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]),
         NTuple{N, Int}(d["chunks"]),
         d["dtype"],
-        d["compressor"],
+        compressor,
         fill_value_decoding(d["fill_value"], T),
         first(d["order"]),
         d["filters"]
@@ -109,7 +113,7 @@ function JSON.lower(md::Metadata)
         "shape" => md.shape,
         "chunks" => md.chunks,
         "dtype" => md.dtype,
-        "compressor" => md.compressor,
+        "compressor" => JSON.lower(md.compressor),
         "fill_value" => fill_value_encoding(md.fill_value),
         "order" => md.order,
         "filters" => md.filters
