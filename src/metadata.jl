@@ -18,15 +18,19 @@ typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
-    ('i', 1) => Int8,
-    ('u', 1) => UInt8,
-    ('c', 2) => Complex{Float16},
-    ('c', 4) => Complex{Float32},
-    ('c', 8) => Complex{Float64},
-    ('f', 2) => Float16,
-    ('f', 4) => Float32,
-    ('f', 8) => Float64,
 )
+sizemapf(x::Type{<:Number}) = sizeof(x)
+sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
+typecharf(::Type{<:Signed}) = 'i'
+typecharf(::Type{<:Unsigned}) = 'u'
+typecharf(::Type{<:AbstractFloat}) = 'f'
+typecharf(::Type{<:Complex}) = 'c'
+foreach([Float16,Float32,Float64,Int8,Int16,Int32,Int64,Int128,
+  UInt8,UInt16,UInt32,UInt64,UInt128,
+  Complex{Float16},Complex{Float32},Complex{Float64}]) do t
+    typemap[(typecharf(t),sizemapf(t))] = t
+end
+
 
 function typestr(s::AbstractString)
     m = match(typestr_regex, s)
@@ -66,7 +70,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         zarr_format::Integer=2,
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
-        order::Char='F',
+        order::Char='C',
         filters::Nothing=nothing
     ) where {T, N, C}
     Metadata{T, N, C}(
@@ -88,7 +92,7 @@ function Metadata(s::Union{AbstractString, IO})
     # create a Metadata struct from it
 
     compdict = d["compressor"]
-    compressor = getCompressor(compressortypes[compdict["id"]], compdict)
+    compressor = getCompressor(compdict)
 
     T = typestr(d["dtype"])
     N = length(d["shape"])
@@ -135,6 +139,8 @@ function fill_value_encoding(v::AbstractFloat)
         v
     end
 end
+
+Base.eltype(::Metadata{T}) where T = T
 
 # this correctly parses "NaN" and "Infinity"
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)

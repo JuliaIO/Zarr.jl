@@ -2,6 +2,9 @@ import Blosc
 
 abstract type Compressor end
 
+getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
+getCompressor(::Nothing) = NoCompressor()
+
 struct BloscCompressor <: Compressor
     blocksize::Int
     clevel::Int

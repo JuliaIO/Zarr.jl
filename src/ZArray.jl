@@ -27,6 +27,44 @@ end
 
 zname(z::ZArray) = zname(z.storage)
 
+"""
+    storagesize(z::ZArray)
+
+Returns the size of the compressed data stored in the ZArray `z` in bytes
+"""
+storagesize(z::ZArray) = storagesize(z.storage)
+
+"""
+    storageratio(z::ZArray)
+
+Returns the ratio of the size of the uncompressed data in `z` and the size of the compressed data.
+"""
+storageratio(z::ZArray) = length(z)*sizeof(eltype(z))/storagesize(z)
+
+zinfo(z::ZArray) = zinfo(stdout,z)
+function zinfo(io::IO,z::ZArray)
+  ninit = sum(chunkindices(z)) do i
+    isinitialized(z.storage,i)
+  end
+  allinfos = [
+    "Type" => "ZArray",
+    "Data type" => eltype(z),
+    "Shape" => size(z),
+    "Chunk Shape" => z.metadata.chunks,
+    "Order" => z.metadata.order,
+    "Read-Only" => !z.writeable,
+    "Compressor" => z.metadata.compressor,
+    "Store type" => z.storage,
+    "No. bytes"  => length(z)*sizeof(eltype(z)),
+    "No. bytes stored" => storagesize(z),
+    "Storage ratio" => storageratio(z),
+    "Chunks initialized" => "$(ninit)/$(length(chunkindices(z)))"
+  ]
+  foreach(allinfos) do ii
+    println(io,rpad(ii[1],20),": ",ii[2])
+  end
+end
+
 # Construction of a ZArray given a folder on a regular drive
 # A lot of the JSON parsing should be moved to a function, since
 # this will be the same for other backends
@@ -38,10 +76,8 @@ function ZArray(folder::String, mode="r")
     storage = DirectoryStore(folder)
     attrs = getattrs(DirectoryStore(folder))
     writeable = mode == "w"
-    ZArray{T, length(shape), typeof(compressor), DirectoryStore}(
-        DirectoryStore(folder), reverse(shape), order(), reverse(chunks), fillval,
-        compressor, attrs, writeable)
-    # z = ZArray{T, N, typeof(compressor), typeof(storage)}(
+    ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), DirectoryStore}(
+        metadata,DirectoryStore(folder), attrs, writeable)
     z = ZArray(
         metadata, storage, attrs, writeable)
 end
@@ -134,7 +170,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
 
         if readmode
             # Read data
-            aout[i_in_out.indices...] .= view(a, i_in_a)
+            copyto!(aout,i_in_out,a,i_in_a)
         else
             # Write data, here one could dispatch on the IndexStyle
             # Of the user-provided array, and then decide on an
@@ -162,7 +198,7 @@ end
 
 function Base.getindex(z::ZArray{T}, i...) where {T}
     ii = CartesianIndices(map(convert_index, i, size(z)))
-    aout = zeros(T, size(ii))
+    aout = Array{T}(undef, size(ii))
     readblock!(aout, z, ii)
     ii2 = map(convert_index2, i, size(z))
     reshape(aout, gets(ii2))
@@ -221,7 +257,7 @@ end
 
 extractreadinds(a::Number, linoutinds, i_in_out) = a
 
-function zzeros(::Type{T},
+function zcreate(::Type{T},
         dims...;
         path="",
         name="",
@@ -234,6 +270,16 @@ function zzeros(::Type{T},
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
+    metadata = Metadata{T, N, C}(
+        2,
+        dims,
+        chunks,
+        typestr(T),
+        compressor,
+        fill_value,
+        'C',
+        nothing
+    )
     nsubs = map((s, c) -> ceil(Int, s/c), dims, chunks)
     et = areltype(compressor, T)
     if isempty(path)
@@ -250,41 +296,35 @@ function zzeros(::Type{T},
         else
             path = joinpath(path, name)
         end
-        isdir(path) && error("Directory $path already exists")
-        mkpath(path)
-        # Generate JSON file
-        jsondict = Dict()
-        jsondict["chunks"] = reverse(chunks)
-        jsondict["compressor"] = JSON.lower(compressor)
-        jsondict["dtype"] = typestr(T)
-        jsondict["fill_value"] = fill_value
-        jsondict["filters"] = nothing
-        jsondict["order"] = "C"
-        jsondict["shape"] = reverse(dims)
-        jsondict["zarr_format"] = 2
+        if isdir(path)
+          !isempty(readdir(path)) && throw(ArgumentError("Directory $path is not empty"))
+        else
+          mkpath(path)
+        end
         open(joinpath(path, ".zarray"), "w") do f
-            JSON.print(f, jsondict)
+            JSON.print(f, metadata)
         end
         open(joinpath(path, ".zattrs"), "w") do f
             JSON.print(f, attrs)
         end
         storage = DirectoryStore(path)
     end
-    metadata = Metadata{T, N, C}(
-        2,
-        dims,
-        chunks,
-        typestr(T),
-        compressor,
-        fill_value,
-        'F',
-        nothing
-    )
     z = ZArray{T, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)
-    as = zeros(T, chunks...)
-    for i in CartesianIndices(map(i -> 1:i, nsubs))
-        writechunk!(as, z, i)
-    end
-    z
+end
+
+"""
+    chunkindices(z::ZArray)
+
+Returns the Cartesian Indices of the chunks of a given ZArray
+"""
+chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape, z.metadata.chunks))
+
+function zzeros(T,dims...;kwargs...)
+  z = zcreate(T,dims...;kwargs...)
+  as = zeros(T, z.metadata.chunks...)
+  for i in chunkindices(z)
+      writechunk!(as, z, i)
+  end
+  z
 end

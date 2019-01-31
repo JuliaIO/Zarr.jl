@@ -16,6 +16,9 @@ struct DirectoryStore <: AbstractStore
     folder::String
     DirectoryStore(p) = new(normalize_path(p))
 end
+storagesize(d::DirectoryStore) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
+  filesize(joinpath(d.folder,f))
+end
 
 function getattrs(s::DirectoryStore)
     if isfile(joinpath(s.folder, ".zattrs"))
@@ -34,6 +37,7 @@ function getchunk(s::DirectoryStore, i::CartesianIndex)
     end
     f
 end
+isinitialized(s::DirectoryStore, i::CartesianIndex) = isfile(joinpath(s.folder, join(reverse((i - one(i)).I), '.')))
 
 function adddir(s::DirectoryStore, i::String)
     f = joinpath(s.folder, i)
@@ -48,10 +52,15 @@ struct DictStore{T} <: AbstractStore
     name::String
     a::T
 end
+Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 
+storagesize(d::DictStore) = sum(sizeof,values(d.a))
 zname(s::DictStore) = s.name
 
 "Returns the chunk at index i if present"
 function getchunk(s::DictStore,  i::CartesianIndex)
     s.a[i]
 end
+
+"Checks if a chunk is initialized"
+isinitialized(s::DictStore, i::CartesianIndex) = !isempty(s.a[i])
