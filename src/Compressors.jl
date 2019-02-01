@@ -12,6 +12,15 @@ struct BloscCompressor <: Compressor
     shuffle::Bool
 end
 
+"""
+    BloscCompressor(;blocksize=0, clevel=5, cname="lz4", shuffle=true)
+
+Returns a `BloscCompressor` struct that can serve as a Zarr array compressor. Keyword arguments are:
+
+* `clevel=5` the compression level, number between 0 (no compression) and 9 (max compression)
+* `cname="lz4"` compressor name, can be one of `"blosclz"`, `"lz4"`, and `"lz4hc"`
+* `shuffle=true` enables/disables bit-shuffling
+"""
 BloscCompressor(;blocksize=0, clevel=5, cname="lz4", shuffle=true) =
     BloscCompressor(blocksize, clevel, cname, shuffle)
 
@@ -43,6 +52,11 @@ areltype(::BloscCompressor, _) = Vector{UInt8}
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
+"""
+    NoCompressor()
+
+Creates an object that can be passed to ZArray constructors without compression.
+"""
 struct NoCompressor <: Compressor end
 
 

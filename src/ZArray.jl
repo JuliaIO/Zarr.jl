@@ -257,6 +257,19 @@ end
 
 extractreadinds(a::Number, linoutinds, i_in_out) = a
 
+"""
+    zcreate(T, dims...;kwargs)
+
+Creates a new empty zarr aray with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
+
+* `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
+* `name=""` name of the zarr array, defaults to the directory name
+* `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
+* `fill_value=nothing` value to represent missing values
+* `compressor=BloscCompressor()` compressor type and properties
+* `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
+* `writeable=true` determines if the array is opened in read-only or write mode
+"""
 function zcreate(::Type{T},
         dims...;
         path="",
@@ -320,6 +333,9 @@ Returns the Cartesian Indices of the chunks of a given ZArray
 """
 chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape, z.metadata.chunks))
 
+"""
+    zzeros(T, dims..., )
+"""
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)
   as = zeros(T, z.metadata.chunks...)

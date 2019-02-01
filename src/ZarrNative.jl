@@ -9,6 +9,7 @@ include("Compressors.jl")
 include("ZArray.jl")
 include("ZGroup.jl")
 
-export ZArray, ZGroup, zopen, zzeros
+export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
+  zinfo
 
 end # module
