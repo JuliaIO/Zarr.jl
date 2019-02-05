@@ -264,6 +264,7 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 
 * `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
 * `name=""` name of the zarr array, defaults to the directory name
+* `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
 * `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
 * `fill_value=nothing` value to represent missing values
 * `compressor=BloscCompressor()` compressor type and properties
@@ -272,14 +273,16 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 """
 function zcreate(::Type{T},
         dims...;
-        path="",
+        path=nothing,
         name="",
+        storagetype=isa(path,Nothing) ? DictStore : DirectoryStore,
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
         attrs=Dict(),
         writeable=true,
         ) where T
+
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
@@ -293,35 +296,9 @@ function zcreate(::Type{T},
         'C',
         nothing
     )
-    nsubs = map((s, c) -> ceil(Int, s/c), dims, chunks)
-    et = areltype(compressor, T)
-    if isempty(path)
-        isempty(name) && (name="data")
-        a = Array{et}(undef, nsubs...)
-        for i in eachindex(a)
-            a[i] = T[]
-        end
-        storage = DictStore(name, a)
-    else
-        # Assume that we write to disk, no S3 yet
-        if isempty(name)
-            name = splitdir(path)[2]
-        else
-            path = joinpath(path, name)
-        end
-        if isdir(path)
-          !isempty(readdir(path)) && throw(ArgumentError("Directory $path is not empty"))
-        else
-          mkpath(path)
-        end
-        open(joinpath(path, ".zarray"), "w") do f
-            JSON.print(f, metadata)
-        end
-        open(joinpath(path, ".zattrs"), "w") do f
-            JSON.print(f, attrs)
-        end
-        storage = DirectoryStore(path)
-    end
+
+    storage = storagetype(path,name,metadata,attrs)
+
     z = ZArray{T, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)
 end
@@ -335,6 +312,8 @@ chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.met
 
 """
     zzeros(T, dims..., )
+
+Creates a zarr array and initializes all values with zero.
 """
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)

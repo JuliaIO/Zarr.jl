@@ -16,6 +16,31 @@ struct DirectoryStore <: AbstractStore
     folder::String
     DirectoryStore(p) = new(normalize_path(p))
 end
+
+"""
+Creates a new DirectoryStore from given metadata by creating a folder on disk and writing the
+.zarray and .zattrs files.
+"""
+function DirectoryStore(path,name,metadata,attrs)
+  if isempty(name)
+    name = splitdir(path)[2]
+  else
+    path = joinpath(path, name)
+  end
+  if isdir(path)
+    !isempty(readdir(path)) && throw(ArgumentError("Directory $path is not empty"))
+  else
+    mkpath(path)
+  end
+  open(joinpath(path, ".zarray"), "w") do f
+    JSON.print(f, metadata)
+  end
+  open(joinpath(path, ".zattrs"), "w") do f
+    JSON.print(f, attrs)
+  end
+  DirectoryStore(path)
+end
+
 storagesize(d::DirectoryStore) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
   filesize(joinpath(d.folder,f))
 end
@@ -51,6 +76,18 @@ zname(s::DirectoryStore) = splitdir(s.folder)[2]
 struct DictStore{T} <: AbstractStore
     name::String
     a::T
+    attrs::Dict
+end
+function DictStore(path,name,metadata,attrs)
+  nsubs = map((s, c) -> ceil(Int, s/c), metadata.shape, metadata.chunks)
+  et = areltype(metadata.compressor, eltype(metadata))
+  T=eltype(metadata)
+  isempty(name) && (name="data")
+  a = Array{et}(undef, nsubs...)
+  for i in eachindex(a)
+    a[i] = T[]
+  end
+  DictStore(name, a, attrs)
 end
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 
