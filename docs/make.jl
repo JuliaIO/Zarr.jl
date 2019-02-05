@@ -14,3 +14,7 @@ makedocs(
 )
 
 rm("data/example.zarr",recursive=true)
+
+deploydocs(
+    repo = "github.com/meggart/ZarrNative.jl.git",
+)
