@@ -6,9 +6,11 @@ abstract type AbstractStore end
 
 "Normalize logical storage path"
 function normalize_path(p::AbstractString)
-    p = normpath(p)
     p = replace(p, '\\'=>'/')
-    strip(p, '/')
+    p = normpath(p)
+    #strip(p, '/') This removes / at the beginning of the path, bad for absolute paths on Linux
+    ilast = findlast(!isequal('/'),p)
+    p[1:ilast]
 end
 
 # Stores files in a regular file system

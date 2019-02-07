@@ -100,8 +100,8 @@ function Metadata(s::Union{AbstractString, IO})
 
     Metadata{T, N, C}(
         d["zarr_format"],
-        NTuple{N, Int}(d["shape"]),
-        NTuple{N, Int}(d["chunks"]),
+        NTuple{N, Int}(d["shape"]) |> reverse,
+        NTuple{N, Int}(d["chunks"]) |> reverse,
         d["dtype"],
         compressor,
         fill_value_decoding(d["fill_value"], T),
@@ -114,8 +114,8 @@ end
 function JSON.lower(md::Metadata)
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
-        "shape" => md.shape,
-        "chunks" => md.chunks,
+        "shape" => md.shape |> reverse,
+        "chunks" => md.chunks |> reverse,
         "dtype" => md.dtype,
         "compressor" => JSON.lower(md.compressor),
         "fill_value" => fill_value_encoding(md.fill_value),
