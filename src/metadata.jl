@@ -98,13 +98,17 @@ function Metadata(s::Union{AbstractString, IO})
     N = length(d["shape"])
     C = typeof(compressor)
 
-    Metadata{T, N, C}(
+    fv = fill_value_decoding(d["fill_value"], T)
+
+    TU = fv === nothing ? T : Union{T,Missing}
+
+    Metadata{TU, N, C}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
         NTuple{N, Int}(d["chunks"]) |> reverse,
         d["dtype"],
         compressor,
-        fill_value_decoding(d["fill_value"], T),
+        fv,
         first(d["order"]),
         d["filters"]
     )

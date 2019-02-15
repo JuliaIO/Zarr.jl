@@ -151,7 +151,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     # Get the offset of the first index in each dimension
     offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.metadata.chunks)
     # Allocate array of the size of a chunks where uncompressed data can be held
-    a = zeros(eltype(z), z.metadata.chunks)
+    a = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
     # Get linear indices from user array. This is a workaround to make something
     # like z[:] = 1:10 work, because a unit range can not be accessed through
     # CartesianIndices
@@ -179,8 +179,13 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
             writechunk!(a, z, bI + one(bI))
         end
     end
+    replace_missings!(aout,z.metadata.fill_value)
     aout
 end
+
+replace_missings!(a,v)=nothing
+replace_missings!(::AbstractArray{>:Missing},::Nothing)=nothing
+replace_missings!(a::AbstractArray{>:Missing},v)=replace!(a,v=>missing)
 
 # Some helper functions to determine the shape of the output array
 gets(x::Tuple) = gets(x...)
@@ -226,7 +231,7 @@ end
 
 Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
-function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
+function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
     if curchunk == nothing
