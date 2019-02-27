@@ -9,6 +9,7 @@ type of the array, and an integer providing the number of bytes the type uses.
 https://zarr.readthedocs.io/en/stable/spec/v2.html#data-type-encoding
 """
 typestr(t::Type) = string('<', 'V', sizeof(t))
+typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
 typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
 typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
 typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
@@ -133,12 +134,12 @@ end
 # https://zarr.readthedocs.io/en/stable/spec/v2.html#fill-value-encoding
 
 fill_value_encoding(v) = v
-
+fill_value_encoding(::Nothing)=nothing
 function fill_value_encoding(v::AbstractFloat)
     if isnan(v)
-        string(v)
+        "NaN"
     elseif isinf(v)
-        string(v, "inity")
+        v>0 ? "Infinity" : "-Infinity"
     else
         v
     end

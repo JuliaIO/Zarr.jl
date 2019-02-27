@@ -3,6 +3,20 @@ import JSON
 getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 
+struct SenMissArray{T,N,V} <: AbstractArray{Union{T,Missing},N}
+  x::Array{T,N}
+end
+SenMissArray(x::Array{T,N},v) where {T,N} = SenMissArray{T,N,convert(T,v)}(x)
+Base.size(x::SenMissArray) = size(x.x)
+senval(x::SenMissArray{<:Any,<:Any,V}) where V = V
+function Base.getindex(x::SenMissArray,i::Int)
+  v = x.x[i]
+  isequal(v,senval(x)) ? missing : v
+end
+Base.setindex!(x::SenMissArray,v,i::Int) = x.x[i] = v
+Base.setindex!(x::SenMissArray,::Missing,i::Int) = x.x[i] = senval(x)
+Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
+
 # Struct representing a Zarr Array in Julia, note that
 # chunks(chunk size) and size are always in Julia column-major order
 # Currently this is not an AbstractArray, because indexing single elements is
@@ -20,6 +34,7 @@ Base.size(z::ZArray) = z.metadata.shape
 Base.size(z::ZArray,i) = z.metadata.shape[i]
 Base.length(z::ZArray) = prod(z.metadata.shape)
 Base.lastindex(z::ZArray,n) = size(z,n)
+Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
 
 function Base.show(io::IO,z::ZArray)
     print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
@@ -121,24 +136,32 @@ function inds_in_block(r::CartesianIndices{N}, # Outer Array indices to read
     sI = size(enumI)
     map(r.indices, bI.I, blockAll.indices, c, enumI.indices, sI, offsfirst) do iouter,
             iblock, ablock, chunk, enu, senu, o0
+
         if iblock == first(ablock)
             i1 = mod1(first(iouter), chunk)
             io1 = 1
         else
             i1 = 1
-            io1 = (iblock - first(ablock)) * chunk + o0
+            io1 = (iblock - first(ablock)) * chunk - o0 + 2
         end
         if iblock == last(ablock)
             i2 = mod1(last(iouter), chunk)
             io2 = length(iouter)
         else
             i2 = chunk
-            io2 = (iblock - first(ablock) + 1) * chunk + o0 - 1
+            io2 = (iblock - first(ablock) + 1) * chunk - o0 + 1
         end
         i1:i2, io1:io2
     end
 end
 
+function getchunkarray(z::ZArray{>:Missing})
+  inner  = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
+  a = SenMissArray(inner,z.metadata.fill_value)
+end
+getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
+maybeinner(a::Array) = a
+maybeinner(a::SenMissArray) = a.x
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
@@ -151,7 +174,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     # Get the offset of the first index in each dimension
     offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.metadata.chunks)
     # Allocate array of the size of a chunks where uncompressed data can be held
-    a = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
+    a = getchunkarray(z)
     # Get linear indices from user array. This is a workaround to make something
     # like z[:] = 1:10 work, because a unit range can not be accessed through
     # CartesianIndices
@@ -161,7 +184,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     # Now loop through the chunks
     for bI in blockr
         # Uncompress a chunk
-        readchunk!(a, z, bI + one(bI))
+        readchunk!(maybeinner(a), z, bI + one(bI))
         # Get indices to extract and to write to for the current chunk
         ii = inds_in_block(r, bI, blockr, z.metadata.chunks, enumI, offsfirst)
         # Extract them as CartesianIndices objects
@@ -176,10 +199,9 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
             # Of the user-provided array, and then decide on an
             # Indexing style
             a[i_in_a] .= extractreadinds(aout, linoutinds, i_in_out)
-            writechunk!(a, z, bI + one(bI))
+            writechunk!(maybeinner(a), z, bI + one(bI))
         end
     end
-    replace_missings!(aout,z.metadata.fill_value)
     aout
 end
 
@@ -247,7 +269,7 @@ end
 
 Write the data from the array `a` to the chunk `i` in the ZArray `z`
 """
-function writechunk!(a::DenseArray{T}, z::ZArray{T,N}, i::CartesianIndex{N}) where {T,N}
+function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
     z.writeable || error("ZArray not in write mode")
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
