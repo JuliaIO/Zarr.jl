@@ -49,7 +49,9 @@ end
 
 function getattrs(s::DirectoryStore)
     if isfile(joinpath(s.folder, ".zattrs"))
-        JSON.parsefile(joinpath(s.folder, ".zattrs"))
+      #Workaround to catch NaNs in user attributes seen issue https://github.com/zarr-developers/zarr/issues/412
+      alllines = open(readlines,joinpath(s.folder, ".zattrs"))
+      JSON.parse(replace(join(alllines,"\n"),": NaN,"=>": \"NaN\","))
     else
         Dict()
     end
