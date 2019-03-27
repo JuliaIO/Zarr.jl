@@ -30,7 +30,7 @@ end
 
 function read_uncompress!(a, f::String, c::BloscCompressor)
     r = read(f)
-    read_uncompress!(a, r, c)
+    length(r) > 0 && read_uncompress!(a, r, c)
 end
 
 read_uncompress!(a, r::AbstractArray, ::BloscCompressor) = copyto!(a, Blosc.decompress(eltype(a), r))
@@ -62,7 +62,7 @@ struct NoCompressor <: Compressor end
 
 compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
 
-read_uncompress!(a, f::String, ::NoCompressor) = read!(f, a)
+read_uncompress!(a, f::String, ::NoCompressor) = filesize(f) > 0 && read!(f, a)
 read_uncompress!(a, r::AbstractArray, ::NoCompressor) = copyto!(a, r)
 write_compress(a, f::String, ::NoCompressor) = write(f, a)
 
