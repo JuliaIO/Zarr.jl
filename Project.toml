@@ -1,7 +1,7 @@
 name = "ZarrNative"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Blosc = "a74b3585-a348-5f62-a45c-50e91977d574"
