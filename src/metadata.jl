@@ -74,7 +74,8 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order::Char='C',
         filters::Nothing=nothing
     ) where {T, N, C}
-    Metadata{T, N, C}(
+    T2 = fill_value === nothing ? T : Union{T,Missing}
+    Metadata{T2, N, C}(
         zarr_format,
         size(A),
         chunks,
