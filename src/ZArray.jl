@@ -183,13 +183,17 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     end
     # Now loop through the chunks
     for bI in blockr
-        # Uncompress a chunk
-        readchunk!(maybeinner(a), z, bI + one(bI))
+
         # Get indices to extract and to write to for the current chunk
         ii = inds_in_block(r, bI, blockr, z.metadata.chunks, enumI, offsfirst)
         # Extract them as CartesianIndices objects
         i_in_a = CartesianIndices(map(i -> i[1], ii))
         i_in_out = CartesianIndices(map(i -> i[2], ii))
+
+        # Uncompress a chunk
+        if readmode || (isinitialized(z.storage, bI + one(bI)) && (size(i_in_a) != size(i_in_a)))
+          readchunk!(maybeinner(a), z, bI + one(bI))
+        end
 
         if readmode
             # Read data
@@ -256,8 +260,8 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
-    if curchunk == nothing
-        fill!(a, z.fillval)
+    if curchunk === nothing
+        fill!(a, z.metadata.fill_value)
     else
         read_uncompress!(a, curchunk, z.metadata.compressor)
     end
@@ -273,6 +277,9 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
     z.writeable || error("ZArray not in write mode")
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
+    if curchunk === nothing
+      curchunk = createchunk(z.storage,i)
+    end
     write_compress(a, curchunk, z.metadata.compressor)
     a
 end

@@ -58,14 +58,16 @@ function getattrs(s::DirectoryStore)
 end
 
 function getchunk(s::DirectoryStore, i::CartesianIndex)
-    f = joinpath(s.folder, join(reverse((i - one(i)).I), '.'))
-    if !isfile(f)
-        open(f, "w") do _
-           nothing
-        end
-    end
-    f
+  f = joinpath(s.folder, join(reverse((i - one(i)).I), '.'))
+  isfile(f) ? f : nothing
 end
+function createchunk(s::DirectoryStore, i::CartesianIndex)
+  f = joinpath(s.folder, join(reverse((i - one(i)).I), '.'))
+  @assert !isfile(f)
+  open(i->nothing,f,"w")
+  f
+end
+
 isinitialized(s::DirectoryStore, i::CartesianIndex) = isfile(joinpath(s.folder, join(reverse((i - one(i)).I), '.')))
 
 function adddir(s::DirectoryStore, i::String)
@@ -104,4 +106,4 @@ function getchunk(s::DictStore,  i::CartesianIndex)
 end
 
 "Checks if a chunk is initialized"
-isinitialized(s::DictStore, i::CartesianIndex) = !isempty(s.a[i])
+isinitialized(s::DictStore, i::CartesianIndex) = true
