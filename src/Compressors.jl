@@ -2,6 +2,9 @@ import Blosc
 
 abstract type Compressor end
 
+getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
+getCompressor(::Nothing) = NoCompressor()
+
 struct BloscCompressor <: Compressor
     blocksize::Int
     clevel::Int
@@ -9,6 +12,15 @@ struct BloscCompressor <: Compressor
     shuffle::Bool
 end
 
+"""
+    BloscCompressor(;blocksize=0, clevel=5, cname="lz4", shuffle=true)
+
+Returns a `BloscCompressor` struct that can serve as a Zarr array compressor. Keyword arguments are:
+
+* `clevel=5` the compression level, number between 0 (no compression) and 9 (max compression)
+* `cname="lz4"` compressor name, can be one of `"blosclz"`, `"lz4"`, and `"lz4hc"`
+* `shuffle=true` enables/disables bit-shuffling
+"""
 BloscCompressor(;blocksize=0, clevel=5, cname="lz4", shuffle=true) =
     BloscCompressor(blocksize, clevel, cname, shuffle)
 
@@ -18,7 +30,7 @@ end
 
 function read_uncompress!(a, f::String, c::BloscCompressor)
     r = read(f)
-    read_uncompress!(a, r, c)
+    length(r) > 0 && read_uncompress!(a, r, c)
 end
 
 read_uncompress!(a, r::AbstractArray, ::BloscCompressor) = copyto!(a, Blosc.decompress(eltype(a), r))
@@ -40,12 +52,17 @@ areltype(::BloscCompressor, _) = Vector{UInt8}
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
+"""
+    NoCompressor()
+
+Creates an object that can be passed to ZArray constructors without compression.
+"""
 struct NoCompressor <: Compressor end
 
 
 compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
 
-read_uncompress!(a, f::String, ::NoCompressor) = read!(f, a)
+read_uncompress!(a, f::String, ::NoCompressor) = filesize(f) > 0 && read!(f, a)
 read_uncompress!(a, r::AbstractArray, ::NoCompressor) = copyto!(a, r)
 write_compress(a, f::String, ::NoCompressor) = write(f, a)
 

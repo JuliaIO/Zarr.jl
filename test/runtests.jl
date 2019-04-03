@@ -15,7 +15,7 @@ using JSON
         @test length(z.storage.a[1]) === 64
         @test eltype(z.storage.a[1]) === UInt8
         @test z.metadata.shape === (2, 3)
-        @test z.metadata.order === 'F'
+        @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
         @test z.metadata.fill_value === nothing
         @test z.metadata.compressor isa ZarrNative.BloscCompressor
@@ -95,7 +95,7 @@ end
         @test metadata.dtype === "<f8"
         @test metadata.compressor === ZarrNative.BloscCompressor(0, 5, "lz4", true)
         @test metadata.fill_value === -1.5
-        @test metadata.order === 'F'
+        @test metadata.order === 'C'
         @test metadata.filters === nothing
 
         jsonstr = json(metadata)

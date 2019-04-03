@@ -3,6 +3,20 @@ import JSON
 getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 
+struct SenMissArray{T,N,V} <: AbstractArray{Union{T,Missing},N}
+  x::Array{T,N}
+end
+SenMissArray(x::Array{T,N},v) where {T,N} = SenMissArray{T,N,convert(T,v)}(x)
+Base.size(x::SenMissArray) = size(x.x)
+senval(x::SenMissArray{<:Any,<:Any,V}) where V = V
+function Base.getindex(x::SenMissArray,i::Int)
+  v = x.x[i]
+  isequal(v,senval(x)) ? missing : v
+end
+Base.setindex!(x::SenMissArray,v,i::Int) = x.x[i] = v
+Base.setindex!(x::SenMissArray,::Missing,i::Int) = x.x[i] = senval(x)
+Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
+
 # Struct representing a Zarr Array in Julia, note that
 # chunks(chunk size) and size are always in Julia column-major order
 # Currently this is not an AbstractArray, because indexing single elements is
@@ -20,12 +34,51 @@ Base.size(z::ZArray) = z.metadata.shape
 Base.size(z::ZArray,i) = z.metadata.shape[i]
 Base.length(z::ZArray) = prod(z.metadata.shape)
 Base.lastindex(z::ZArray,n) = size(z,n)
+Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
 
 function Base.show(io::IO,z::ZArray)
     print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
 zname(z::ZArray) = zname(z.storage)
+
+"""
+    storagesize(z::ZArray)
+
+Returns the size of the compressed data stored in the ZArray `z` in bytes
+"""
+storagesize(z::ZArray) = storagesize(z.storage)
+
+"""
+    storageratio(z::ZArray)
+
+Returns the ratio of the size of the uncompressed data in `z` and the size of the compressed data.
+"""
+storageratio(z::ZArray) = length(z)*sizeof(eltype(z))/storagesize(z)
+
+zinfo(z::ZArray) = zinfo(stdout,z)
+function zinfo(io::IO,z::ZArray)
+  ninit = sum(chunkindices(z)) do i
+    isinitialized(z.storage,i)
+  end
+  allinfos = [
+    "Type" => "ZArray",
+    "Data type" => eltype(z),
+    "Shape" => size(z),
+    "Chunk Shape" => z.metadata.chunks,
+    "Order" => z.metadata.order,
+    "Read-Only" => !z.writeable,
+    "Compressor" => z.metadata.compressor,
+    "Store type" => z.storage,
+    "No. bytes"  => length(z)*sizeof(eltype(z)),
+    "No. bytes stored" => storagesize(z),
+    "Storage ratio" => storageratio(z),
+    "Chunks initialized" => "$(ninit)/$(length(chunkindices(z)))"
+  ]
+  foreach(allinfos) do ii
+    println(io,rpad(ii[1],20),": ",ii[2])
+  end
+end
 
 # Construction of a ZArray given a folder on a regular drive
 # A lot of the JSON parsing should be moved to a function, since
@@ -38,10 +91,8 @@ function ZArray(folder::String, mode="r")
     storage = DirectoryStore(folder)
     attrs = getattrs(DirectoryStore(folder))
     writeable = mode == "w"
-    ZArray{T, length(shape), typeof(compressor), DirectoryStore}(
-        DirectoryStore(folder), reverse(shape), order(), reverse(chunks), fillval,
-        compressor, attrs, writeable)
-    # z = ZArray{T, N, typeof(compressor), typeof(storage)}(
+    ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), DirectoryStore}(
+        metadata,DirectoryStore(folder), attrs, writeable)
     z = ZArray(
         metadata, storage, attrs, writeable)
 end
@@ -85,24 +136,32 @@ function inds_in_block(r::CartesianIndices{N}, # Outer Array indices to read
     sI = size(enumI)
     map(r.indices, bI.I, blockAll.indices, c, enumI.indices, sI, offsfirst) do iouter,
             iblock, ablock, chunk, enu, senu, o0
+
         if iblock == first(ablock)
             i1 = mod1(first(iouter), chunk)
             io1 = 1
         else
             i1 = 1
-            io1 = (iblock - first(ablock)) * chunk + o0
+            io1 = (iblock - first(ablock)) * chunk - o0 + 2
         end
         if iblock == last(ablock)
             i2 = mod1(last(iouter), chunk)
             io2 = length(iouter)
         else
             i2 = chunk
-            io2 = (iblock - first(ablock) + 1) * chunk + o0 - 1
+            io2 = (iblock - first(ablock) + 1) * chunk - o0 + 1
         end
         i1:i2, io1:io2
     end
 end
 
+function getchunkarray(z::ZArray{>:Missing})
+  inner  = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
+  a = SenMissArray(inner,z.metadata.fill_value)
+end
+getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
+maybeinner(a::Array) = a
+maybeinner(a::SenMissArray) = a.x
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
@@ -115,7 +174,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     # Get the offset of the first index in each dimension
     offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.metadata.chunks)
     # Allocate array of the size of a chunks where uncompressed data can be held
-    a = zeros(eltype(z), z.metadata.chunks)
+    a = getchunkarray(z)
     # Get linear indices from user array. This is a workaround to make something
     # like z[:] = 1:10 work, because a unit range can not be accessed through
     # CartesianIndices
@@ -124,27 +183,35 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
     end
     # Now loop through the chunks
     for bI in blockr
-        # Uncompress a chunk
-        readchunk!(a, z, bI + one(bI))
+
         # Get indices to extract and to write to for the current chunk
         ii = inds_in_block(r, bI, blockr, z.metadata.chunks, enumI, offsfirst)
         # Extract them as CartesianIndices objects
         i_in_a = CartesianIndices(map(i -> i[1], ii))
         i_in_out = CartesianIndices(map(i -> i[2], ii))
 
+        # Uncompress a chunk
+        if readmode || (isinitialized(z.storage, bI + one(bI)) && (size(i_in_a) != size(i_in_a)))
+          readchunk!(maybeinner(a), z, bI + one(bI))
+        end
+
         if readmode
             # Read data
-            aout[i_in_out.indices...] .= view(a, i_in_a)
+            copyto!(aout,i_in_out,a,i_in_a)
         else
             # Write data, here one could dispatch on the IndexStyle
             # Of the user-provided array, and then decide on an
             # Indexing style
             a[i_in_a] .= extractreadinds(aout, linoutinds, i_in_out)
-            writechunk!(a, z, bI + one(bI))
+            writechunk!(maybeinner(a), z, bI + one(bI))
         end
     end
     aout
 end
+
+replace_missings!(a,v)=nothing
+replace_missings!(::AbstractArray{>:Missing},::Nothing)=nothing
+replace_missings!(a::AbstractArray{>:Missing},v)=replace!(a,v=>missing)
 
 # Some helper functions to determine the shape of the output array
 gets(x::Tuple) = gets(x...)
@@ -162,7 +229,7 @@ end
 
 function Base.getindex(z::ZArray{T}, i...) where {T}
     ii = CartesianIndices(map(convert_index, i, size(z)))
-    aout = zeros(T, size(ii))
+    aout = Array{T}(undef, size(ii))
     readblock!(aout, z, ii)
     ii2 = map(convert_index2, i, size(z))
     reshape(aout, gets(ii2))
@@ -190,11 +257,11 @@ end
 
 Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
-function readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
+function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
-    if curchunk == nothing
-        fill!(a, z.fillval)
+    if curchunk === nothing
+        fill!(a, z.metadata.fill_value)
     else
         read_uncompress!(a, curchunk, z.metadata.compressor)
     end
@@ -206,10 +273,13 @@ end
 
 Write the data from the array `a` to the chunk `i` in the ZArray `z`
 """
-function writechunk!(a::DenseArray{T}, z::ZArray{T,N}, i::CartesianIndex{N}) where {T,N}
+function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
     z.writeable || error("ZArray not in write mode")
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
     curchunk = getchunk(z.storage, i)
+    if curchunk === nothing
+      curchunk = createchunk(z.storage,i)
+    end
     write_compress(a, curchunk, z.metadata.compressor)
     a
 end
@@ -221,55 +291,35 @@ end
 
 extractreadinds(a::Number, linoutinds, i_in_out) = a
 
-function zzeros(::Type{T},
+"""
+    zcreate(T, dims...;kwargs)
+
+Creates a new empty zarr aray with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
+
+* `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
+* `name=""` name of the zarr array, defaults to the directory name
+* `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
+* `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
+* `fill_value=nothing` value to represent missing values
+* `compressor=BloscCompressor()` compressor type and properties
+* `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
+* `writeable=true` determines if the array is opened in read-only or write mode
+"""
+function zcreate(::Type{T},
         dims...;
-        path="",
+        path=nothing,
         name="",
+        storagetype=isa(path,Nothing) ? DictStore : DirectoryStore,
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
         attrs=Dict(),
         writeable=true,
         ) where T
+
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
-    nsubs = map((s, c) -> ceil(Int, s/c), dims, chunks)
-    et = areltype(compressor, T)
-    if isempty(path)
-        isempty(name) && (name="data")
-        a = Array{et}(undef, nsubs...)
-        for i in eachindex(a)
-            a[i] = T[]
-        end
-        storage = DictStore(name, a)
-    else
-        # Assume that we write to disk, no S3 yet
-        if isempty(name)
-            name = splitdir(path)[2]
-        else
-            path = joinpath(path, name)
-        end
-        isdir(path) && error("Directory $path already exists")
-        mkpath(path)
-        # Generate JSON file
-        jsondict = Dict()
-        jsondict["chunks"] = reverse(chunks)
-        jsondict["compressor"] = JSON.lower(compressor)
-        jsondict["dtype"] = typestr(T)
-        jsondict["fill_value"] = fill_value
-        jsondict["filters"] = nothing
-        jsondict["order"] = "C"
-        jsondict["shape"] = reverse(dims)
-        jsondict["zarr_format"] = 2
-        open(joinpath(path, ".zarray"), "w") do f
-            JSON.print(f, jsondict)
-        end
-        open(joinpath(path, ".zattrs"), "w") do f
-            JSON.print(f, attrs)
-        end
-        storage = DirectoryStore(path)
-    end
     metadata = Metadata{T, N, C}(
         2,
         dims,
@@ -277,14 +327,33 @@ function zzeros(::Type{T},
         typestr(T),
         compressor,
         fill_value,
-        'F',
+        'C',
         nothing
     )
+
+    storage = storagetype(path,name,metadata,attrs)
+
     z = ZArray{T, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)
-    as = zeros(T, chunks...)
-    for i in CartesianIndices(map(i -> 1:i, nsubs))
-        writechunk!(as, z, i)
-    end
-    z
+end
+
+"""
+    chunkindices(z::ZArray)
+
+Returns the Cartesian Indices of the chunks of a given ZArray
+"""
+chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape, z.metadata.chunks))
+
+"""
+    zzeros(T, dims..., )
+
+Creates a zarr array and initializes all values with zero.
+"""
+function zzeros(T,dims...;kwargs...)
+  z = zcreate(T,dims...;kwargs...)
+  as = zeros(T, z.metadata.chunks...)
+  for i in chunkindices(z)
+      writechunk!(as, z, i)
+  end
+  z
 end

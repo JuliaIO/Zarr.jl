@@ -7,11 +7,12 @@ end
 
 zname(g::ZGroup) = zname(g.storage)
 
-function ZGroup(p::String)
+function ZGroup(p::String,mode="r")
+  isfile(joinpath(p,".zgroup")) || error("No Zarr group found at $p")
     arrays = Dict{String, ZArray}()
     groups = Dict{String, ZGroup}()
     for d in filter(i -> isdir(joinpath(p, i)), readdir(p))
-        m = zopen(joinpath(p, d))
+        m = zopen(joinpath(p, d),mode)
         if isa(m, ZArray)
             arrays[d] = m
         else
@@ -21,6 +22,8 @@ function ZGroup(p::String)
     attrs = getattrs(DirectoryStore(p))
     ZGroup(DirectoryStore(p), arrays, groups, attrs)
 end
+
+
 
 function Base.show(io::IO, g::ZGroup)
     print(io, "ZarrGroup at ", g.storage)
@@ -39,11 +42,11 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
-function zopen(p::String)
+function zopen(p::String,mode="r")
     if isfile(joinpath(p, ".zarray"))
-        return ZArray(p)
+        return ZArray(p,mode)
     elseif isfile(joinpath(p, ".zgroup"))
-        return ZGroup(p)
+        return ZGroup(p,mode)
     else
         throw(ArgumentError("Specified path $p is neither a ZArray nor a ZGroup"))
     end
@@ -59,11 +62,22 @@ function zgroup(p::String; attrs=Dict())
     ZGroup(DirectoryStore(p), Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
 end
 
-function zzeros(g::ZGroup, addargs...; kwargs...)
-    :name in keys(kwargs) || throw(ArgumentError("You must provide a name"))
+"Create a subgroup of the group g"
+function zgroup(g::ZGroup, name; attrs=Dict())
+  if isa(g.storage, DictStore)
+      error("Not implemented")
+  elseif isa(g.storage, DirectoryStore)
+      zgroup(joinpath(g.storage.folder, "name"), attrs=attrs)
+  end
+end
+
+"Create a new subarray of the group g"
+function zcreate(g::ZGroup, name::String, addargs...; kwargs...)
     if isa(g.storage, DictStore)
         error("Not implemented")
     elseif isa(g.storage, DirectoryStore)
-        zzeros(addargs...; kwargs..., path=joinpath(g.storage.folder, "name"))
+        z = zcreate(addargs...; kwargs..., name = name, path=g.storage.folder)
+        g.arrays[name] = z
+        z
     end
 end
