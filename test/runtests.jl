@@ -125,6 +125,9 @@ end
     norm_path = "path/to/a"
     @test ZarrNative.normalize_path(mixed_path) == norm_path
     @test ZarrNative.DirectoryStore(mixed_path).folder == norm_path
+    @test ZarrNative.normalize_path("/") == "/"
+    @test ZarrNative.normalize_path("/a/") == "/a"
+    @test ZarrNative.normalize_path("/path/to/a") == "/path/to/a"
 end
 
 end  # @testset "ZarrNative"
