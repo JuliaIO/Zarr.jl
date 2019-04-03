@@ -1,3 +1,5 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-ZarrNative = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[compat]
+Documenter = "~0.22"
