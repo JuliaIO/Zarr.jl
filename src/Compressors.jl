@@ -28,8 +28,14 @@ function getCompressor(::Type{BloscCompressor}, d::Dict)
     BloscCompressor(d["blocksize"], d["clevel"], d["cname"], d["shuffle"] > 0)
 end
 
-function read_uncompress!(a, f::String, c::BloscCompressor)
-    r = read(f)
+function read_uncompress!(a, f::String, c::BloscCompressor, s::ST) where ST <: AbstractStore
+    if s isa DirectoryStore
+        r = read(f)
+    elseif s isa S3Store
+        r = readobject(f, s)
+    else
+        throw(ArgumentError("Unknown type of storage."))
+    end
     length(r) > 0 && read_uncompress!(a, r, c)
 end
 

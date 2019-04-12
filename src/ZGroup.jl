@@ -7,20 +7,20 @@ end
 
 zname(g::ZGroup) = zname(g.storage)
 
-function ZGroup(p::String,mode="r")
-  isfile(joinpath(p,".zgroup")) || error("No Zarr group found at $p")
+function ZGroup(s::T,mode="r") where T <: AbstractStore
     arrays = Dict{String, ZArray}()
     groups = Dict{String, ZGroup}()
-    for d in filter(i -> isdir(joinpath(p, i)), readdir(p))
-        m = zopen(joinpath(p, d),mode)
+
+    for d in subs(s)
+        m = zopen(T(s, d),mode)
         if isa(m, ZArray)
             arrays[d] = m
         else
             groups[d] = m
         end
     end
-    attrs = getattrs(DirectoryStore(p))
-    ZGroup(DirectoryStore(p), arrays, groups, attrs)
+    attrs = getattrs(s)
+    ZGroup(s, arrays, groups, attrs)
 end
 
 
@@ -42,15 +42,18 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
-function zopen(p::String,mode="r")
-    if isfile(joinpath(p, ".zarray"))
-        return ZArray(p,mode)
-    elseif isfile(joinpath(p, ".zgroup"))
-        return ZGroup(p,mode)
+function zopen(s::T, mode="r") where T <: AbstractStore
+    # add interfaces to Stores later
+    if is_zarray(s)
+        return ZArray(s,mode)
+    elseif is_zgroup(s)
+        return ZGroup(s,mode)
     else
-        throw(ArgumentError("Specified path $p is neither a ZArray nor a ZGroup"))
+        x = path(s)
+        throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))
     end
 end
+
 
 function zgroup(p::String; attrs=Dict())
     d = Dict("zarr_format"=>2)
