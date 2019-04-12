@@ -19,6 +19,7 @@ typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
+    ('S', 1) => String,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
 sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
@@ -152,3 +153,4 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, T) = v
 fill_value_decoding(v, T) = T(v)
+fill_value_decoding(v, T::Type{String}) = v == "" ? nothing : UInt8(v[1])
