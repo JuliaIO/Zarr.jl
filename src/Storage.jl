@@ -124,6 +124,10 @@ end
 "Checks if a chunk is initialized"
 isinitialized(s::DictStore, i::CartesianIndex) = true
 
+# change when DictStore ZGroups are implemented
+is_zgroup(s::DictStore) = false
+is_zarray(s::DictStore) = true
+
 struct S3Store <: AbstractStore
     bucket::String
     store::String
@@ -131,15 +135,22 @@ struct S3Store <: AbstractStore
     aws::Dict{Symbol, Any}
     S3Store(b, s, r, a) = new(b, s, r, a)
 end
-function S3Store(s::S3Store, d::String)
-    S3Store(s.bucket, d, s.region, s.aws)
-end
 
-Base.show(io::IO,d::S3Store) = print(io,"S3 Object Storage")
+S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, region, aws_config(region=region))
+
+S3Store(s::S3Store, d::String) = S3Store(s.bucket, d, s.region, s.aws)
+
+Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 
 function S3Store(bucket, region, store, metadata, attrs)
 end
-# storagesize needs to be written for S3Store
+
+function storagesize(s::S3Store)
+    contents = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=s.store)["Contents"]
+    sum(filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)) do f
+        parse(Int, f["Size"])
+    end
+end
 
 function getattrs(s::S3Store)
     if s3_exists(s.aws, s.bucket, joinpath(s.store, ".zattrs"))
@@ -163,7 +174,9 @@ function readobject(o::String, s::S3Store)
     return s3_get(s.aws, s.bucket, o)
 end
 
-zname(s::S3Store) = s.store
+zname(s::S3Store) = splitdir(splitdir(s.store)[1])[2]
+
+isinitialized(s::S3Store, i::CartesianIndex) = s3_exists(s.aws, s.bucket, joinpath(s.store, join(reverse((i - one(i)).I), '.')))
 
 is_zgroup(s::S3Store) = s3_exists(s.aws, s.bucket, joinpath(s.store, ".zgroup"))
 is_zarray(s::S3Store) = s3_exists(s.aws, s.bucket, joinpath(s.store, ".zarray"))
