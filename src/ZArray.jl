@@ -153,15 +153,15 @@ function inds_in_block(r::CartesianIndices{N}, # Outer Array indices to read
 end
 
 function getchunkarray(z::ZArray{>:Missing})
-    # temporary workaround to use strings as a data values
-    if Base.nonmissingtype(eltype(z)) <: String
-        inner = Array{UInt8}(undef, z.metadata.chunks)
-    else
-        inner  = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
-    end
+    # temporary workaround to use strings as data values
+    inner = zeros(eltype(z), z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
-getchunkarray(z::ZArray) = eltype(z) == String ? Array{UInt8}(undef, z.metadata.chunks) : zeros(eltype(z), z.metadata.chunks)
+
+
+
+getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
+
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 # Function to read or write from a zarr array. Could be refactored
@@ -225,13 +225,9 @@ gets() = ()
 function Base.getindex(z::ZArray{T}, i::Int...) where {T}
     ii = CartesianIndices(map(convert_index, i, size(z)))
     # temporary workaround to strings as a data values
-    if T >: String
-        aout = Array{UInt8}(undef, size(ii))
-    else
-        aout = zeros(T, size(ii))
-    end
+    aout = zeros(T, size(ii))
     readblock!(aout, z, ii)
-    T >: String ? String([aout[1]]) : aout[1]
+    aout[1]
 end
 
 function Base.getindex(z::ZArray{T}, i...) where {T}
@@ -244,13 +240,9 @@ end
 
 function Base.getindex(z::ZArray{T,1}, ::Colon) where {T}
     ii = CartesianIndices(size(z))
-    if T >: String
-        aout = Array{UInt8}(undef, size(ii))
-    else
-        aout = zeros(T, size(ii))
-    end
+    aout = zeros(T, size(ii))
     readblock!(aout, z, ii)
-    T >: String ? String(reshape(aout, length(aout))) : reshape(aout, length(aout))
+    reshape(aout, length(aout))
 end
 
 # Method for getting a UnitRange of indices is missing
