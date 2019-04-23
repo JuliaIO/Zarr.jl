@@ -136,7 +136,7 @@ struct S3Store <: AbstractStore
     S3Store(b, s, r, a) = new(b, s, r, a)
 end
 
-S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, region, aws_config(region=region))
+S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, region, aws_config(creds=nothing,region=region))
 
 S3Store(s::S3Store, d::String) = S3Store(s.bucket, d, s.region, s.aws)
 
