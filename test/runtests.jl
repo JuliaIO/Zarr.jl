@@ -117,6 +117,7 @@ end
         @test ZarrNative.fill_value_decoding("3", Int) === 3
         @test ZarrNative.fill_value_decoding(nothing, Int) === nothing
         @test ZarrNative.fill_value_decoding("-", String) === "-"
+        @test ZarrNative.fill_value_decoding("", ZarrNative.ASCIIChar) === nothing
     end
 end
 
@@ -128,6 +129,23 @@ end
     @test ZarrNative.normalize_path("/") == "/"
     @test ZarrNative.normalize_path("/a/") == "/a"
     @test ZarrNative.normalize_path("/path/to/a") == "/path/to/a"
+end
+
+@testset "AWS S3 Storage" begin
+    bucket = "zarr-demo"
+    store = "store/foo/"
+    region = "eu-west-2"
+    S3 = S3Store(bucket, store, region)
+    @test storagesize(S3) == 69
+    @test ZarrNative.zname(S3) == "foo"
+    @test ZarrNative.is_zgroup(S3) == true
+    S3group = zopen(S3)
+    @test ZarrNative.zname(S3group) == "foo"
+    S3Array = S3group.groups["store/foo/bar/"].arrays["store/foo/bar/baz/"]
+    @test ZarrNative.zname(S3Array) == "baz"
+    @test eltype(S3Array) == ZarrNative.ASCIIChar
+    @test storagesize(S3Array) == 69
+    @test String(S3Array[:]) == "Hello from the cloud!"
 end
 
 end  # @testset "ZarrNative"

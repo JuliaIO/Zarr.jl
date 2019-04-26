@@ -8,6 +8,15 @@ type of the array, and an integer providing the number of bytes the type uses.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#data-type-encoding
 """
+
+primitive type ASCIIChar <: AbstractChar 8 end
+ASCIIChar(x::UInt8) = reinterpret(ASCIIChar, x)
+UInt8(x::ASCIIChar) = reinterpret(UInt8, x)
+Base.codepoint(x::ASCIIChar) = UInt8(x)
+Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
+Base.zero(ASCIIChar) = ASCIIChar(Base.zero(UInt8))
+
+
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
 typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
@@ -19,6 +28,7 @@ typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
+    ('S', 1) => ASCIIChar,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
 sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
@@ -152,3 +162,4 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, T) = v
 fill_value_decoding(v, T) = T(v)
+fill_value_decoding(v, T::Type{ASCIIChar}) = v == "" ? nothing : v

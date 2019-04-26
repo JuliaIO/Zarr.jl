@@ -10,6 +10,6 @@ include("ZArray.jl")
 include("ZGroup.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
-  zinfo
+  zinfo, DirectoryStore, S3Store
 
 end # module

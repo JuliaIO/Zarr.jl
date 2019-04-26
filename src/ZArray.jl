@@ -83,18 +83,15 @@ end
 # Construction of a ZArray given a folder on a regular drive
 # A lot of the JSON parsing should be moved to a function, since
 # this will be the same for other backends
-function ZArray(folder::String, mode="r")
-    files = readdir(folder)
-    @assert in(".zarray", files)
-    jsonstr = read(joinpath(folder, ".zarray"), String)
+function ZArray(s::T, mode="r") where T <: AbstractStore
+    jsonstr = readmeta(s, ".zarray")
     metadata = Metadata(jsonstr)
-    storage = DirectoryStore(folder)
-    attrs = getattrs(DirectoryStore(folder))
+    attrs = getattrs(s)
     writeable = mode == "w"
-    ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), DirectoryStore}(
-        metadata,DirectoryStore(folder), attrs, writeable)
+    ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), T}(
+        metadata, s, attrs, writeable)
     z = ZArray(
-        metadata, storage, attrs, writeable)
+        metadata, s, attrs, writeable)
 end
 
 """
@@ -156,10 +153,15 @@ function inds_in_block(r::CartesianIndices{N}, # Outer Array indices to read
 end
 
 function getchunkarray(z::ZArray{>:Missing})
-  inner  = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
-  a = SenMissArray(inner,z.metadata.fill_value)
+    # temporary workaround to use strings as data values
+    inner = zeros(eltype(z), z.metadata.chunks)
+    a = SenMissArray(inner,z.metadata.fill_value)
 end
+
+
+
 getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
+
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 # Function to read or write from a zarr array. Could be refactored
@@ -222,6 +224,7 @@ gets() = ()
 # Short wrapper around readblock! to have getindex-style behavior
 function Base.getindex(z::ZArray{T}, i::Int...) where {T}
     ii = CartesianIndices(map(convert_index, i, size(z)))
+    # temporary workaround to strings as a data values
     aout = zeros(T, size(ii))
     readblock!(aout, z, ii)
     aout[1]
@@ -241,6 +244,8 @@ function Base.getindex(z::ZArray{T,1}, ::Colon) where {T}
     readblock!(aout, z, ii)
     reshape(aout, length(aout))
 end
+
+# Method for getting a UnitRange of indices is missing
 
 function Base.setindex!(z::ZArray, v, i...)
     ii = CartesianIndices(map(convert_index, i, size(z)))
@@ -263,7 +268,7 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
-        read_uncompress!(a, curchunk, z.metadata.compressor)
+        read_uncompress!(a, curchunk, z.metadata.compressor, z.storage)
     end
     a
 end
