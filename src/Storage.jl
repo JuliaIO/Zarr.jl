@@ -1,6 +1,8 @@
 # Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
 import JSON
+import Pkg
+Pkg.add(Pkg.PackageSpec(url="https://github.com/JuliaCloud/AWSCore.jl", rev="master"))
 using AWSS3
 using AWSCore
 using AWSSDK.S3
