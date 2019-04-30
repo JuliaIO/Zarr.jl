@@ -4,7 +4,7 @@ import JSON
 import Blosc
 
 include("metadata.jl")
-include("Storage.jl")
+include("Storage/Storage.jl")
 include("Compressors.jl")
 include("ZArray.jl")
 include("ZGroup.jl")

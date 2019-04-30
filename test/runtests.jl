@@ -141,7 +141,7 @@ end
     @test ZarrNative.is_zgroup(S3) == true
     S3group = zopen(S3)
     @test ZarrNative.zname(S3group) == "foo"
-    S3Array = S3group.groups["store/foo/bar/"].arrays["store/foo/bar/baz/"]
+    S3Array = S3group.groups["bar"].arrays["baz"]
     @test ZarrNative.zname(S3Array) == "baz"
     @test eltype(S3Array) == ZarrNative.ASCIIChar
     @test storagesize(S3Array) == 69

@@ -8,19 +8,19 @@ end
 zname(g::ZGroup) = zname(g.storage)
 
 function ZGroup(s::T,mode="r") where T <: AbstractStore
-    arrays = Dict{String, ZArray}()
-    groups = Dict{String, ZGroup}()
+  arrays = Dict{String, ZArray}()
+  groups = Dict{String, ZGroup}()
 
-    for d in subs(s)
-        m = zopen(T(s, d),mode)
-        if isa(m, ZArray)
-            arrays[d] = m
-        else
-            groups[d] = m
-        end
+  for d in subs(s)
+    m = zopen(T(s, d),mode)
+    if isa(m, ZArray)
+      arrays[splitpath(d)[end]] = m
+    else
+      groups[splitpath(d)[end]] = m
     end
-    attrs = getattrs(s)
-    ZGroup(s, arrays, groups, attrs)
+  end
+  attrs = getattrs(s)
+  ZGroup(s, arrays, groups, attrs)
 end
 
 
@@ -42,7 +42,7 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
-function zopen(s::T, mode="r") where T <: AbstractStore
+function zopen(s::AbstractStore, mode="r")
     # add interfaces to Stores later
     if is_zarray(s)
         return ZArray(s,mode)
@@ -54,6 +54,11 @@ function zopen(s::T, mode="r") where T <: AbstractStore
     end
 end
 
+function zopen(s::String, mode="r")
+  #TODO this could include some heuristics to determine if this is a local
+  #Directory or a s3 path or a zip file... Curretnly we assuem a local store
+  zopen(DirectoryStore(s), mode)
+end
 
 function zgroup(p::String; attrs=Dict())
     d = Dict("zarr_format"=>2)
