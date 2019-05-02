@@ -11,7 +11,10 @@ end
 # Stores files in a regular file system
 struct DirectoryStore <: AbstractStore
     folder::String
-    DirectoryStore(p) = new(normalize_path(p))
+    function DirectoryStore(p)
+      mkpath(normalize_path(p))
+      new(normalize_path(p))
+    end
 end
 
 function Base.getindex(d::DirectoryStore, i::String)

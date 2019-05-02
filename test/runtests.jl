@@ -8,12 +8,12 @@ using JSON
     @testset "fields" begin
         z = zzeros(Int, 2, 3)
         @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
-            ZarrNative.DictStore{Matrix{Vector{UInt8}}}}
+            ZarrNative.DictStore}
 
         @test z.storage.name === "data"
-        @test length(z.storage.a) === 1
-        @test length(z.storage.a[1]) === 64
-        @test eltype(z.storage.a[1]) === UInt8
+        @test length(z.storage.a) === 3
+        @test length(z.storage.a["0.0"]) === 64
+        @test eltype(z.storage.a["0.0"]) === UInt8
         @test z.metadata.shape === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
@@ -30,7 +30,7 @@ using JSON
     @testset "methods" begin
         z = zzeros(Int, 2, 3)
         @test z isa ZArray{Int, 2, ZarrNative.BloscCompressor,
-            ZarrNative.DictStore{Matrix{Vector{UInt8}}}}
+            ZarrNative.DictStore}
 
         @test eltype(z) === Int
         @test ndims(z) === 2
@@ -121,6 +121,6 @@ end
     end
 end
 
-
+include("storage.jl")
 
 end  # @testset "ZarrNative"

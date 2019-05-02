@@ -15,7 +15,6 @@ function test_store_common(ds)
   @test !ZarrNative.is_zarray(ds)
 
   @test ZarrNative.zname(ds)=="foo"
-  @test ZarrNative.path(ds)==joinpath(p,"foo")
   @test ZarrNative.subdirs(ds)==[]
   @test sort(ZarrNative.keys(ds))==[".zgroup"]
 
@@ -48,6 +47,7 @@ end
   @test isdir(joinpath(p,"foo","bar"))
   @test isfile(joinpath(p,"foo","bar","0.0.0"))
   @test isfile(joinpath(p,"foo","bar",".zarray"))
+  @test ZarrNative.path(ds)==joinpath(p,"foo")
 end
 
 @testset "AWS S3 Storage" begin

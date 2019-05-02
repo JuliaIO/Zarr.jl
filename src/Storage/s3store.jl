@@ -28,7 +28,11 @@ function storagesize(s::S3Store)
     end
 end
 
-zname(s::S3Store) = splitdir(splitdir(s.store)[1])[2]
+function zname(s::S3Store)
+  d = splitdir(s.store)
+  i = findlast(!isempty,d)
+  d[i]
+end
 
 function isinitialized(s::S3Store, i::String)
   try
