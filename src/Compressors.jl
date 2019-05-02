@@ -37,7 +37,6 @@ function zcompress(a, f::AbstractArray, c::BloscCompressor)
     append!(f, r)
 end
 
-areltype(::BloscCompressor, _) = Vector{UInt8}
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
@@ -48,14 +47,16 @@ Creates an object that can be passed to ZArray constructors without compression.
 """
 struct NoCompressor <: Compressor end
 
-zuncompress(a, r::AbstractArray, ::NoCompressor) = copyto!(a, r)
-
-function zcompress(a, f::AbstractArray, ::NoCompressor)
-    empty!(f)
-    append!(f, a)
+function zuncompress(a, r::AbstractArray, ::NoCompressor)
+  copyto!(a, reinterpret(eltype(a),r))
 end
 
-areltype(::NoCompressor,T) = Vector{T}
+function zcompress(a, f::AbstractArray, ::NoCompressor)
+  a2 = reinterpret(UInt8,a)
+  empty!(f)
+  append!(f, a2)
+end
+
 JSON.lower(::NoCompressor) = nothing
 
 

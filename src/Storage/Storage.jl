@@ -15,14 +15,31 @@ function getattrs(s::AbstractStore)
     JSON.parse(replace(String(atts),": NaN,"=>": \"NaN\","))
   end
 end
+function writeattrs(s::AbstractStore, att::Dict)
+  b = IOBuffer()
+  JSON.print(b,att)
+  s[".zattrs"] = take!(b)
+  att
+end
+
+is_zgroup(s::AbstractStore) = isinitialized(s,".zgroup")
+is_zarray(s::AbstractStore) = isinitialized(s,".zarray")
 
 isinitialized(s::AbstractStore, i::CartesianIndex)=isinitialized(s,citostring(i))
 
-getmetadata(s::AbstractStore) = Metadata(String(s[".zarray"]))
+isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
-function Base.setindex!(s::AbstractStore,v,i::CartesianIndex)
-  s[citostring(i)]=v
+getmetadata(s::AbstractStore) = Metadata(String(s[".zarray"]))
+function writemetadata(s::AbstractStore, m::Metadata)
+  met = IOBuffer()
+  JSON.print(met,m)
+  s[".zarray"] = take!(met)
+  m
 end
+
+Base.setindex!(s::AbstractStore,v,i::CartesianIndex) = s[citostring(i)]=v
+
+Base.isempty(s::AbstractStore) = isempty(keys(s)) && isempty(subdirs(s))
 
 include("directorystore.jl")
 include("dictstore.jl")

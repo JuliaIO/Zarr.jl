@@ -7,16 +7,18 @@ end
 
 zname(g::ZGroup) = zname(g.storage)
 
+#Open an existing ZGroup
 function ZGroup(s::T,mode="r") where T <: AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
 
-  for d in subs(s)
-    m = zopen(T(s, d),mode)
+  for d in subdirs(s)
+    dshort = splitpath(d)[end]
+    m = zopen(getsub(s,dshort),mode)
     if isa(m, ZArray)
-      arrays[splitpath(d)[end]] = m
+      arrays[dshort] = m
     else
-      groups[splitpath(d)[end]] = m
+      groups[dshort] = m
     end
   end
   attrs = getattrs(s)
@@ -42,6 +44,11 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
+"""
+    zopen(s::AbstractStore, mode="r")
+
+Opens a zarr Array or Group at Store `s`
+"""
 function zopen(s::AbstractStore, mode="r")
     # add interfaces to Stores later
     if is_zarray(s)
@@ -54,30 +61,34 @@ function zopen(s::AbstractStore, mode="r")
     end
 end
 
+"""
+    zopen(p::String, mode="r")
+
+Open a zarr Array or group at disc path p.
+"""
 function zopen(s::String, mode="r")
   #TODO this could include some heuristics to determine if this is a local
-  #Directory or a s3 path or a zip file... Curretnly we assuem a local store
+  #Directory or a s3 path or a zip file... Currently we assuem a local store
   zopen(DirectoryStore(s), mode)
 end
 
-function zgroup(p::String; attrs=Dict())
+"""
+    zgroup(s::AbstractStore; attrs=Dict())
+
+Create a new zgroup in the store `s`
+"""
+function zgroup(s::AbstractStore; attrs=Dict())
     d = Dict("zarr_format"=>2)
-    isdir(p) && throw(ArgumentError("Path $p already exists."))
-    mkpath(p)
-    open(joinpath(p, ".zgroup"), "w") do f
-       JSON.print(f, d)
-    end
-    ZGroup(DirectoryStore(p), Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
+    isempty(s) || error("Store is not empty")
+    b = IOBuffer()
+    JSON.print(b,d)
+    s[".zgroup"]=take!(b)
+    writeattrs(s,attrs)
+    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
 end
 
 "Create a subgroup of the group g"
-function zgroup(g::ZGroup, name; attrs=Dict())
-  if isa(g.storage, DictStore)
-      error("Not implemented")
-  elseif isa(g.storage, DirectoryStore)
-      zgroup(joinpath(g.storage.folder, "name"), attrs=attrs)
-  end
-end
+zgroup(g::ZGroup, name; attrs=Dict()) = g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
 
 "Create a new subarray of the group g"
 function zcreate(g::ZGroup, name::String, addargs...; kwargs...)

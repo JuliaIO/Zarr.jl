@@ -6,12 +6,9 @@ struct S3Store <: AbstractStore
     store::String
     region::String
     aws::Dict{Symbol, Any}
-    S3Store(b, s, r, a) = new(b, s, r, a)
 end
 
 S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, region, aws_config(creds=nothing,region=region))
-
-S3Store(s::S3Store, d::String) = S3Store(s.bucket, d, s.region, s.aws)
 
 Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 
@@ -22,6 +19,7 @@ function Base.getindex(s::S3Store, i::String)
     return nothing
   end
 end
+getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.region, s.aws)
 
 function storagesize(s::S3Store)
     contents = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=s.store)["Contents"]
@@ -41,13 +39,15 @@ function isinitialized(s::S3Store, i::String)
   end
 end
 
-is_zgroup(s::S3Store) = isinitialized(s,".zgroup")
-is_zarray(s::S3Store) = isinitialized(s,".zarray")
-
-function subs(s::S3Store)
+function subdirs(s::S3Store)
   st = endswith(s.store,"/") ? s.store : string(s.store,"/")
   s3_resp = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=st, delimiter = "/")
   allstrings(s3_resp["CommonPrefixes"])
+end
+function Base.keys(s::S3Store)
+  st = endswith(s.store,"/") ? s.store : string(s.store,"/")
+  s3_resp = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=st, delimiter = "/")
+  allstrings(s3_resp["Contents"])
 end
 allstrings(v::AbstractArray) = map(i -> String(i["Prefix"]), v)
 allstrings(v) = [String(v["Prefix"])]

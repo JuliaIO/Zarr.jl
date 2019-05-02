@@ -151,7 +151,7 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
     # temporary workaround to use strings as data values
-    inner = zeros(eltype(z), z.metadata.chunks)
+    inner = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
 
@@ -304,11 +304,21 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 """
-function zcreate(::Type{T},
-        dims...;
-        path=nothing,
+function zcreate(::Type{T}, dims...;
         name="",
-        storagetype=isa(path,Nothing) ? DictStore : DirectoryStore,
+        path=nothing,
+        kwargs...
+        ) where T
+  if path===nothing
+    store = DictStore("")
+  else
+    store = DirectoryStore(joinpath(path,name))
+  end
+  zcreate(T, store, dims...; kwargs...)
+end
+
+function zcreate(::Type{T},storage::AbstractStore,
+        dims...;
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
@@ -330,7 +340,11 @@ function zcreate(::Type{T},
         nothing
     )
 
-    storage = storagetype(path,name,metadata,attrs)
+    isempty(storage) || error("$storage is not empty")
+
+    writemetadata(storage, metadata)
+
+    writeattrs(storage, attrs)
 
     z = ZArray{T, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)

@@ -29,45 +29,20 @@ function Base.setindex!(d::DirectoryStore,v,i::String)
   v
 end
 
-"""
-Creates a new DirectoryStore from given metadata by creating a folder on disk and writing the
-.zarray and .zattrs files.
-"""
-function DirectoryStore(path,name,metadata,attrs)
-  if isempty(name)
-    name = splitdir(path)[2]
-  else
-    path = joinpath(path, name)
-  end
-  if isdir(path)
-    !isempty(readdir(path)) && throw(ArgumentError("Directory $path is not empty"))
-  else
-    mkpath(path)
-  end
-  open(joinpath(path, ".zarray"), "w") do f
-    JSON.print(f, metadata)
-  end
-  open(joinpath(path, ".zattrs"), "w") do f
-    JSON.print(f, attrs)
-  end
-  DirectoryStore(path)
-end
+getsub(s::DirectoryStore, d::String) = DirectoryStore(joinpath(s.folder,d))
 
-function DirectoryStore(s::DirectoryStore, d::String)
-    DirectoryStore(joinpath(s.folder), d)
+function newsub(s::DirectoryStore, d::String)
+  p = mkpath(joinpath(s.folder,d))
+  DirectoryStore(p)
 end
 
 storagesize(d::DirectoryStore) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
   filesize(joinpath(d.folder,f))
 end
 
-isinitialized(s::DirectoryStore, i::String) = isfile(joinpath(s.folder, i))
-
 zname(s::DirectoryStore) = splitdir(s.folder)[2]
 
-is_zgroup(s::DirectoryStore) = isfile(joinpath(s.folder, ".zgroup"))
-is_zarray(s::DirectoryStore) = isfile(joinpath(s.folder, ".zarray"))
-
-subs(s::DirectoryStore) = filter(i -> isdir(joinpath(s.folder, i)), readdir(s.folder))
+subdirs(s::DirectoryStore) = filter(i -> isdir(joinpath(s.folder, i)), readdir(s.folder))
+Base.keys(s::DirectoryStore) = filter(i -> isfile(joinpath(s.folder, i)), readdir(s.folder))
 
 path(s::DirectoryStore) = s.folder

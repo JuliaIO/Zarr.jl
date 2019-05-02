@@ -1,34 +1,26 @@
 # Stores data in a simple dict in memory
-struct DictStore{T} <: AbstractStore
-    name::String
-    a::T
-    attrs::Dict
+struct DictStore <: AbstractStore
+  name::String
+  a::Dict{String,Vector{UInt8}}
+  subdirs::Dict{String,DictStore}
 end
-function DictStore(path,name,metadata,attrs)
-  nsubs = map((s, c) -> ceil(Int, s/c), metadata.shape, metadata.chunks)
-  et = areltype(metadata.compressor, eltype(metadata))
-  T=eltype(metadata)
+function DictStore(name)
   isempty(name) && (name="data")
-  a = Array{et}(undef, nsubs...)
-  for i in eachindex(a)
-    a[i] = T[]
-  end
-  DictStore(name, a, attrs)
+  a = Dict{String,Vector{UInt8}}()
+  subdirs = Dict{String,DictStore}()
+  DictStore(name, a, subdirs)
 end
+DictStore() = DictStore("")
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 
-
-storagesize(d::DictStore) = sum(sizeof,values(d.a))
+storagesize(d::DictStore) = sum(sizeof,filter(i->isa(i,Vector{UInt8}),values(d.a)))
 zname(s::DictStore) = s.name
 
-Base.getindex(d::DictStore,i::CartesianIndex) = d.a[i]
-Base.getindex(d::DictStore,s::String) = error("not implemented for DictStore")
-Base.setindex!(d::DictStore,v,i::CartesianIndex) = d.a[i] = v
+Base.getindex(d::DictStore,i::String) = get(d.a,i,nothing)
+Base.setindex!(d::DictStore,v,i::String) = d.a[i] = v
 
+subdirs(d::DictStore) = keys(d.subdirs)
+Base.keys(d::DictStore) = keys(d.a)
+newsub(d::DictStore, n) = d.subdirs[n] = DictStore(n)
 
-"Checks if a chunk is initialized"
-isinitialized(s::DictStore, i::CartesianIndex) = true
-
-# change when DictStore ZGroups are implemented
-is_zgroup(s::DictStore) = false
-is_zarray(s::DictStore) = true
+path(d::DictStore) = ""
