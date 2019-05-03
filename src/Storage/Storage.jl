@@ -12,7 +12,7 @@ function getattrs(s::AbstractStore)
   if atts === nothing
     Dict()
   else
-    JSON.parse(replace(String(atts),": NaN,"=>": \"NaN\","))
+    JSON.parse(replace(String(copy(atts)),": NaN,"=>": \"NaN\","))
   end
 end
 function writeattrs(s::AbstractStore, att::Dict)

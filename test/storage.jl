@@ -8,15 +8,18 @@
     @test ZarrNative.normalize_path("/path/to/a") == "/path/to/a"
 end
 
+"""
+Function to test the interface of AbstractStore. Every complete implementation should pass this test.
+"""
 function test_store_common(ds)
   @test !ZarrNative.is_zgroup(ds)
-  ds[".zgroup"]=rand(50)
+  ds[".zgroup"]=rand(UInt8,50)
   @test ZarrNative.is_zgroup(ds)
   @test !ZarrNative.is_zarray(ds)
 
   @test ZarrNative.zname(ds)=="foo"
-  @test ZarrNative.subdirs(ds)==[]
-  @test sort(ZarrNative.keys(ds))==[".zgroup"]
+  @test isempty(ZarrNative.subdirs(ds))
+  @test sort(collect(ZarrNative.keys(ds)))==[".zgroup"]
 
   #Create a subgroup
   snew = ZarrNative.newsub(ds,"bar")
@@ -32,6 +35,9 @@ function test_store_common(ds)
   @test !ZarrNative.isinitialized(snew,"0.0.1")
   ZarrNative.writeattrs(snew,Dict("a"=>"b"))
   @test ZarrNative.getattrs(snew)==Dict("a"=>"b")
+  snew2 = ZarrNative.getsub(ds,"bar")
+  @test ZarrNative.getattrs(snew2)==Dict("a"=>"b")
+  @test snew2["0.0.0"]==data
 end
 
 @testset "DirectoryStore" begin
@@ -48,6 +54,19 @@ end
   @test isfile(joinpath(p,"foo","bar","0.0.0"))
   @test isfile(joinpath(p,"foo","bar",".zarray"))
   @test ZarrNative.path(ds)==joinpath(p,"foo")
+end
+
+@testset "DictStore" begin
+  A = fill(1.0, 30, 20)
+  chunks = (5,10)
+  metadata = ZarrNative.Metadata(A, chunks; fill_value=-1.5)
+  ds = ZarrNative.DictStore("foo")
+  test_store_common(ds)
+  @test ds.name == "foo"
+  @test haskey(ds.a,".zgroup")
+  @test ds.subdirs["bar"].a[".zattrs"]==UInt8[0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0x62, 0x22, 0x7d]
+  @test sort(collect(keys(ds.subdirs["bar"].a)))==[".zarray", ".zattrs", "0.0.0"]
+  @test isempty(keys(ds.subdirs["bar"].subdirs))
 end
 
 @testset "AWS S3 Storage" begin

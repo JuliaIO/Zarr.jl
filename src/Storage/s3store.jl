@@ -29,7 +29,7 @@ function storagesize(s::S3Store)
 end
 
 function zname(s::S3Store)
-  d = splitdir(s.store)
+  d = split(s.store,"/")
   i = findlast(!isempty,d)
   d[i]
 end

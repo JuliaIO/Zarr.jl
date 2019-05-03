@@ -13,7 +13,7 @@ end
 DictStore() = DictStore("")
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 
-storagesize(d::DictStore) = sum(sizeof,filter(i->isa(i,Vector{UInt8}),values(d.a)))
+storagesize(d::DictStore) = sum(i->i[1] ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])),d.a)
 zname(s::DictStore) = s.name
 
 Base.getindex(d::DictStore,i::String) = get(d.a,i,nothing)
@@ -22,5 +22,6 @@ Base.setindex!(d::DictStore,v,i::String) = d.a[i] = v
 subdirs(d::DictStore) = keys(d.subdirs)
 Base.keys(d::DictStore) = keys(d.a)
 newsub(d::DictStore, n) = d.subdirs[n] = DictStore(n)
+getsub(d::DictStore, n) = d.subdirs[n]
 
 path(d::DictStore) = ""
