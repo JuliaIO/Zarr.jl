@@ -2,9 +2,11 @@ language: julia
 os:
     - osx
     - linux
+before_install:
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then pip install zarr  ; fi
 julia:
-    - 1.0
     - 1.1
+    - nightly
 notifications:
     email: false
 jobs:

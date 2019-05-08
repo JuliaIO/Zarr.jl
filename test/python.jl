@@ -7,6 +7,7 @@
 
 using PyCall
 import PyCall: @py_str
+#If we are on conda, import zarr
 pyimport_conda("zarr","zarr")
 
 #Create some directories
