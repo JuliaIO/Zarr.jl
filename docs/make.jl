@@ -10,6 +10,7 @@ makedocs(
         "Home" => "index.md",
         "Tutorial" => "tutorial.md",
         "Function Reference" => "reference.md",
+        "Storage Backends" => "storage.md",
     ]
 )
 

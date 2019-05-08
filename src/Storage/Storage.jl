@@ -3,6 +3,63 @@
 # and Dictionaries are supported
 abstract type AbstractStore end
 
+#Define the interface
+"""
+  storagesize(d::AbstractStore)
+
+This function shall return the size of all data files in a store.
+"""
+function storagesize end
+
+"""
+    zname(d::AbstractStore)
+
+Returns the name of the current variable.
+"""
+function zname end
+
+"""
+    Base.getindex(d::AbstractStore,i::String)
+
+Returns the data stored in the given key as a Vector{UInt8}
+"""
+Base.getindex(d::AbstractStore,i::String) = error("getindex not implemented for store $(typeof(d))")
+
+"""
+    Base.setindex!(d::AbstractStore,v,i::String)
+
+Writes the values in v to the given store and key.
+"""
+Base.setindex!(d::AbstractStore,v,i::String) = error("setindex not implemented for store $(typeof(d))")
+
+"""
+    subdirs(d::AbstractStore)
+
+Returns a list of keys for children stores in the given store.
+"""
+function subdirs end
+
+"""
+    Base.keys(d::AbstractStore)
+
+Returns the keys of files in the given store.
+"""
+Base.keys(d::AbstractStore) = error("keys function not implemented for store $(typeof(d))")
+
+"""
+    newsub(d::AbstractStore, name::String)
+
+Create a new Store as a child of the given store `d` with given `name`. Returns the new created substore.
+"""
+function newsub end
+
+"""
+    getsub(d::AbstractStore, name::String)
+
+Returns the child store of name `name`.
+"""
+function getsub end
+
 citostring(i::CartesianIndex) = join(reverse((i - one(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]

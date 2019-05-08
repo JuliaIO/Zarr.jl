@@ -1,6 +1,9 @@
 using Test
 using ZarrNative
 using JSON
+using Pkg
+
+include("readwrite.jl")
 
 @testset "ZarrNative" begin
 
@@ -122,5 +125,6 @@ end
 end
 
 include("storage.jl")
+
 
 end  # @testset "ZarrNative"

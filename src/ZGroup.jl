@@ -87,16 +87,13 @@ function zgroup(s::AbstractStore; attrs=Dict())
     ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
 end
 
+zgroup(s::String;kwargs...)=zgroup(DirectoryStore(s);kwargs...)
+
 "Create a subgroup of the group g"
 zgroup(g::ZGroup, name; attrs=Dict()) = g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
 
 "Create a new subarray of the group g"
-function zcreate(g::ZGroup, name::String, addargs...; kwargs...)
-    if isa(g.storage, DictStore)
-        error("Not implemented")
-    elseif isa(g.storage, DirectoryStore)
-        z = zcreate(addargs...; kwargs..., name = name, path=g.storage.folder)
-        g.arrays[name] = z
-        z
-    end
+function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
+  newstore = newsub(g.storage,name)
+  zcreate(T, newstore, addargs...; kwargs...)
 end
