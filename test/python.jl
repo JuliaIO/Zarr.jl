@@ -3,10 +3,10 @@
 ### We save some data in Julia and python and test if it is still the same
 ### when read from teh other language
 ###
-
-
+@testset "Python zarr implementation" begin
 
 using PyCall
+import PyCall: @py_str
 pyimport_conda("zarr","zarr")
 
 #Create some directories
@@ -35,7 +35,6 @@ for t in dtypes, comp in compressors
     a = zcreate(t, g,string("a",t,compstr),10,6,2,attrs=att, chunks = (5,2,2))
     a[:,:,:] = testarrays[t]
 end
-
 # Test reading in python
 py"""
 import zarr
@@ -89,3 +88,4 @@ a1 = g["a1"]
 @test a1.attrs["test"]==Dict("b"=>6)
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
+end

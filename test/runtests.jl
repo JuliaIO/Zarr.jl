@@ -2,10 +2,10 @@ using Test
 using ZarrNative
 using JSON
 using Pkg
-
-include("readwrite.jl")
+using PyCall
 
 @testset "ZarrNative" begin
+
 
 @testset "ZArray" begin
     @testset "fields" begin
@@ -124,7 +124,24 @@ end
     end
 end
 
+@testset "getindex/setindex" begin
+  a = zzeros(Int64, 10, 10, chunks = (5,2))
+  a[2,:] = 5
+  a[:,3] = 6
+  a[9:10,9:10] = 2
+  a[5,5] = 1
+
+  @test a[2,:] == [5, 5, 6, 5, 5, 5, 5, 5, 5, 5]
+  @test a[:,3] == fill(6,10)
+  @test a[4,4] == 0
+  @test a[5:6,5:6] == [1 0; 0 0]
+  @test a[9:10,9:10] == fill(2,2,2)
+end
+
+
+
 include("storage.jl")
 
+include("python.jl")
 
 end  # @testset "ZarrNative"
