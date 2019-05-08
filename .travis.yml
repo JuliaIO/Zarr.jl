@@ -3,7 +3,7 @@ os:
     - osx
     - linux
 before_install:
-  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then pip install zarr  ; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install zarr  ; fi
 julia:
     - 1.1
     - nightly
