@@ -33,6 +33,7 @@ function Base.show(io::IO, g::ZGroup)
     !isempty(g.groups) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(g.groups))...)
     nothing
 end
+Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
 
 function Base.getindex(g::ZGroup, k)
     if haskey(g.groups, k)
@@ -40,7 +41,7 @@ function Base.getindex(g::ZGroup, k)
     elseif haskey(g.arrays, k)
        return g.arrays[k]
     else
-       throw(KeyError("Zarr Dataset does not contain ", k))
+       throw(KeyError("Zarr Dataset does not contain $k"))
     end
 end
 

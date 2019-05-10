@@ -52,17 +52,29 @@ function isinitialized(s::S3Store, i::String)
   end
 end
 
+isgoogle(s::S3Store) = get(s.aws,:url_ext,nothing) == "googleapis.com"
+
+function cloud_list_objects(s::S3Store, prefix)
+  if isgoogle(s)
+    S3.list_objects(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
+  else
+    S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
+  end
+end
 function subdirs(s::S3Store)
   st = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
-  s3_resp = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=st, delimiter = "/")
-  allstrings(s3_resp["CommonPrefixes"])
+  s3_resp = cloud_list_objects(s,st)
+  !haskey(s3_resp,"CommonPrefixes") && return String[]
+  allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
 function Base.keys(s::S3Store)
   st = endswith(s.store,"/") ? s.store : string(s.store,"/")
-  s3_resp = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=st, delimiter = "/")
-  allstrings(s3_resp["Contents"])
+  s3_resp = cloud_list_objects(s,st)
+  !haskey(s3_resp,"Contents") && return String[]
+  r = allstrings(s3_resp["Contents"],"Key")
+  map(i->splitdir(i)[2],r)
 end
-allstrings(v::AbstractArray) = map(i -> String(i["Prefix"]), v)
-allstrings(v) = [String(v["Prefix"])]
+allstrings(v::AbstractArray,prefixkey) = map(i -> String(i[prefixkey]), v)
+allstrings(v,prefixkey) = [String(v[prefixkey])]
 
 path(s::S3Store) = s.store
