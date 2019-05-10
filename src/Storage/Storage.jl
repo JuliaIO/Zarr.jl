@@ -64,12 +64,15 @@ citostring(i::CartesianIndex) = join(reverse((i - one(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]
 
+maybecopy(x) = copy(x)
+maybecopy(x::String) = x
+
 function getattrs(s::AbstractStore)
   atts = s[".zattrs"]
   if atts === nothing
     Dict()
   else
-    JSON.parse(replace(String(copy(atts)),": NaN,"=>": \"NaN\","))
+    JSON.parse(replace(String(maybecopy(atts)),": NaN,"=>": \"NaN\","))
   end
 end
 function writeattrs(s::AbstractStore, att::Dict)

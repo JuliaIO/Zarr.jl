@@ -15,8 +15,12 @@ Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 function Base.getindex(s::S3Store, i::String)
   try
     return S3.get_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
-  catch
-    return nothing
+  catch e
+    if isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+      return nothing
+    else
+      throw(e)
+    end
   end
 end
 getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.region, s.aws)
@@ -38,13 +42,18 @@ function isinitialized(s::S3Store, i::String)
   try
     S3.head_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
     return true
-  catch
-    return false
+  catch e
+
+    if isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+      return false
+    else
+      throw(e)
+    end
   end
 end
 
 function subdirs(s::S3Store)
-  st = endswith(s.store,"/") ? s.store : string(s.store,"/")
+  st = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
   s3_resp = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=st, delimiter = "/")
   allstrings(s3_resp["CommonPrefixes"])
 end
