@@ -1,3 +1,10 @@
+```@meta
+CurrentModule = ZarrNative
+DocTestSetup  = quote
+    using ZarrNative
+end
+```
+
 ## Tutorial
 
 Zarr provides classes and functions for working with N-dimensional arrays that behave like Julia arrays but whose data is divided into chunks and each chunk is compressed. If you are already familiar with HDF5 then Zarr arrays provide similar functionality, but with some additional flexibility. This tutorial is an attempt to recreate this  [Python Zarr tutorial](https://zarr.readthedocs.io/en/stable/tutorial.html) as closely as possible and some of the explanation text is just copied and modified from this source.

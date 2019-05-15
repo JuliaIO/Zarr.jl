@@ -1,9 +1,9 @@
 import Blosc
 
 abstract type Compressor end
-
 getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
 getCompressor(::Nothing) = NoCompressor()
+
 
 struct BloscCompressor <: Compressor
     blocksize::Int
@@ -28,33 +28,15 @@ function getCompressor(::Type{BloscCompressor}, d::Dict)
     BloscCompressor(d["blocksize"], d["clevel"], d["cname"], d["shuffle"] > 0)
 end
 
-function read_uncompress!(a, f::String, c::BloscCompressor, s::ST) where ST <: AbstractStore
-    if s isa DirectoryStore
-        r = read(f)
-    elseif s isa S3Store
-        r = readobject(f, s)
-    else
-        throw(ArgumentError("Unknown type of storage."))
-    end
-    length(r) > 0 && read_uncompress!(a, r, c)
-end
+zuncompress(a, r::AbstractArray, ::BloscCompressor) = copyto!(a, Blosc.decompress(Base.nonmissingtype(eltype(a)), r))
 
-read_uncompress!(a, r::AbstractArray, ::BloscCompressor) = copyto!(a, Blosc.decompress(eltype(a), r))
-
-function write_compress(a, f::String, c::BloscCompressor)
-    Blosc.set_compressor(c.cname)
-    r = Blosc.compress(a; level=c.clevel, shuffle=c.shuffle)
-    write(f, r)
-end
-
-function write_compress(a, f::AbstractArray, c::BloscCompressor)
+function zcompress(a, f::AbstractArray, c::BloscCompressor)
     Blosc.set_compressor(c.cname)
     r = Blosc.compress(a, level=c.clevel, shuffle=c.shuffle)
     empty!(f)
     append!(f, r)
 end
 
-areltype(::BloscCompressor, _) = Vector{UInt8}
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle ? 1 : 0, "blocksize"=>c.blocksize)
 
@@ -65,17 +47,18 @@ Creates an object that can be passed to ZArray constructors without compression.
 """
 struct NoCompressor <: Compressor end
 
-
-compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
-
-read_uncompress!(a, f::String, ::NoCompressor) = filesize(f) > 0 && read!(f, a)
-read_uncompress!(a, r::AbstractArray, ::NoCompressor) = copyto!(a, r)
-write_compress(a, f::String, ::NoCompressor) = write(f, a)
-
-function write_compress(a, f::AbstractArray, ::NoCompressor)
-    empty!(f)
-    append!(f, a)
+function zuncompress(a, r::AbstractArray, ::NoCompressor)
+  copyto!(a, reinterpret(eltype(a),r))
 end
 
-areltype(::NoCompressor,T) = Vector{T}
+function zcompress(a, f::AbstractArray, ::NoCompressor)
+  a2 = reinterpret(UInt8,a)
+  empty!(f)
+  append!(f, a2)
+end
+
 JSON.lower(::NoCompressor) = nothing
+
+
+
+compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)

@@ -84,14 +84,11 @@ end
 # A lot of the JSON parsing should be moved to a function, since
 # this will be the same for other backends
 function ZArray(s::T, mode="r") where T <: AbstractStore
-    jsonstr = readmeta(s, ".zarray")
-    metadata = Metadata(jsonstr)
-    attrs = getattrs(s)
-    writeable = mode == "w"
-    ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), T}(
-        metadata, s, attrs, writeable)
-    z = ZArray(
-        metadata, s, attrs, writeable)
+  metadata = getmetadata(s)
+  attrs = getattrs(s)
+  writeable = mode == "w"
+  ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), T}(
+    metadata, s, attrs, writeable)
 end
 
 """
@@ -154,7 +151,7 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
     # temporary workaround to use strings as data values
-    inner = zeros(eltype(z), z.metadata.chunks)
+    inner = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
 
@@ -191,9 +188,8 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
         # Extract them as CartesianIndices objects
         i_in_a = CartesianIndices(map(i -> i[1], ii))
         i_in_out = CartesianIndices(map(i -> i[2], ii))
-
         # Uncompress a chunk
-        if readmode || (isinitialized(z.storage, bI + one(bI)) && (size(i_in_a) != size(i_in_a)))
+        if readmode || (isinitialized(z.storage, bI + one(bI)) && (size(i_in_a) != size(a)))
           readchunk!(maybeinner(a), z, bI + one(bI))
         end
 
@@ -264,11 +260,11 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = getchunk(z.storage, i)
+    curchunk = z.storage[i]
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
-        read_uncompress!(a, curchunk, z.metadata.compressor, z.storage)
+        zuncompress(a, curchunk, z.metadata.compressor)
     end
     a
 end
@@ -281,11 +277,9 @@ Write the data from the array `a` to the chunk `i` in the ZArray `z`
 function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
     z.writeable || error("ZArray not in write mode")
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = getchunk(z.storage, i)
-    if curchunk === nothing
-      curchunk = createchunk(z.storage,i)
-    end
-    write_compress(a, curchunk, z.metadata.compressor)
+    dtemp = UInt8[]
+    zcompress(a,dtemp,z.metadata.compressor)
+    z.storage[i]=dtemp
     a
 end
 
@@ -310,11 +304,21 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 """
-function zcreate(::Type{T},
-        dims...;
-        path=nothing,
+function zcreate(::Type{T}, dims...;
         name="",
-        storagetype=isa(path,Nothing) ? DictStore : DirectoryStore,
+        path=nothing,
+        kwargs...
+        ) where T
+  if path===nothing
+    store = DictStore("")
+  else
+    store = DirectoryStore(joinpath(path,name))
+  end
+  zcreate(T, store, dims...; kwargs...)
+end
+
+function zcreate(::Type{T},storage::AbstractStore,
+        dims...;
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
@@ -336,7 +340,11 @@ function zcreate(::Type{T},
         nothing
     )
 
-    storage = storagetype(path,name,metadata,attrs)
+    isempty(storage) || error("$storage is not empty")
+
+    writemetadata(storage, metadata)
+
+    writeattrs(storage, attrs)
 
     z = ZArray{T, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)
