@@ -1,4 +1,4 @@
-The ZarrNative.jl package is licensed under the MIT "Expat" License:
+The Zarr.jl package is licensed under the MIT "Expat" License:
 
 > Copyright (c) 2019: Fabian Gans, Martijn Visser
 >

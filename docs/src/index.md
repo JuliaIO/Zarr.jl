@@ -1,4 +1,4 @@
-# ZarrNative.jl
+# Zarr.jl
 
 *Reading and Writing Zarr Datasets from Julia*
 

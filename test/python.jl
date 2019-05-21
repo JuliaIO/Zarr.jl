@@ -21,7 +21,7 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import ZarrNative: NoCompressor, BloscCompressor
+import Zarr: NoCompressor, BloscCompressor
 dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
@@ -82,7 +82,7 @@ z2[:]=[k for k in 'hallo']
 
 #Open in Julia
 g = zopen(ppython)
-@test g isa ZarrNative.ZGroup
+@test g isa Zarr.ZGroup
 a1 = g["a1"]
 @test a1 isa ZArray
 @test a1[:,:,:]==permutedims(data,(3,2,1))

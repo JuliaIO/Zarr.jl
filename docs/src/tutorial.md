@@ -1,7 +1,7 @@
 ```@meta
-CurrentModule = ZarrNative
+CurrentModule = Zarr
 DocTestSetup  = quote
-    using ZarrNative
+    using Zarr
 end
 ```
 
@@ -11,10 +11,10 @@ Zarr provides classes and functions for working with N-dimensional arrays that b
 
 ### Creating an in-memory array
 
-ZarrNative has several functions for creating arrays. For example:
+Zarr has several functions for creating arrays. For example:
 
 ```jldoctest inmemory
-julia> using ZarrNative
+julia> using Zarr
 
 julia> z = zzeros(Int32,10000,10000,chunks=(1000,1000))
 ZArray{Int32} of size 10000 x 10000
@@ -88,7 +88,7 @@ julia> z[1:5,1:10]
 In the examples above, compressed data for each chunk of the array was stored in main memory. Zarr arrays can also be stored on a file system, enabling persistence of data between sessions. For example:
 
 ```jldoctest persist
-julia> using ZarrNative
+julia> using Zarr
 
 julia> p = "data/example.zarr"
 "data/example.zarr"
@@ -132,15 +132,15 @@ true
 A number of different compressors can be used with Zarr. In this Julia package we currently support only Blosc compression, but more compression methods will be supported in the future. Different compressors can be provided via the compressor keyword argument accepted by all array creation functions. For example:
 
 ```jldoctest compress
-julia> using ZarrNative
+julia> using Zarr
 
-julia> compressor = ZarrNative.BloscCompressor(cname="zstd", clevel=3, shuffle=true)
-ZarrNative.BloscCompressor(0, 3, "zstd", true)
+julia> compressor = Zarr.BloscCompressor(cname="zstd", clevel=3, shuffle=true)
+Zarr.BloscCompressor(0, 3, "zstd", true)
 
 julia> data = Int32(1):Int32(1000000000)
 1:1000000000
 
-julia> z = ZarrNative.zcreate(Int32,10000, 10000, chunks = (1000,1000),compressor=compressor)
+julia> z = Zarr.zcreate(Int32,10000, 10000, chunks = (1000,1000),compressor=compressor)
 ZArray{Int32} of size 10000 x 10000
 
 julia> z[:,:]=data
@@ -159,7 +159,7 @@ Shape               : (10000, 10000)
 Chunk Shape         : (1000, 1000)
 Order               : C
 Read-Only           : false
-Compressor          : ZarrNative.BloscCompressor(0, 3, "zstd", true)
+Compressor          : Zarr.BloscCompressor(0, 3, "zstd", true)
 Store type          : Dictionary Storage
 No. bytes           : 400000000
 No. bytes stored    : 2406369
@@ -170,10 +170,10 @@ Chunks initialized  : 100/100
 
 If you don’t specify a compressor, by default Zarr uses the Blosc compressor. Blosc is generally very fast and can be configured in a variety of ways to improve the compression ratio for different types of data. Blosc is in fact a “meta-compressor”, which means that it can use a number of different compression algorithms internally to compress the data. Blosc also provides highly optimized implementations of byte- and bit-shuffle filters, which can improve compression ratios for some data.
 
-To disable compression, set `compressor=ZarrNative.NoCompressor()` when creating an array, e.g.:
+To disable compression, set `compressor=Zarr.NoCompressor()` when creating an array, e.g.:
 
 ```jldoctest compress
-julia> z = zzeros(Int32,100000000, chunks=(1000000,), compressor=ZarrNative.NoCompressor());
+julia> z = zzeros(Int32,100000000, chunks=(1000000,), compressor=Zarr.NoCompressor());
 
 julia> storageratio(z)
 1.0

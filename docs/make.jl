@@ -1,10 +1,10 @@
-using Documenter, ZarrNative
+using Documenter, Zarr
 
 makedocs(
-    modules = [ZarrNative],
+    modules = [Zarr],
     clean = false,
     format = Documenter.HTML(),
-    sitename = "ZarrNative.jl",
+    sitename = "Zarr.jl",
     authors = "Fabian Gans, Martijn Visser",
     pages = [
         "Home" => "index.md",
@@ -18,5 +18,5 @@ zarrpath = joinpath(@__DIR__, "data", "example.zarr")
 isdir(zarrpath) && rm(zarrpath, recursive=true)
 
 deploydocs(
-    repo = "github.com/meggart/ZarrNative.jl.git",
+    repo = "github.com/meggart/Zarr.jl.git",
 )

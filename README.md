@@ -1,6 +1,6 @@
-# ZarrNative.jl
+# Zarr.jl
 
-ZarrNative is a Julia package providing an implementation of chunked, compressed, N-dimensional arrays. [Zarr](https://zarr.readthedocs.io/en/stable/) is originally a Python package. In ZarrNative we aim to implement the [zarr spec](https://zarr.readthedocs.io/en/stable/spec/v2.html).
+Zarr is a Julia package providing an implementation of chunked, compressed, N-dimensional arrays. [Zarr](https://zarr.readthedocs.io/en/stable/) is originally a Python package. In Zarr we aim to implement the [zarr spec](https://zarr.readthedocs.io/en/stable/spec/v2.html).
 
 | **Documentation**                                                               | **Build Status**                                                                                |
 |:-------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
@@ -13,7 +13,7 @@ The package currently implements basic functionality for reading and writing zar
 ## Quick start
 
 ````julia
-using ZarrNative
+using Zarr
 z1 = zcreate(Int, 10000,10000,path = "data/example.zarr",chunks=(1000, 1000))
 z1[:] = 42
 z1[:,1] = 1:10000
@@ -30,10 +30,10 @@ https://zarr.readthedocs.io/en/stable/spec/v2.html
 
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://meggart.github.io/ZarrNative.jl/latest
+[docs-dev-url]: https://meggart.github.io/Zarr.jl/latest
 
-[travis-img]: https://travis-ci.org/meggart/ZarrNative.jl.svg?branch=master
-[travis-url]: https://travis-ci.org/meggart/ZarrNative.jl
+[travis-img]: https://travis-ci.org/meggart/Zarr.jl.svg?branch=master
+[travis-url]: https://travis-ci.org/meggart/Zarr.jl
 
-[codecov-img]: https://codecov.io/gh/meggart/ZarrNative.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/meggart/ZarrNative.jl
+[codecov-img]: https://codecov.io/gh/meggart/Zarr.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/meggart/Zarr.jl

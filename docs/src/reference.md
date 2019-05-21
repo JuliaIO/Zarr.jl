@@ -8,6 +8,6 @@ zzeros
 ## Compressors
 
 ```@docs
-ZarrNative.BloscCompressor
-ZarrNative.NoCompressor
+Zarr.BloscCompressor
+Zarr.NoCompressor
 ```
