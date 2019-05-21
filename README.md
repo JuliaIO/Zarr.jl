@@ -6,6 +6,9 @@ ZarrNative is a Julia package providing an implementation of chunked, compressed
 |:-------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
 | [![][docs-dev-img]][docs-dev-url] | [![][travis-img]][travis-url] [![][codecov-img]][codecov-url] |
 
+## Package status
+
+The package currently implements basic functionality for reading and writing zarr arrays. However, the package is under active development, since many compressors and backends supported by the python implementation are still missing.
 
 ## Links
 https://discourse.julialang.org/t/a-julia-compatible-alternative-to-zarr/11842
