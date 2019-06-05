@@ -1,12 +1,8 @@
 language: julia
+codecov: true
 os:
     - osx
     - linux
-# before_install:
-#   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get -y install python3-pip  ; fi
-#   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip3 install --upgrade pip  ; fi
-#   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip3 install --upgrade setuptools  ; fi
-#   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip3 install zarr  ; fi
 julia:
     - 1.1
     - nightly
@@ -21,5 +17,5 @@ jobs:
         - julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
         - julia --project=docs docs/make.jl
       after_success: skip
-after_success:
-- julia -e 'import Pkg; Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder()); Codecov.submit(Codecov.process_folder())'
+#after_success:
+#- julia -e 'import Pkg; Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder()); Codecov.submit(Codecov.process_folder())'
