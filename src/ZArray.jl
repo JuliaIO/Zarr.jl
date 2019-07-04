@@ -30,9 +30,9 @@ end
 
 Base.eltype(::ZArray{T}) where {T} = T
 Base.ndims(::ZArray{<:Any,N}) where {N} = N
-Base.size(z::ZArray) = z.metadata.shape
-Base.size(z::ZArray,i) = z.metadata.shape[i]
-Base.length(z::ZArray) = prod(z.metadata.shape)
+Base.size(z::ZArray) = z.metadata.shape[]
+Base.size(z::ZArray,i) = z.metadata.shape[][i]
+Base.length(z::ZArray) = prod(z.metadata.shape[])
 Base.lastindex(z::ZArray,n) = size(z,n)
 Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
 
@@ -87,7 +87,7 @@ function ZArray(s::T, mode="r") where T <: AbstractStore
   metadata = getmetadata(s)
   attrs = getattrs(s)
   writeable = mode == "w"
-  ZArray{eltype(metadata), length(metadata.shape), typeof(metadata.compressor), T}(
+  ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
     metadata, s, attrs, writeable)
 end
 
@@ -329,7 +329,8 @@ function zcreate(::Type{T},storage::AbstractStore,
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
-    metadata = Metadata{T, N, C}(
+    T2 = fill_value == nothing ? T : Union{T,Missing}
+    metadata = Metadata{T2, N, C}(
         2,
         dims,
         chunks,
@@ -346,16 +347,23 @@ function zcreate(::Type{T},storage::AbstractStore,
 
     writeattrs(storage, attrs)
 
-    z = ZArray{T, N, typeof(compressor), typeof(storage)}(
+    z = ZArray{T2, N, typeof(compressor), typeof(storage)}(
         metadata, storage, attrs, writeable)
 end
+
+function ZArray(a::AbstractArray{T}, args...; kwargs...) where T
+  z = zcreate(T, args..., size(a)...; kwargs...)
+  z[:]=a
+  z
+end
+
 
 """
     chunkindices(z::ZArray)
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape, z.metadata.chunks))
+chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
 
 """
     zzeros(T, dims..., )
@@ -369,4 +377,71 @@ function zzeros(T,dims...;kwargs...)
       writechunk!(as, z, i)
   end
   z
+end
+
+#Resizing Zarr arrays
+"""
+    resize!(z::ZArray{T,N}, newsize::NTuple{N})
+
+Resizes a `ZArray` to the new specified size. If the size along any of the
+axes is decreased, unused chunks will be deleted from the store.
+"""
+function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
+    oldsize = z.metadata.shape[]
+    z.metadata.shape[] = newsize
+    #Check if array was shrunk
+    if any(map(<,newsize, oldsize))
+        prune_oob_chunks(z.storage,oldsize,newsize, z.metadata.chunks)
+    end
+    writemetadata(z.storage, z.metadata)
+    nothing
+end
+Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
+
+"""
+    append!(z::ZArray{<:Any, N},a;dims = N)
+
+Appends an AbstractArray to an existinng `ZArray` along the dimension dims. The
+size of the `ZArray` is increased accordingly and data appended.
+
+Example:
+
+````julia
+z=zzeros(Int,5,3)
+append!(z,[1,2,3],dims=1) #Add a new row
+append!(z,ones(Int,6,2)) #Add two new columns
+z[:,:]
+````
+"""
+function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
+    #Determine how many entries to add to axis
+    otherdims = sort!(setdiff(1:N,dims))
+    othersize = size(z)[otherdims]
+    if ndims(a)==N
+        nadd = size(a,dims)
+        size(a)[otherdims]==othersize || throw(DimensionMismatch("Array to append does not have the correct size, expected: $(othersize)"))
+    elseif ndims(a)==N-1
+        size(a)==othersize || throw(DimensionMismatch("Array to append does not have the correct size, expected: $(othersize)"))
+        nadd = 1
+    else
+        throw(DimensionMismatch("Number of dimensions of array must be either $N or $(N-1)"))
+    end
+    oldsize = size(z)
+    newsize = ntuple(i->i==dims ? oldsize[i]+nadd : oldsize[i], N)
+    resize!(z,newsize)
+    appendinds = ntuple(i->i==dims ? (oldsize[i]+1:newsize[i]) : Colon(),N)
+    z[appendinds...] = a
+    nothing
+end
+
+function prune_oob_chunks(s::AbstractStore,oldsize, newsize, chunks)
+    dimstoshorten = findall(map(<,newsize, oldsize))
+    for idim in dimstoshorten
+        delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
+        allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
+        r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
+        for cI in CartesianIndices(r)
+            delete!(s,cI)
+        end
+    end
 end

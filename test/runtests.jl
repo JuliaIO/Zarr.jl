@@ -17,7 +17,7 @@ using PyCall
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
         @test eltype(z.storage.a["0.0"]) === UInt8
-        @test z.metadata.shape === (2, 3)
+        @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
         @test z.metadata.fill_value === nothing
@@ -93,7 +93,7 @@ end
         metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
         @test metadata isa Zarr.Metadata
         @test metadata.zarr_format === 2
-        @test metadata.shape === size(A)
+        @test metadata.shape[] === size(A)
         @test metadata.chunks === chunks
         @test metadata.dtype === "<f8"
         @test metadata.compressor === Zarr.BloscCompressor(0, 5, "lz4", true)
@@ -103,7 +103,7 @@ end
 
         jsonstr = json(metadata)
         metadata_cycled = Zarr.Metadata(jsonstr)
-        @test metadata === metadata_cycled
+        @test metadata == metadata_cycled
     end
 
     @testset "Fill value" begin
@@ -138,6 +138,29 @@ end
   @test a[9:10,9:10] == fill(2,2,2)
 end
 
+@testset "resize" begin
+  a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+  resize!(a,5,4)
+  @test size(a)==(5,4)
+  resize!(a,10,10)
+  @test size(a)==(10,10)
+  @test all(ismissing,a[6:end,:])
+  xapp = rand(1:10,10,20)
+  append!(a,xapp)
+  @test size(a)==(10,30)
+  @test a[:,11:30] == xapp
+  singlevec = rand(1:10,10)
+  append!(a,singlevec)
+  @test size(a)==(10,31)
+  @test a[:,31]==singlevec
+  singlerow = rand(1:10,31)
+  append!(a,singlerow,dims=1)
+  @test size(a)==(11,31)
+  @test a[11,:]==singlerow
+  append!(a,vcat(singlerow', singlerow'), dims=1)
+  @test size(a)==(13,31)
+  @test a[12:13,:]==vcat(singlerow', singlerow')
+end
 
 
 include("storage.jl")

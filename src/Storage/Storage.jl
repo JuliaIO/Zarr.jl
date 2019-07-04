@@ -60,9 +60,16 @@ Returns the child store of name `name`.
 """
 function getsub end
 
+"""
+    Base.delete!(d::AbstractStore, k::String)
+
+Deletes the given key from the store.
+"""
+
 citostring(i::CartesianIndex) = join(reverse((i - one(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]
+Base.delete!(s::AbstractStore, i::CartesianIndex) = delete!(s, citostring(i))
 
 maybecopy(x) = copy(x)
 maybecopy(x::String) = x
