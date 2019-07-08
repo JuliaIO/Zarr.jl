@@ -200,7 +200,7 @@ function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=
             # Write data, here one could dispatch on the IndexStyle
             # Of the user-provided array, and then decide on an
             # Indexing style
-            a[i_in_a] .= extractreadinds(aout, linoutinds, i_in_out)
+            copydata!(a,i_in_a, aout,linoutinds, i_in_out)
             writechunk!(maybeinner(a), z, bI + one(bI))
         end
     end
@@ -283,12 +283,13 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
     a
 end
 
-function extractreadinds(a,linoutinds,i_in_out)
+function copydata!(a,i_in_a,aout,linoutinds,i_in_out)
     i_in_out2 = linoutinds[i_in_out]
-    a[i_in_out2]
+    a[i_in_a] .= aout[i_in_out2]
 end
+copydata!(a,i_in_a, aout::Number, linoutinds, i_in_out) = a[i_in_a] .= aout
 
-extractreadinds(a::Number, linoutinds, i_in_out) = a
+copydata!(a::AbstractArray{<:Any,N},i_in_a,aout::AbstractArray{<:Any,N},linoutinds,i_in_out) where N = copyto!(a,i_in_a,aout,i_in_out)
 
 """
     zcreate(T, dims...;kwargs)
