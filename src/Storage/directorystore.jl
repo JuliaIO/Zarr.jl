@@ -47,5 +47,7 @@ zname(s::DirectoryStore) = splitdir(s.folder)[2]
 
 subdirs(s::DirectoryStore) = filter(i -> isdir(joinpath(s.folder, i)), readdir(s.folder))
 Base.keys(s::DirectoryStore) = filter(i -> isfile(joinpath(s.folder, i)), readdir(s.folder))
+Base.delete!(s::DirectoryStore, k::String) = isfile(joinpath(s.folder, k)) && rm(joinpath(s.folder, k))
+
 
 path(s::DirectoryStore) = s.folder

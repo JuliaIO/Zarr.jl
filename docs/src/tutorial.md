@@ -125,7 +125,43 @@ true
 
 ### Resizing and appending
 
-*TODO*
+A Zarr array can be resized, which means that any of its dimensions can be increased or decreased in length. For example:
+
+```jldoctest resize
+julia> using Zarr
+
+julia> z = zzeros(Int32,10000, 10000, chunks=(1000, 1000))
+ZArray{Int32} of size 10000 x 10000
+
+julia> z[:] = 42
+42
+
+julia> resize!(z,20000, 10000)
+
+julia> size(z)
+(20000, 10000)
+```
+
+Note that when an array is resized, the underlying data are not rearranged in any way. If one or more dimensions are shrunk, any chunks falling outside the new array shape will be deleted from the underlying store.
+
+For convenience, `ZArrays` also provide an `append!` method, which can be used to append data to any axis. E.g.:
+
+```jldoctest resize
+julia> a = reshape(1:Int32(10000000),1000, 10000);
+
+julia> z = ZArray(a, chunks=(100, 1000))
+ZArray{Int64} of size 1000 x 10000
+
+julia> size(z)
+(1000, 10000)
+
+julia> append!(z,a)
+
+julia> append!(z,hcat(a,a), dims=1)
+
+julia> size(z)
+(2000, 20000)
+```
 
 ### Compressors
 

@@ -19,6 +19,8 @@ zname(s::DictStore) = s.name
 Base.getindex(d::DictStore,i::String) = get(d.a,i,nothing)
 Base.setindex!(d::DictStore,v,i::String) = d.a[i] = v
 
+Base.delete!(d::DictStore,i::String) = delete!(d.a,i)
+
 subdirs(d::DictStore) = keys(d.subdirs)
 Base.keys(d::DictStore) = keys(d.a)
 newsub(d::DictStore, n) = d.subdirs[n] = DictStore(n)

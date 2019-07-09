@@ -12,13 +12,18 @@ S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, 
 
 Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 
+function error_is_ignorable(e)
+  isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+end
+
 function Base.getindex(s::S3Store, i::String)
   try
     return S3.get_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
   catch e
-    if isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+    if error_is_ignorable(e)
       return nothing
     else
+      println(joinpath(s.store,i))
       throw(e)
     end
   end
@@ -43,10 +48,10 @@ function isinitialized(s::S3Store, i::String)
     S3.head_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
     return true
   catch e
-
-    if isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+    if error_is_ignorable(e)
       return false
     else
+      println(joinpath(s.store,i))
       throw(e)
     end
   end

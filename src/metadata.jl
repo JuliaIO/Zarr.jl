@@ -67,7 +67,7 @@ https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
 struct Metadata{T, N, C}
     zarr_format::Int
-    shape::NTuple{N, Int}
+    shape::Ref{NTuple{N, Int}}
     chunks::NTuple{N, Int}
     dtype::String  # structured data types not yet supported
     compressor::C
@@ -75,6 +75,20 @@ struct Metadata{T, N, C}
     order::Char
     filters::Nothing  # not yet supported
 end
+
+#To make unit tests pass with ref shape
+import Base.==
+function ==(m1::Metadata{T,N,C}, m2::Metadata{T,N,C}) where {T,N,C}
+  m1.zarr_format == m2.zarr_format &&
+  m1.shape[] == m2.shape[] &&
+  m1.chunks == m2.chunks &&
+  m1.dtype == m2.dtype &&
+  m1.compressor == m2.compressor &&
+  m1.fill_value == m2.fill_value &&
+  m1.order == m2.order &&
+  m1.filters == m2.filters
+end
+
 
 "Construct Metadata based on your data"
 function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
@@ -130,7 +144,7 @@ end
 function JSON.lower(md::Metadata)
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
-        "shape" => md.shape |> reverse,
+        "shape" => md.shape[] |> reverse,
         "chunks" => md.chunks |> reverse,
         "dtype" => md.dtype,
         "compressor" => JSON.lower(md.compressor),

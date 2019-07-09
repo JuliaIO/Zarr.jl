@@ -38,6 +38,9 @@ function test_store_common(ds)
   snew2 = Zarr.getsub(ds,"bar")
   @test Zarr.getattrs(snew2)==Dict("a"=>"b")
   @test snew2["0.0.0"]==data
+  delete!(snew2,"0.0.0")
+  @test !Zarr.isinitialized(snew2,"0.0.0")
+  snew["0.0.0"] = data
 end
 
 @testset "DirectoryStore" begin
