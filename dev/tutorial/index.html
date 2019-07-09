@@ -57,7 +57,31 @@ julia&gt; z1[:,1]=1:10000;
 ZArray{Int64} of size 10000 x 10000
 
 julia&gt; all(z1[:,:].==z2[:,:])
-true</code></pre><p><em>A Julia-equivalent for zarr.load and zarr.save is still missing...</em></p><h3><a class="nav-anchor" id="Resizing-and-appending-1" href="#Resizing-and-appending-1">Resizing and appending</a></h3><p><em>TODO</em></p><h3><a class="nav-anchor" id="Compressors-1" href="#Compressors-1">Compressors</a></h3><p>A number of different compressors can be used with Zarr. In this Julia package we currently support only Blosc compression, but more compression methods will be supported in the future. Different compressors can be provided via the compressor keyword argument accepted by all array creation functions. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+true</code></pre><p><em>A Julia-equivalent for zarr.load and zarr.save is still missing...</em></p><h3><a class="nav-anchor" id="Resizing-and-appending-1" href="#Resizing-and-appending-1">Resizing and appending</a></h3><p>A Zarr array can be resized, which means that any of its dimensions can be increased or decreased in length. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+
+julia&gt; z = zzeros(Int32,10000, 10000, chunks=(1000, 1000))
+ZArray{Int32} of size 10000 x 10000
+
+julia&gt; z[:] = 42
+42
+
+julia&gt; resize!(z,20000, 10000)
+
+julia&gt; size(z)
+(20000, 10000)</code></pre><p>Note that when an array is resized, the underlying data are not rearranged in any way. If one or more dimensions are shrunk, any chunks falling outside the new array shape will be deleted from the underlying store.</p><p>For convenience, <code>ZArrays</code> also provide an <code>append!</code> method, which can be used to append data to any axis. E.g.:</p><pre><code class="language-julia-repl">julia&gt; a = reshape(1:Int32(10000000),1000, 10000);
+
+julia&gt; z = ZArray(a, chunks=(100, 1000))
+ZArray{Int64} of size 1000 x 10000
+
+julia&gt; size(z)
+(1000, 10000)
+
+julia&gt; append!(z,a)
+
+julia&gt; append!(z,hcat(a,a), dims=1)
+
+julia&gt; size(z)
+(2000, 20000)</code></pre><h3><a class="nav-anchor" id="Compressors-1" href="#Compressors-1">Compressors</a></h3><p>A number of different compressors can be used with Zarr. In this Julia package we currently support only Blosc compression, but more compression methods will be supported in the future. Different compressors can be provided via the compressor keyword argument accepted by all array creation functions. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
 
 julia&gt; compressor = Zarr.BloscCompressor(cname=&quot;zstd&quot;, clevel=3, shuffle=true)
 Zarr.BloscCompressor(0, 3, &quot;zstd&quot;, true)
