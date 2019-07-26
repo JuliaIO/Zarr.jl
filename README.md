@@ -24,9 +24,9 @@ z2[1:10,1:10]
 ````
 
 ## Links
-https://discourse.julialang.org/t/a-julia-compatible-alternative-to-zarr/11842
-https://github.com/zarr-developers/zarr/issues/284
-https://zarr.readthedocs.io/en/stable/spec/v2.html
+- https://discourse.julialang.org/t/a-julia-compatible-alternative-to-zarr/11842
+- https://github.com/zarr-developers/zarr/issues/284
+- https://zarr.readthedocs.io/en/stable/spec/v2.html
 
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
