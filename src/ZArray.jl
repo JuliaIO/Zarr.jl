@@ -137,9 +137,6 @@ resetbuffer!(a::SenMissArray) = fill!(a,missing)
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
 
   aout = OffsetArray(aout,map(i->first(i)-1,r.indices))
-  if !readmode && !z.writeable
-    error("Trying to write to read-only ZArray")
-  end
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
   # Allocate array of the size of a chunks where uncompressed data can be held
@@ -231,20 +228,26 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     a
 end
 
+allmissing(::ZArray,a)=false
+allmissing(z::ZArray{>:Missing},a)=all(isequal(z.metadata.fill_value),a)
+
 """
     writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
 
 Write the data from the array `a` to the chunk `i` in the ZArray `z`
 """
 function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
-  z.writeable ||
-    a2 = OffsetArray(a,map((s,i)->s*(i-1)+1,size(a),i.I)...)
-    z.writeable || error("ZArray not in write mode")
-    length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  z.writeable || error("Can not write to read-only ZArray")
+  z.writeable || error("ZArray not in write mode")
+  length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  if !allmissing(z,a)
     dtemp = UInt8[]
     zcompress(a,dtemp,z.metadata.compressor)
     z.storage[i]=dtemp
-    a
+  else
+    isinitialized(z,i) || delete!(z,i)
+  end
+  a
 end
 
 """
