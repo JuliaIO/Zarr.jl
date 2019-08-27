@@ -245,7 +245,7 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
     zcompress(a,dtemp,z.metadata.compressor)
     z.storage[i]=dtemp
   else
-    isinitialized(z,i) || delete!(z,i)
+    isinitialized(z.storage,i) || delete!(z,i)
   end
   a
 end
