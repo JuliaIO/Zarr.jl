@@ -199,7 +199,7 @@ end
 
 corshape(ii::CartesianIndices{N}, v::AbstractArray{<:Any,N}) where N = v
 corshape(ii::CartesianIndices, v::AbstractVector{<:Any}) = reshape(v,size(ii))
-corshape(ii::CartesianIndices, v::Number) = Fill(v,size(ii))
+corshape(ii::CartesianIndices, v) = Fill(v,size(ii))
 
 # Method for getting a UnitRange of indices is missing
 function Base.setindex!(z::ZArray, v, i...)
@@ -245,7 +245,7 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
     zcompress(a,dtemp,z.metadata.compressor)
     z.storage[i]=dtemp
   else
-    isinitialized(z.storage,i) || delete!(z.storage,i)
+    isinitialized(z.storage,i) && delete!(z.storage,i)
   end
   a
 end
