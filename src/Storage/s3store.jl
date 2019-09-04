@@ -4,11 +4,12 @@ using AWSSDK.S3
 struct S3Store <: AbstractStore
     bucket::String
     store::String
-    region::String
+    listversion::Int
     aws::Dict{Symbol, Any}
 end
 
-S3Store(bucket::String, store::String, region::String) = S3Store(bucket, store, region, aws_config(creds=nothing,region=region))
+
+S3Store(bucket::String, store::String; listversion = 2, aws_config = S3.aws_config(creds=nothing)) = S3Store(bucket, store, listversion, aws_config)
 
 Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 
@@ -23,18 +24,18 @@ function Base.getindex(s::S3Store, i::String)
     if error_is_ignorable(e)
       return nothing
     else
-      println(joinpath(s.store,i))
       throw(e)
     end
   end
 end
-getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.region, s.aws)
+getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.listversion, s.aws)
 
 function storagesize(s::S3Store)
-    contents = S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=s.store)["Contents"]
-    sum(filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)) do f
-        parse(Int, f["Size"])
-    end
+  listfun = s.listversion==2 ? S3.clod_list_objects_v2 : S3.cloud_list_objects
+  contents = listfun(s.aws, Bucket=s.bucket, prefix=s.store)["Contents"]
+  sum(filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)) do f
+      parse(Int, f["Size"])
+  end
 end
 
 function zname(s::S3Store)
@@ -57,14 +58,9 @@ function isinitialized(s::S3Store, i::String)
   end
 end
 
-isgoogle(s::S3Store) = get(s.aws,:url_ext,nothing) == "googleapis.com"
-
 function cloud_list_objects(s::S3Store, prefix)
-  if isgoogle(s)
-    S3.list_objects(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
-  else
-    S3.list_objects_v2(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
-  end
+  listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
+  listfun(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
 end
 function subdirs(s::S3Store)
   st = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
