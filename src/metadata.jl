@@ -14,7 +14,7 @@ ASCIIChar(x::UInt8) = reinterpret(ASCIIChar, x)
 UInt8(x::ASCIIChar) = reinterpret(UInt8, x)
 Base.codepoint(x::ASCIIChar) = UInt8(x)
 Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
-Base.zero(ASCIIChar) = ASCIIChar(Base.zero(UInt8))
+Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
 
 typestr(t::Type) = string('<', 'V', sizeof(t))

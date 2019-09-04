@@ -136,6 +136,20 @@ end
   @test a[4,4] == 0
   @test a[5:6,5:6] == [1 0; 0 0]
   @test a[9:10,9:10] == fill(2,2,2)
+  # Now with FillValue
+  amiss = zzeros(Int64, 10,10,chunks=(5,2), fill_value=-1)
+  amiss[:,1] = 1:10
+  amiss[:,2] = missing
+  amiss[1:3,4] = [1,missing,3]
+  amiss[1,10] = 5
+  amiss[1:5,9:10] = missing
+
+  @test amiss[:,1] == 1:10
+  @test all(ismissing,amiss[:,2])
+  @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
+  # Test that chunk containing only missings is not initialized
+  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+
 end
 
 @testset "resize" begin

@@ -1,5 +1,6 @@
 import JSON
-
+import FillArrays: Fill
+import OffsetArrays: OffsetArray
 getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 
@@ -111,42 +112,13 @@ convert_index2(i, s) = i
 For a given index and blocksize determines which chunks of the Zarray will have to
 be accessed.
 """
-trans_ind(r::AbstractUnitRange, bs) = ((first(r) - 1) ÷ bs):((last(r) - 1) ÷ bs)
-trans_ind(r::Integer, bs) = (r - 1) ÷ bs
+trans_ind(r::AbstractUnitRange, bs) = fld1(first(r),bs):fld1(last(r),bs)
+trans_ind(r::Integer, bs) = fld1(r,bs)
 
-"""
-Most important helper function. Returns two tuples of ranges.
-For a given chunks bI it determines the indices
-to read inside the chunk `i1:i2` as well as the indices to write to in the return
-array `io1:io2`.
-"""
-function inds_in_block(r::CartesianIndices{N}, # Outer Array indices to read
-        bI::CartesianIndex{N}, # Index of the current block to read
-        blockAll::CartesianIndices{N}, # All blocks to read
-        c::NTuple{N, Int}, # Chunks
-        enumI::CartesianIndices{N}, # Idices of all block to read
-        offsfirst::NTuple{N, Int} # Offset of the first block to read
-        ) where {N}
-    sI = size(enumI)
-    map(r.indices, bI.I, blockAll.indices, c, enumI.indices, sI, offsfirst) do iouter,
-            iblock, ablock, chunk, enu, senu, o0
-
-        if iblock == first(ablock)
-            i1 = mod1(first(iouter), chunk)
-            io1 = 1
-        else
-            i1 = 1
-            io1 = (iblock - first(ablock)) * chunk - o0 + 2
-        end
-        if iblock == last(ablock)
-            i2 = mod1(last(iouter), chunk)
-            io2 = length(iouter)
-        else
-            i2 = chunk
-            io2 = (iblock - first(ablock) + 1) * chunk - o0 + 1
-        end
-        i1:i2, io1:io2
-    end
+function boundint(r1, r2)
+    f1, f2  = first(r1), first(r2)
+    l1, l2  = last(r1),last(r2)
+    UnitRange(f1 > f2 ? f1 : f2, l1 < l2 ? l1 : l2)
 end
 
 function getchunkarray(z::ZArray{>:Missing})
@@ -154,62 +126,45 @@ function getchunkarray(z::ZArray{>:Missing})
     inner = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
-
-
-
 getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
 
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
+resetbuffer!(a::Array) = nothing
+resetbuffer!(a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
-function readblock!(aout, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
-    if !readmode && !z.writeable
-        error("Trying to write to read-only ZArray")
-    end
-    # Determines which chunks are affected
-    blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
-    enumI = CartesianIndices(blockr)
-    # Get the offset of the first index in each dimension
-    offsfirst = map((a, bs) -> mod(first(a) - 1, bs) + 1, r.indices, z.metadata.chunks)
-    # Allocate array of the size of a chunks where uncompressed data can be held
-    a = getchunkarray(z)
-    # Get linear indices from user array. This is a workaround to make something
-    # like z[:] = 1:10 work, because a unit range can not be accessed through
-    # CartesianIndices
-    if !readmode
-          linoutinds = LinearIndices(r)
-    end
-    # Now loop through the chunks
-    for bI in blockr
+function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
 
-        # Get indices to extract and to write to for the current chunk
-        ii = inds_in_block(r, bI, blockr, z.metadata.chunks, enumI, offsfirst)
-        # Extract them as CartesianIndices objects
-        i_in_a = CartesianIndices(map(i -> i[1], ii))
-        i_in_out = CartesianIndices(map(i -> i[2], ii))
-        # Uncompress a chunk
-        if readmode || (isinitialized(z.storage, bI + one(bI)) && (size(i_in_a) != size(a)))
-          readchunk!(maybeinner(a), z, bI + one(bI))
-        end
+  aout = OffsetArray(aout,map(i->first(i)-1,r.indices))
+  # Determines which chunks are affected
+  blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
+  # Allocate array of the size of a chunks where uncompressed data can be held
+  a = getchunkarray(z)
+  # Now loop through the chunks
+  foreach(blockr) do bI
 
-        if readmode
-            # Read data
-            copyto!(aout,i_in_out,a,i_in_a)
-        else
-            # Write data, here one could dispatch on the IndexStyle
-            # Of the user-provided array, and then decide on an
-            # Indexing style
-            copydata!(a,i_in_a, aout,linoutinds, i_in_out)
-            writechunk!(maybeinner(a), z, bI + one(bI))
-        end
+    curchunk = OffsetArray(a,map((s,i)->s*(i-1),size(a),Tuple(bI))...)
+
+    inds    = CartesianIndices(map(boundint,r.indices,axes(curchunk)))
+
+    # Uncompress current chunk
+    if !readmode && !(isinitialized(z.storage, bI) && (size(inds) != size(a)))
+      resetbuffer!(a)
+    else
+      readchunk!(maybeinner(a), z, bI)
     end
-    aout
+
+    if readmode
+      # Read data
+      copyto!(aout,inds,curchunk,inds)
+    else
+      copyto!(curchunk,inds,aout,inds)
+      writechunk!(maybeinner(a), z, bI)
+    end
+  end
+  aout
 end
-
-replace_missings!(a,v)=nothing
-replace_missings!(::AbstractArray{>:Missing},::Nothing)=nothing
-replace_missings!(a::AbstractArray{>:Missing},v)=replace!(a,v=>missing)
 
 # Some helper functions to determine the shape of the output array
 gets(x::Tuple) = gets(x...)
@@ -241,16 +196,20 @@ function Base.getindex(z::ZArray{T,1}, ::Colon) where {T}
     reshape(aout, length(aout))
 end
 
-# Method for getting a UnitRange of indices is missing
 
+corshape(ii::CartesianIndices{N}, v::AbstractArray{<:Any,N}) where N = v
+corshape(ii::CartesianIndices, v::AbstractVector{<:Any}) = reshape(v,size(ii))
+corshape(ii::CartesianIndices, v) = Fill(v,size(ii))
+
+# Method for getting a UnitRange of indices is missing
 function Base.setindex!(z::ZArray, v, i...)
     ii = CartesianIndices(map(convert_index, i, size(z)))
-    readblock!(v, z, ii, readmode=false)
+    readblock!(corshape(ii,v), z, ii, readmode=false)
 end
 
 function Base.setindex!(z::ZArray,v,::Colon)
     ii = CartesianIndices(size(z))
-    readblock!(v, z, ii, readmode=false)
+    readblock!(corshape(ii,v), z, ii, readmode=false)
 end
 
 """
@@ -269,27 +228,27 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     a
 end
 
+allmissing(::ZArray,a)=false
+allmissing(z::ZArray{>:Missing},a)=all(isequal(z.metadata.fill_value),a)
+
 """
     writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
 
 Write the data from the array `a` to the chunk `i` in the ZArray `z`
 """
 function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
-    z.writeable || error("ZArray not in write mode")
-    length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  z.writeable || error("Can not write to read-only ZArray")
+  z.writeable || error("ZArray not in write mode")
+  length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  if !allmissing(z,a)
     dtemp = UInt8[]
     zcompress(a,dtemp,z.metadata.compressor)
     z.storage[i]=dtemp
-    a
+  else
+    isinitialized(z.storage,i) && delete!(z.storage,i)
+  end
+  a
 end
-
-function copydata!(a,i_in_a,aout,linoutinds,i_in_out)
-    i_in_out2 = linoutinds[i_in_out]
-    a[i_in_a] .= aout[i_in_out2]
-end
-copydata!(a,i_in_a, aout::Number, linoutinds, i_in_out) = a[i_in_a] .= aout
-
-copydata!(a::AbstractArray{<:Any,N},i_in_a,aout::AbstractArray{<:Any,N},linoutinds,i_in_out) where N = copyto!(a,i_in_a,aout,i_in_out)
 
 """
     zcreate(T, dims...;kwargs)
