@@ -1,7 +1,7 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 AWSCore = "4f1ea46c-232b-54a6-9b17-cc2d0f3e6598"
