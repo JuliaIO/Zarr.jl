@@ -72,11 +72,13 @@ end
   @test isempty(keys(ds.subdirs["bar"].subdirs))
 end
 
+import AWSCore: aws_config
+
 @testset "AWS S3 Storage" begin
   bucket = "zarr-demo"
   store = "store/foo"
   region = "eu-west-2"
-  S3 = S3Store(bucket, store, region=region)
+  S3 = S3Store(bucket, store, region=region, aws = aws_config(creds=nothing))
   @test storagesize(S3) == 0
   @test Zarr.zname(S3) == "foo"
   @test Zarr.is_zgroup(S3) == true
@@ -90,7 +92,7 @@ end
 end
 
 @testset "GCS S3 Storage" begin
-  import AWSCore: aws_config
+
   bucket = "cmip6"
   store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
   region = ""
