@@ -90,6 +90,7 @@ end
 end
 
 @testset "GCS S3 Storage" begin
+  import AWSCore: aws_config
   bucket = "cmip6"
   store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
   region = ""
