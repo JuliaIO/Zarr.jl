@@ -9,7 +9,15 @@ struct S3Store <: AbstractStore
 end
 
 
-S3Store(bucket::String, store::String; listversion = 2, aws_config = S3.aws_config(creds=nothing)) = S3Store(bucket, store, listversion, aws_config)
+function S3Store(bucket::String, store::String;
+  listversion = 2,
+  aws = nothing,
+  region = get(ENV, "AWS_DEFAULT_REGION", "us-east-1"),
+  )
+  aws = something(aws, aws_config(region=region))
+
+  S3Store(bucket, store, listversion, aws)
+end
 
 Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
 
@@ -31,10 +39,16 @@ end
 getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.listversion, s.aws)
 
 function storagesize(s::S3Store)
-  listfun = s.listversion==2 ? S3.clod_list_objects_v2 : S3.cloud_list_objects
-  contents = listfun(s.aws, Bucket=s.bucket, prefix=s.store)["Contents"]
-  sum(filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)) do f
+  r = cloud_list_objects(s)
+  haskey(r,"Contents") || return 0
+  contents = r["Contents"]
+  datafiles = filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)
+  if isempty(datafiles)
+    0
+  else
+    sum(datafiles) do f
       parse(Int, f["Size"])
+    end
   end
 end
 
@@ -58,19 +72,18 @@ function isinitialized(s::S3Store, i::String)
   end
 end
 
-function cloud_list_objects(s::S3Store, prefix)
+function cloud_list_objects(s::S3Store)
+  prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
   listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
   listfun(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
 end
 function subdirs(s::S3Store)
-  st = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
-  s3_resp = cloud_list_objects(s,st)
+  s3_resp = cloud_list_objects(s)
   !haskey(s3_resp,"CommonPrefixes") && return String[]
   allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
 function Base.keys(s::S3Store)
-  st = endswith(s.store,"/") ? s.store : string(s.store,"/")
-  s3_resp = cloud_list_objects(s,st)
+  s3_resp = cloud_list_objects(s)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
   map(i->splitdir(i)[2],r)
