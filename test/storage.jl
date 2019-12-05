@@ -77,7 +77,7 @@ import AWSCore: aws_config
 @testset "AWS S3 Storage" begin
   # These tests work locally but not on Travis, not idea why, will skip them for now
   # TODO fix
-  if get(ENV,"TRAVIS") != "true"
+  if get(ENV,"TRAVIS","") != "true"
     bucket = "zarr-demo"
     store = "store/foo"
     region = "eu-west-2"
@@ -98,7 +98,7 @@ end
 @testset "GCS S3 Storage" begin
   # These tests work locally but not on Travis, not idea why, will skip them for now
   # TODO fix
-  if get(ENV,"TRAVIS") != "true"
+  if get(ENV,"TRAVIS","") != "true"
     bucket = "cmip6"
     store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
     region = ""
