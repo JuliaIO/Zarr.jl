@@ -1,0 +1,146 @@
+# Some examples on how to access public S3 datasets
+
+With this package it is possible to access public datasets that are hosted remotely on
+a s3-compatible cloud store. Here we provide examples on how to read data from commonly used datasets.
+
+## Accessing data on Amazon S3
+
+First we show how to access the zarr-demo bucket on AWS S3. We have to setup a
+AWS configuration first, for options look at the documentation of
+[AWSCore.jl](https://github.com/JuliaCloud/AWSCore.jl). If you don't have an
+account, you can access the dataset without credentials as follows:
+
+````@example aws
+using Zarr, AWSCore
+region = "eu-west-2"
+aws = aws_config(creds=nothing, region = region)
+````
+
+Then we can create an S3Store based on the known bucket name and store base path.
+
+````@example aws
+bucket = "zarr-demo"
+store = "store/foo/bar"
+S3 = S3Store(bucket, store, aws = aws)
+````
+
+Let's find out what is actually stored in there:
+
+````@example aws
+z = zopen(S3)
+````
+
+So we see that the store points to a zarr group with a single variable `baz`.
+
+````@example aws
+v = z["baz"]
+````
+
+The variable seems to contain an ASCIIString.
+
+````@example aws
+String(v[:])
+````
+
+## Accessing CMIP6 data on GCS
+
+GCS is hosting a subset of the [CMIP6](https://pcmdi.llnl.gov/CMIP6/) climate model
+ensemble runs. The data is stored in zarr format and accessible using this package.
+We first have to create an anonymous config again to access the data:
+
+````julia
+using Zarr, AWSCore
+aws_google = AWSCore.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+cmip6_base = S3Store("cmip6","", aws = aws_google, listversion=1)
+keys(cmip6_base)
+````
+````
+8-element Array{String,1}:
+ "cmip6-zarr-consolidated-stores-noQC.csv"
+ "cmip6-zarr-consolidated-stores.csv"     
+ "cmip6.csv"                              
+ "pangeo-cmip3.csv"                       
+ "pangeo-cmip3.json"                      
+ "pangeo-cmip5.csv"                       
+ "pangeo-cmip5.json"                      
+ "pangeo-cmip6.json"                      
+````
+
+Looks like there is some configuration stored in these csv files. So let's read it into a DatFrame:
+
+````julia
+using DataFrames, CSV
+overview = CSV.read(IOBuffer(cmip6_base["cmip6-zarr-consolidated-stores.csv"]))
+````
+````
+138786×10 DataFrame. Omitted printing of 6 columns
+│ Row    │ activity_id │ institution_id │ source_id  │ experiment_id │
+│        │ String      │ String         │ String     │ String        │
+├────────┼─────────────┼────────────────┼────────────┼───────────────┤
+│ 1      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 2      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 3      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 4      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 5      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 6      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 7      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+⋮
+│ 138779 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138780 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138781 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138782 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138783 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138784 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138785 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138786 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+````
+
+These columns contain the path to the store as well, so after some subsetting we can access
+the member run we are interested in:
+
+````julia
+store = filter(overview) do row
+  row.activity_id == "ScenarioMIP" && row.institution_id=="DKRZ" && row.variable_id=="tas" && row.experiment_id=="ssp585"
+end
+store.zstore[1]
+````
+````
+"gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/"
+````
+
+So we can access the dataset and read some data from it:
+
+````julia
+s = S3Store("cmip6","ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/", aws=aws_google, listversion=1)
+g = zopen(s)
+````
+
+You can access the meta-information through `g.attrs` or for example read the first
+time slice through
+
+````julia
+g["tas"][:,:,1]
+````
+````
+384×192 reshape(::Array{Union{Missing, Float32},3}, 384, 192) with eltype Union{Missing, Float32}:
+ 244.27   245.276  245.186  245.419  …  252.782  252.852  252.672  252.667
+ 244.284  245.223  245.122  245.497     252.833  252.88   252.686  252.682
+ 244.309  245.139  245.003  245.422     252.85   252.895  252.704  252.663
+ 244.297  245.104  244.954  245.272     252.84   252.872  252.727  252.69
+ 244.352  245.055  244.835  245.182     252.858  252.895  252.739  252.69
+ 244.358  245.001  244.825  245.079  …  252.79   252.926  252.77   252.7  
+ 244.34   244.924  244.79   245.104     252.778  252.907  252.768  252.672
+ 244.348  244.87   244.737  245.112     252.756  252.928  252.755  252.712
+ 244.339  244.803  244.684  245.223     252.741  252.911  252.78   252.706
+ 244.383  244.723  244.649  245.005     252.729  252.842  252.78   252.719
+   ⋮                                 ⋱                      ⋮             
+ 244.184  245.68   245.997  246.456  …  252.421  252.528  252.452  252.637
+ 244.186  245.649  245.907  246.313     252.518  252.546  252.469  252.643
+ 244.163  245.542  245.731  246.085     252.561  252.553  252.495  252.637
+ 244.227  245.491  245.68   246.178     252.643  252.596  252.534  252.678
+ 244.227  245.483  245.626  245.987     252.692  252.633  252.573  252.672
+ 244.253  245.442  245.497  245.975  …  252.756  252.682  252.577  252.631
+ 244.227  245.409  245.352  245.897     252.719  252.758  252.6    252.655
+ 244.296  245.356  245.231  245.774     252.735  252.809  252.612  252.659
+ 244.301  245.303  245.192  245.524     252.733  252.862  252.655  252.678
+````
