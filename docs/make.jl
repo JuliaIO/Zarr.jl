@@ -11,6 +11,7 @@ makedocs(
         "Tutorial" => "tutorial.md",
         "Function Reference" => "reference.md",
         "Storage Backends" => "storage.md",
+        "Accessing cloud data Examples" => "s3examples.md",
     ]
 )
 

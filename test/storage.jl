@@ -81,7 +81,7 @@ import AWSCore: aws_config
     bucket = "zarr-demo"
     store = "store/foo"
     region = "eu-west-2"
-    S3 = S3Store(bucket, store, region=region, aws = aws_config(creds=nothing))
+    S3 = S3Store(bucket, store, aws = aws_config(creds=nothing, region = region))
     @test storagesize(S3) == 0
     @test Zarr.zname(S3) == "foo"
     @test Zarr.is_zgroup(S3) == true

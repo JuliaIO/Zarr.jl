@@ -173,14 +173,14 @@ julia> using Zarr
 julia> compressor = Zarr.BloscCompressor(cname="zstd", clevel=3, shuffle=true)
 Zarr.BloscCompressor(0, 3, "zstd", true)
 
-julia> data = Int32(1):Int32(1000000000)
-1:1000000000
+julia> data = Int32(1):Int32(100000000)
+1:100000000
 
 julia> z = Zarr.zcreate(Int32,10000, 10000, chunks = (1000,1000),compressor=compressor)
 ZArray{Int32} of size 10000 x 10000
 
 julia> z[:,:]=data
-1:1000000000
+1:100000000
 ```
 
 This array above will use Blosc as the primary compressor, using the Zstandard algorithm (compression level 3) internally within Blosc, and with the bit-shuffle filter applied.
