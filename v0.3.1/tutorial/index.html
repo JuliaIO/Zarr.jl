@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Tutorial · Zarr.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">Zarr.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Tutorial</a><ul class="internal"><li><a class="tocitem" href="#Tutorial-1"><span>Tutorial</span></a></li></ul></li><li><a class="tocitem" href="../reference/">Function Reference</a></li><li><a class="tocitem" href="../storage/">Storage Backends</a></li><li><a class="tocitem" href="../s3examples/">Accessing cloud data Examples</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/meggart/Zarr.jl/blob/master/docs/src/tutorial.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h2 id="Tutorial-1"><a class="docs-heading-anchor" href="#Tutorial-1">Tutorial</a><a class="docs-heading-anchor-permalink" href="#Tutorial-1" title="Permalink"></a></h2><p>Zarr provides classes and functions for working with N-dimensional arrays that behave like Julia arrays but whose data is divided into chunks and each chunk is compressed. If you are already familiar with HDF5 then Zarr arrays provide similar functionality, but with some additional flexibility. This tutorial is an attempt to recreate this  <a href="https://zarr.readthedocs.io/en/stable/tutorial.html">Python Zarr tutorial</a> as closely as possible and some of the explanation text is just copied and modified from this source.</p><h3 id="Creating-an-in-memory-array-1"><a class="docs-heading-anchor" href="#Creating-an-in-memory-array-1">Creating an in-memory array</a><a class="docs-heading-anchor-permalink" href="#Creating-an-in-memory-array-1" title="Permalink"></a></h3><p>Zarr has several functions for creating arrays. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+
+julia&gt; z = zzeros(Int32,10000,10000,chunks=(1000,1000))
+ZArray{Int32} of size 10000 x 10000</code></pre><p>The code above creates a 2-dimensional array of 32-bit integers with 10000 rows and 10000 columns, divided into chunks where each chunk has 1000 rows and 1000 columns (and so there will be 100 chunks in total).</p><p>Other Array creation routines are [<code>zcreate</code>, <code>zones</code> and <code>zfill</code>].</p><h3 id="Reading-and-Writing-data-1"><a class="docs-heading-anchor" href="#Reading-and-Writing-data-1">Reading and Writing data</a><a class="docs-heading-anchor-permalink" href="#Reading-and-Writing-data-1" title="Permalink"></a></h3><p>Zarr arrays support a similar interface to Julia arrays for reading and writing data, although they don&#39;t implement the all indexing methods of an <code>AbstractArray</code> yet. For example, the entire array can be filled with a scalar value:</p><pre><code class="language-julia-repl">julia&gt; z[:] = 42
+42</code></pre><p>Regions of the array can also be written to, e.g.:</p><pre><code class="language-julia-repl">julia&gt; z[1,:]=1:10000;
+
+julia&gt; z[:,1]=1:10000;</code></pre><p>The contents of the array can be retrieved by slicing, which will load the requested region into memory as a Julia array, e.g.:</p><pre><code class="language-julia-repl">julia&gt; z[1,1]
+1
+
+julia&gt; z[end,end]
+42
+
+julia&gt; z[1,:]
+10000-element Array{Int32,1}:
+     1
+     2
+     3
+     4
+     5
+     6
+     7
+     8
+     9
+    10
+     ⋮
+  9992
+  9993
+  9994
+  9995
+  9996
+  9997
+  9998
+  9999
+ 10000
+
+
+julia&gt; z[1:5,1:10]
+5×10 Array{Int32,2}:
+ 1   2   3   4   5   6   7   8   9  10
+ 2  42  42  42  42  42  42  42  42  42
+ 3  42  42  42  42  42  42  42  42  42
+ 4  42  42  42  42  42  42  42  42  42
+ 5  42  42  42  42  42  42  42  42  42</code></pre><h3 id="Persistent-arrays-1"><a class="docs-heading-anchor" href="#Persistent-arrays-1">Persistent arrays</a><a class="docs-heading-anchor-permalink" href="#Persistent-arrays-1" title="Permalink"></a></h3><p>In the examples above, compressed data for each chunk of the array was stored in main memory. Zarr arrays can also be stored on a file system, enabling persistence of data between sessions. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+
+julia&gt; p = &quot;data/example.zarr&quot;
+&quot;data/example.zarr&quot;
+
+julia&gt; z1 = zcreate(Int, 10000,10000,path = p,chunks=(1000, 1000))
+ZArray{Int64} of size 10000 x 10000</code></pre><p>The array above will store its configuration metadata and all compressed chunk data in a directory called ‘data/example.zarr’ relative to the current working directory. The zarr.create() function provides a way to create a new persistent array. Note that there is no need to close an array: data are automatically flushed to disk, and files are automatically closed whenever an array is modified.</p><p>Persistent arrays support the same interface for reading and writing data, e.g.:</p><pre><code class="language-julia-repl">julia&gt; z1[:] = 42
+42
+
+julia&gt; z1[1,:]=1:10000;
+
+julia&gt; z1[:,1]=1:10000;
+</code></pre><p>Check that the data have been written and can be read again:</p><pre><code class="language-julia-repl">julia&gt; z2 = zopen(p)
+ZArray{Int64} of size 10000 x 10000
+
+julia&gt; all(z1[:,:].==z2[:,:])
+true</code></pre><p><em>A Julia-equivalent for zarr.load and zarr.save is still missing...</em></p><h3 id="Resizing-and-appending-1"><a class="docs-heading-anchor" href="#Resizing-and-appending-1">Resizing and appending</a><a class="docs-heading-anchor-permalink" href="#Resizing-and-appending-1" title="Permalink"></a></h3><p>A Zarr array can be resized, which means that any of its dimensions can be increased or decreased in length. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+
+julia&gt; z = zzeros(Int32,10000, 10000, chunks=(1000, 1000))
+ZArray{Int32} of size 10000 x 10000
+
+julia&gt; z[:] = 42
+42
+
+julia&gt; resize!(z,20000, 10000)
+
+julia&gt; size(z)
+(20000, 10000)</code></pre><p>Note that when an array is resized, the underlying data are not rearranged in any way. If one or more dimensions are shrunk, any chunks falling outside the new array shape will be deleted from the underlying store.</p><p>For convenience, <code>ZArrays</code> also provide an <code>append!</code> method, which can be used to append data to any axis. E.g.:</p><pre><code class="language-julia-repl">julia&gt; a = reshape(1:Int32(10000000),1000, 10000);
+
+julia&gt; z = ZArray(a, chunks=(100, 1000))
+ZArray{Int64} of size 1000 x 10000
+
+julia&gt; size(z)
+(1000, 10000)
+
+julia&gt; append!(z,a)
+
+julia&gt; append!(z,hcat(a,a), dims=1)
+
+julia&gt; size(z)
+(2000, 20000)</code></pre><h3 id="Compressors-1"><a class="docs-heading-anchor" href="#Compressors-1">Compressors</a><a class="docs-heading-anchor-permalink" href="#Compressors-1" title="Permalink"></a></h3><p>A number of different compressors can be used with Zarr. In this Julia package we currently support only Blosc compression, but more compression methods will be supported in the future. Different compressors can be provided via the compressor keyword argument accepted by all array creation functions. For example:</p><pre><code class="language-julia-repl">julia&gt; using Zarr
+
+julia&gt; compressor = Zarr.BloscCompressor(cname=&quot;zstd&quot;, clevel=3, shuffle=true)
+Zarr.BloscCompressor(0, 3, &quot;zstd&quot;, true)
+
+julia&gt; data = Int32(1):Int32(100000000)
+1:100000000
+
+julia&gt; z = Zarr.zcreate(Int32,10000, 10000, chunks = (1000,1000),compressor=compressor)
+ZArray{Int32} of size 10000 x 10000
+
+julia&gt; z[:,:]=data
+1:100000000</code></pre><p>This array above will use Blosc as the primary compressor, using the Zstandard algorithm (compression level 3) internally within Blosc, and with the bit-shuffle filter applied.</p><p>When using a compressor, it can be useful to get some diagnostics on the compression ratio. <code>ZArrays</code> provide a <code>zinfo</code> function which can be used to print some diagnostics, e.g.:</p><pre><code class="language-julia-repl">julia&gt; zinfo(z)
+Type                : ZArray
+Data type           : Int32
+Shape               : (10000, 10000)
+Chunk Shape         : (1000, 1000)
+Order               : C
+Read-Only           : false
+Compressor          : Zarr.BloscCompressor(0, 3, &quot;zstd&quot;, true)
+Store type          : Dictionary Storage
+No. bytes           : 400000000
+No. bytes stored    : 2406369
+Storage ratio       : 166.2255456249644
+Chunks initialized  : 100/100</code></pre><p>If you don’t specify a compressor, by default Zarr uses the Blosc compressor. Blosc is generally very fast and can be configured in a variety of ways to improve the compression ratio for different types of data. Blosc is in fact a “meta-compressor”, which means that it can use a number of different compression algorithms internally to compress the data. Blosc also provides highly optimized implementations of byte- and bit-shuffle filters, which can improve compression ratios for some data.</p><p>To disable compression, set <code>compressor=Zarr.NoCompressor()</code> when creating an array, e.g.:</p><pre><code class="language-julia-repl">julia&gt; z = zzeros(Int32,100000000, chunks=(1000000,), compressor=Zarr.NoCompressor());
+
+julia&gt; storageratio(z)
+1.0</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../reference/">Function Reference »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Tuesday 10 December 2019 06:36">Tuesday 10 December 2019</span>. Using Julia version 1.1.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
