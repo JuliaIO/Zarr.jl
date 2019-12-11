@@ -77,7 +77,7 @@ import AWSCore: aws_config
 @testset "AWS S3 Storage" begin
   # These tests work locally but not on Travis, not idea why, will skip them for now
   # TODO fix
-  if get(ENV,"TRAVIS","") != "true"
+  #if get(ENV,"TRAVIS","") != "true"
     bucket = "zarr-demo"
     store = "store/foo"
     region = "eu-west-2"
@@ -92,13 +92,13 @@ import AWSCore: aws_config
     @test eltype(S3Array) == Zarr.ASCIIChar
     @test storagesize(S3Array) == 69
     @test String(S3Array[:]) == "Hello from the cloud!"
-  end
+  #end
 end
 
 @testset "GCS S3 Storage" begin
   # These tests work locally but not on Travis, not idea why, will skip them for now
   # TODO fix
-  if get(ENV,"TRAVIS","") != "true"
+  #if get(ENV,"TRAVIS","") != "true"
     bucket = "cmip6"
     store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
     region = ""
@@ -111,5 +111,5 @@ end
     @test size(arr) == (384,192,1032)
     @test eltype(arr) == Union{Missing, Float32}
     @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
-  end
+  #end
 end

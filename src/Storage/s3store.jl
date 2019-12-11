@@ -13,9 +13,11 @@ function S3Store(bucket::String, store::String;
   listversion = 2,
   aws = nothing,
   region = get(ENV, "AWS_DEFAULT_REGION", "us-east-1"),
+  creds = nothing,
   )
-  aws = something(aws, aws_config(region=region))
-
+  if aws === nothing
+    aws = aws_config(creds=creds,region=region)
+  end
   S3Store(bucket, store, listversion, aws)
 end
 
