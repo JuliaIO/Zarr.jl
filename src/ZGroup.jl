@@ -96,5 +96,7 @@ zgroup(g::ZGroup, name; attrs=Dict()) = g.groups[name] = zgroup(newsub(g.storage
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
   newstore = newsub(g.storage,name)
-  zcreate(T, newstore, addargs...; kwargs...)
+  z = zcreate(T, newstore, addargs...; kwargs...)
+  g.arrays[name] = z
+  return z
 end
