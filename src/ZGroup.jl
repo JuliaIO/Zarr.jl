@@ -8,20 +8,29 @@ end
 zname(g::ZGroup) = zname(g.storage)
 
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r") where T <: AbstractStore
+function ZGroup(s::T,mode="r"; data_consolidated = nothing) where T <: AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
 
   for d in subdirs(s)
     dshort = splitpath(d)[end]
-    m = zopen(getsub(s,dshort),mode)
+    m = if data_consolidated === nothing
+      zopen(getsub(s,dshort),mode)
+    else
+      consol_sub = subconsolidated(data_consolidated, dshort)
+      zopen(getsub(s,dshort),mode, data_consolidated = consol_sub)
+    end
     if isa(m, ZArray)
       arrays[dshort] = m
     else
       groups[dshort] = m
     end
   end
-  attrs = getattrs(s)
+  attrs = if data_consolidated === nothing
+    getattrs(s)
+  else
+    get(data_consolidated, ".zattrs", Dict())
+  end
   ZGroup(s, arrays, groups, attrs)
 end
 
@@ -35,6 +44,23 @@ function Base.show(io::IO, g::ZGroup)
 end
 Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
 
+function get_data_consolidated(s)
+    data_cons = s[".zmetadata"]
+    data_cons === nothing && return nothing
+    data_cons = JSON.parse(String(data_cons))
+    if data_cons["zarr_consolidated_format"]==1
+      return data_cons["metadata"]
+    else
+      throw(IOError("Unknown zarr consolidated metadata version"))
+    end
+end
+function subconsolidated(d,name)
+    dictshort = filter(d) do (k,v)
+      startswith(k,string(name, "/"))
+    end
+    Dict(join(split(k,"/")[2:end],"/")=>v for (k,v) in dictshort)
+end
+
 function Base.getindex(g::ZGroup, k)
     if haskey(g.groups, k)
         return g.groups[k]
@@ -46,16 +72,23 @@ function Base.getindex(g::ZGroup, k)
 end
 
 """
-    zopen(s::AbstractStore, mode="r")
+    zopen(s::AbstractStore, mode="r"; consolidated = false)
 
-Opens a zarr Array or Group at Store `s`
+Opens a zarr Array or Group at Store `s`. If `consolidated` is set to "true",
+Zarr will search for a consolidated metadata field as created by the python zarr
+`consolidate_metadata` function. This can substantially speed up metadata parsing
+of large zarr groups.
 """
-function zopen(s::AbstractStore, mode="r")
+function zopen(s::AbstractStore, mode="r"; consolidated = false, data_consolidated = nothing)
     # add interfaces to Stores later
+    if data_consolidated === nothing && consolidated
+      #Try to find cosolidated metadata
+      data_consolidated = get_data_consolidated(s)
+    end
     if is_zarray(s)
-        return ZArray(s,mode)
+        return ZArray(s,mode,data_consolidated = data_consolidated)
     elseif is_zgroup(s)
-        return ZGroup(s,mode)
+        return ZGroup(s,mode, data_consolidated = data_consolidated)
     else
         x = path(s)
         throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))
@@ -67,10 +100,10 @@ end
 
 Open a zarr Array or group at disc path p.
 """
-function zopen(s::String, mode="r")
+function zopen(s::String, mode="r"; kwargs...)
   #TODO this could include some heuristics to determine if this is a local
   #Directory or a s3 path or a zip file... Currently we assuem a local store
-  zopen(DirectoryStore(s), mode)
+  zopen(DirectoryStore(s), mode; kwargs...)
 end
 
 """

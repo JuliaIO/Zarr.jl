@@ -108,11 +108,12 @@ store.zstore[1]
 "gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/"
 ````
 
-So we can access the dataset and read some data from it:
+So we can access the dataset and read some data from it. Note that we use `consolidated=true` reduce
+the overhead of repeatedly requesting many metadata files:
 
 ````julia
 s = S3Store("cmip6","ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/", aws=aws_google, listversion=1)
-g = zopen(s)
+g = zopen(s, consolidated=true)
 ````
 
 You can access the meta-information through `g.attrs` or for example read the first

@@ -111,10 +111,10 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     )
 end
 
-"Construct Metadata from JSON"
-function Metadata(s::Union{AbstractString, IO})
-    # get the JSON representation as a Dict
-    d = JSON.parse(s)
+Metadata(s::Union{AbstractString, IO}) = Metadata(JSON.parse(s))
+
+"Construct Metadata from Dict"
+function Metadata(d::AbstractDict)
     # create a Metadata struct from it
 
     compdict = d["compressor"]
