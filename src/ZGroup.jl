@@ -8,29 +8,20 @@ end
 zname(g::ZGroup) = zname(g.storage)
 
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r"; data_consolidated = nothing) where T <: AbstractStore
+function ZGroup(s::T,mode="r") where T <: AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
 
   for d in subdirs(s)
     dshort = splitpath(d)[end]
-    m = if data_consolidated === nothing
-      zopen(getsub(s,dshort),mode)
-    else
-      consol_sub = subconsolidated(data_consolidated, dshort)
-      zopen(getsub(s,dshort),mode, data_consolidated = consol_sub)
-    end
+    m = zopen(getsub(s,dshort),mode)
     if isa(m, ZArray)
       arrays[dshort] = m
     else
       groups[dshort] = m
     end
   end
-  attrs = if data_consolidated === nothing
-    getattrs(s)
-  else
-    get(data_consolidated, ".zattrs", Dict())
-  end
+  attrs = getattrs(s)
   ZGroup(s, arrays, groups, attrs)
 end
 
@@ -44,22 +35,6 @@ function Base.show(io::IO, g::ZGroup)
 end
 Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
 
-function get_data_consolidated(s)
-    data_cons = s[".zmetadata"]
-    data_cons === nothing && return nothing
-    data_cons = JSON.parse(String(data_cons))
-    if data_cons["zarr_consolidated_format"]==1
-      return data_cons["metadata"]
-    else
-      throw(IOError("Unknown zarr consolidated metadata version"))
-    end
-end
-function subconsolidated(d,name)
-    dictshort = filter(d) do (k,v)
-      startswith(k,string(name, "/"))
-    end
-    Dict(join(split(k,"/")[2:end],"/")=>v for (k,v) in dictshort)
-end
 
 function Base.getindex(g::ZGroup, k)
     if haskey(g.groups, k)
@@ -79,16 +54,13 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups.
 """
-function zopen(s::AbstractStore, mode="r"; consolidated = false, data_consolidated = nothing)
+function zopen(s::AbstractStore, mode="r"; consolidated = false)
     # add interfaces to Stores later
-    if data_consolidated === nothing && consolidated
-      #Try to find cosolidated metadata
-      data_consolidated = get_data_consolidated(s)
-    end
+    consolidated && return zopen(ConsolidatedStore(s), mode)
     if is_zarray(s)
-        return ZArray(s,mode,data_consolidated = data_consolidated)
+        return ZArray(s,mode)
     elseif is_zgroup(s)
-        return ZGroup(s,mode, data_consolidated = data_consolidated)
+        return ZGroup(s,mode)
     else
         x = path(s)
         throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))

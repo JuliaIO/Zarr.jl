@@ -84,12 +84,9 @@ end
 # Construction of a ZArray given a folder on a regular drive
 # A lot of the JSON parsing should be moved to a function, since
 # this will be the same for other backends
-function ZArray(s::T, mode="r"; data_consolidated = nothing) where T <: AbstractStore
-  metadata, attrs = if data_consolidated === nothing
-    getmetadata(s), getattrs(s)
-  else
-    Metadata(data_consolidated[".zarray"]), get(data_consolidated, ".zattrs", Dict())
-  end
+function ZArray(s::T, mode="r") where T <: AbstractStore
+  metadata = getmetadata(s)
+  attrs    = getattrs(s)
   writeable = mode == "w"
 
   ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
