@@ -73,16 +73,35 @@ end
 data = rand(Int32,2,6,10)
 py"""
 g = zarr.group($ppython)
+g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
 z1[:,:,:]=$data
 z1.attrs["test"]={"b": 6}
 z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1')
 z2[:]=[k for k in 'hallo']
+zarr.consolidate_metadata($ppython)
 """
 
 #Open in Julia
 g = zopen(ppython)
 @test g isa Zarr.ZGroup
+@test g.attrs["groupatt"] == "Hi"
+a1 = g["a1"]
+@test a1 isa ZArray
+@test a1[:,:,:]==permutedims(data,(3,2,1))
+@test a1.attrs["test"]==Dict("b"=>6)
+# Test reading the string array
+@test String(g["a2"][:])=="hallo"
+
+# And test for consolidated metadata
+# Delete files so we make sure they are note accessed
+rm(joinpath(ppython,".zattrs"))
+rm(joinpath(ppython,"a1",".zattrs"))
+rm(joinpath(ppython,"a1",".zarray"))
+rm(joinpath(ppython,"a2",".zarray"))
+g = zopen(ppython, consolidated=true)
+@test g isa Zarr.ZGroup
+@test g.attrs["groupatt"] == "Hi"
 a1 = g["a1"]
 @test a1 isa ZArray
 @test a1[:,:,:]==permutedims(data,(3,2,1))

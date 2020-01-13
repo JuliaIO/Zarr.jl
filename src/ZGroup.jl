@@ -35,6 +35,7 @@ function Base.show(io::IO, g::ZGroup)
 end
 Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
 
+
 function Base.getindex(g::ZGroup, k)
     if haskey(g.groups, k)
         return g.groups[k]
@@ -46,12 +47,16 @@ function Base.getindex(g::ZGroup, k)
 end
 
 """
-    zopen(s::AbstractStore, mode="r")
+    zopen(s::AbstractStore, mode="r"; consolidated = false)
 
-Opens a zarr Array or Group at Store `s`
+Opens a zarr Array or Group at Store `s`. If `consolidated` is set to "true",
+Zarr will search for a consolidated metadata field as created by the python zarr
+`consolidate_metadata` function. This can substantially speed up metadata parsing
+of large zarr groups.
 """
-function zopen(s::AbstractStore, mode="r")
+function zopen(s::AbstractStore, mode="r"; consolidated = false)
     # add interfaces to Stores later
+    consolidated && return zopen(ConsolidatedStore(s), mode)
     if is_zarray(s)
         return ZArray(s,mode)
     elseif is_zgroup(s)
@@ -67,10 +72,10 @@ end
 
 Open a zarr Array or group at disc path p.
 """
-function zopen(s::String, mode="r")
+function zopen(s::String, mode="r"; kwargs...)
   #TODO this could include some heuristics to determine if this is a local
   #Directory or a s3 path or a zip file... Currently we assuem a local store
-  zopen(DirectoryStore(s), mode)
+  zopen(DirectoryStore(s), mode; kwargs...)
 end
 
 """

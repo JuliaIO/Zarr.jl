@@ -86,8 +86,9 @@ end
 # this will be the same for other backends
 function ZArray(s::T, mode="r") where T <: AbstractStore
   metadata = getmetadata(s)
-  attrs = getattrs(s)
+  attrs    = getattrs(s)
   writeable = mode == "w"
+
   ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
     metadata, s, attrs, writeable)
 end
