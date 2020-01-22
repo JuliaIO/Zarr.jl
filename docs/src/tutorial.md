@@ -29,8 +29,8 @@ Other Array creation routines are [`zcreate`, `zones` and `zfill`].
 Zarr arrays support a similar interface to Julia arrays for reading and writing data, although they don't implement the all indexing methods of an `AbstractArray` yet. For example, the entire array can be filled with a scalar value:
 
 ```jldoctest inmemory
-julia> z[:] = 42
-42
+julia> z .= 42
+ZArray{Int32} of size 10000 x 10000
 ```
 
 Regions of the array can also be written to, e.g.:
@@ -102,8 +102,8 @@ The array above will store its configuration metadata and all compressed chunk d
 Persistent arrays support the same interface for reading and writing data, e.g.:
 
 ```jldoctest persist
-julia> z1[:] = 42
-42
+julia> z1 .= 42
+ZArray{Int64} of size 10000 x 10000
 
 julia> z1[1,:]=1:10000;
 
@@ -133,8 +133,8 @@ julia> using Zarr
 julia> z = zzeros(Int32,10000, 10000, chunks=(1000, 1000))
 ZArray{Int32} of size 10000 x 10000
 
-julia> z[:] = 42
-42
+julia> z .= 42
+ZArray{Int32} of size 10000 x 10000
 
 julia> resize!(z,20000, 10000)
 

@@ -126,9 +126,9 @@ end
 
 @testset "getindex/setindex" begin
   a = zzeros(Int64, 10, 10, chunks = (5,2))
-  a[2,:] = 5
-  a[:,3] = 6
-  a[9:10,9:10] = 2
+  a[2,:] .= 5
+  a[:,3] .= 6
+  a[9:10,9:10] .= 2
   a[5,5] = 1
 
   @test a[2,:] == [5, 5, 6, 5, 5, 5, 5, 5, 5, 5]
@@ -139,10 +139,10 @@ end
   # Now with FillValue
   amiss = zzeros(Int64, 10,10,chunks=(5,2), fill_value=-1)
   amiss[:,1] = 1:10
-  amiss[:,2] = missing
+  amiss[:,2] .= missing
   amiss[1:3,4] = [1,missing,3]
   amiss[1,10] = 5
-  amiss[1:5,9:10] = missing
+  amiss[1:5,9:10] .= missing
 
   @test amiss[:,1] == 1:10
   @test all(ismissing,amiss[:,2])
