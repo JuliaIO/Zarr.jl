@@ -111,5 +111,10 @@ end
     @test size(arr) == (384,192,1032)
     @test eltype(arr) == Union{Missing, Float32}
     @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+    g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
+    arr = g["tasmax"]
+    @test size(arr) == (384,192,1032)
+    @test eltype(arr) == Union{Missing, Float32}
+    @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
   #end
 end

@@ -73,9 +73,20 @@ end
 Open a zarr Array or group at disc path p.
 """
 function zopen(s::String, mode="r"; kwargs...)
-  #TODO this could include some heuristics to determine if this is a local
-  #Directory or a s3 path or a zip file... Currently we assuem a local store
-  zopen(DirectoryStore(s), mode; kwargs...)
+  zopen(storefromstring(s), mode; kwargs...)
+end
+
+import AWSCore
+function storefromstring(s)
+  if startswith(s,"gs://")
+    aws_google = AWSCore.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+    decomp = split(s,"/")
+    bucket = decomp[3]
+    path = join(decomp[4:end],"/")
+    S3Store(String(bucket),path, aws=aws_google, listversion=1)
+  else
+    return DirectoryStore(s)
+  end
 end
 
 """
