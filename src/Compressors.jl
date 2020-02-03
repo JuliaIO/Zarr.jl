@@ -3,7 +3,7 @@ import CodecZlib
 import Zarr: Compressor, zcompress, zuncompress, getCompressor
 import JSON
 import Zarr
-using Zarrare already providing valuable data for regional estimates of GHG dynamics. 
+using Zarr
 
 
 abstract type Compressor end
