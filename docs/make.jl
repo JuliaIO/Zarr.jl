@@ -12,6 +12,7 @@ makedocs(
         "Function Reference" => "reference.md",
         "Storage Backends" => "storage.md",
         "Accessing cloud data Examples" => "s3examples.md",
+        "Operations on Zarr Arrays" => "operations.md",
     ]
 )
 

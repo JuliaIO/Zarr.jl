@@ -1,6 +1,8 @@
 import JSON
 import FillArrays: Fill
 import OffsetArrays: OffsetArray
+import DiskArrays: AbstractDiskArray
+import DiskArrays
 getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
 
@@ -22,7 +24,7 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 # chunks(chunk size) and size are always in Julia column-major order
 # Currently this is not an AbstractArray, because indexing single elements is
 # would be really slow, although most AbstractArray interface functions are implemented
-struct ZArray{T, N, C<:Compressor, S<:AbstractStore}
+struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
     metadata::Metadata{T, N, C}
     storage::S
     attrs::Dict
@@ -38,6 +40,9 @@ Base.lastindex(z::ZArray,n) = size(z,n)
 Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
 
 function Base.show(io::IO,z::ZArray)
+    print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
+end
+function Base.show(io::IO,::MIME"text/plain",z::ZArray)
     print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
@@ -167,51 +172,10 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   aout
 end
 
-# Some helper functions to determine the shape of the output array
-gets(x::Tuple) = gets(x...)
-gets(x::AbstractRange, r...) = (length(x), gets(r...)...)
-gets(x::Integer, r...) = gets(r...)
-gets() = ()
-
-# Short wrapper around readblock! to have getindex-style behavior
-function Base.getindex(z::ZArray{T}, i::Int...) where {T}
-    ii = CartesianIndices(map(convert_index, i, size(z)))
-    # temporary workaround to strings as a data values
-    aout = zeros(T, size(ii))
-    readblock!(aout, z, ii)
-    aout[1]
-end
-
-function Base.getindex(z::ZArray{T}, i...) where {T}
-    ii = CartesianIndices(map(convert_index, i, size(z)))
-    aout = Array{T}(undef, size(ii))
-    readblock!(aout, z, ii)
-    ii2 = map(convert_index2, i, size(z))
-    reshape(aout, gets(ii2))
-end
-
-function Base.getindex(z::ZArray{T,1}, ::Colon) where {T}
-    ii = CartesianIndices(size(z))
-    aout = zeros(T, size(ii))
-    readblock!(aout, z, ii)
-    reshape(aout, length(aout))
-end
-
-
-corshape(ii::CartesianIndices{N}, v::AbstractArray{<:Any,N}) where N = v
-corshape(ii::CartesianIndices, v::AbstractVector{<:Any}) = reshape(v,size(ii))
-corshape(ii::CartesianIndices, v) = Fill(v,size(ii))
-
-# Method for getting a UnitRange of indices is missing
-function Base.setindex!(z::ZArray, v, i...)
-    ii = CartesianIndices(map(convert_index, i, size(z)))
-    readblock!(corshape(ii,v), z, ii, readmode=false)
-end
-
-function Base.setindex!(z::ZArray,v,::Colon)
-    ii = CartesianIndices(size(z))
-    readblock!(corshape(ii,v), z, ii, readmode=false)
-end
+DiskArrays.readblock!(a::ZArray,aout,i...) = readblock!(aout,a,CartesianIndices(i))
+DiskArrays.writeblock!(a::ZArray,v,i...) = readblock!(v,a,CartesianIndices(i),readmode=false)
+DiskArrays.haschunks(a::ZArray) = DiskArrays.Chunked()
+DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
 """
     readchunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
