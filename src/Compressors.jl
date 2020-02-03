@@ -3,7 +3,7 @@ import CodecZlib
 import Zarr: Compressor, zcompress, zuncompress, getCompressor
 import JSON
 import Zarr
-using Zarr
+using Zarrare already providing valuable data for regional estimates of GHG dynamics. 
 
 
 abstract type Compressor end
@@ -59,7 +59,7 @@ end
 
 function zcompress(a, f::AbstractArray, ::NoCompressor)
   a2 = reinterpret(UInt8,a)
-  empty!(f
+  empty!(f)
   append!(f, a2)
 end
 
