@@ -1,4 +1,10 @@
 import Blosc
+import CodecZlib
+import Zarr: Compressor, zcompress, zuncompress, getCompressor
+import JSON
+import Zarr
+using Zarr
+
 
 abstract type Compressor end
 getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
@@ -53,12 +59,48 @@ end
 
 function zcompress(a, f::AbstractArray, ::NoCompressor)
   a2 = reinterpret(UInt8,a)
-  empty!(f)
+  empty!(f
   append!(f, a2)
 end
 
 JSON.lower(::NoCompressor) = nothing
 
-
-
 compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
+
+
+
+"""
+    ZlibCompressor(clevel=-1)
+Returns a `ZlibCompressor` struct that can serve as a Zarr array compressor. Keyword arguments are:
+* `clevel=-1` the compression level, number between -1 (Default), 0 (no compression) and 9 (max compression)
+*  default is -1 compromise between speed and compression (currently equivalent to level 6).
+"""
+struct ZlibCompressor <: Compressor
+    clevel::Int
+end
+
+ZlibCompressor(;clevel=-1) = ZlibCompressor(clevel)
+
+function getCompressor(::Type{ZlibCompressor}, d::Dict)
+    ZlibCompressor(d["clevel"])
+end
+
+function zuncompress(a, r::AbstractArray, ::ZlibCompressor)
+    result = transcode(CodecZlib.ZlibDecompressor,r)
+    copyto!(a, reinterpret(Base.nonmissingtype(eltype(a)),result))
+end
+
+function zcompress(a, f::AbstractArray, ::ZlibCompressor)
+    a_uint8 = reinterpret(UInt8,a)
+    r = transcode(CodecZlib.ZlibCompressor,a_uint8[:])
+    empty!(f)
+    append!(f,r)
+end
+
+JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "clevel" => z.clevel)
+
+Zarr.compressortypes["zlib"] = ZlibCompressor
+
+
+
+
