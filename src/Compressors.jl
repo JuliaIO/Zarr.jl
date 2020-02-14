@@ -1,9 +1,6 @@
 import Blosc
 import CodecZlib
-import Zarr: Compressor, zcompress, zuncompress, getCompressor
 import JSON
-import Zarr
-using Zarr
 
 
 abstract type Compressor end
@@ -82,7 +79,7 @@ end
 ZlibCompressor(;clevel=-1) = ZlibCompressor(clevel)
 
 function getCompressor(::Type{ZlibCompressor}, d::Dict)
-    ZlibCompressor(d["clevel"])
+    ZlibCompressor(d["level"])
 end
 
 function zuncompress(a, r::AbstractArray, ::ZlibCompressor)
@@ -97,10 +94,6 @@ function zcompress(a, f::AbstractArray, ::ZlibCompressor)
     append!(f,r)
 end
 
-JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "clevel" => z.clevel)
+JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "level" => z.clevel)
 
 Zarr.compressortypes["zlib"] = ZlibCompressor
-
-
-
-

@@ -21,19 +21,19 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor
 dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
     Bool)
-compressors = (NoCompressor(), BloscCompressor(cname="zstd"))
+compressors = ("no"=>NoCompressor(), "blosc"=>BloscCompressor(cname="zstd"),"zlib"=>ZlibCompressor())
 testarrays = Dict(t=>rand(t,10,6,2) for t in dtypes)
 
-for t in dtypes, comp in compressors
-    compstr = isa(comp,NoCompressor) ? "no" : "blosc"
+for t in dtypes, co in compressors
+    compstr, comp = co
     att = Dict("This is a nested attribute"=>Dict("a"=>5))
-    a = zcreate(t, g,string("a",t,compstr),10,6,2,attrs=att, chunks = (5,2,2))
+    a = zcreate(t, g,string("a",t,compstr),10,6,2,attrs=att, chunks = (5,2,2),compressor=comp)
     a[:,:,:] = testarrays[t]
 end
 # Test reading in python
@@ -55,14 +55,15 @@ dtypesp = ("uint8","uint16","uint32","uint64",
     "complex64", "complex128","bool")
 
 #Test accessing arrays from python and reading data
-for i=1:length(dtypes), comp in compressors
+for i=1:length(dtypes), co in compressors
+    compstr,comp = co
     t = dtypes[i]
     tp = dtypesp[i]
-    compstr = isa(comp,NoCompressor) ? "no" : "blosc"
     arname = string("a",t,compstr)
     py"""
     ar=g[$arname]
     """
+
     @test py"ar.attrs['This is a nested attribute']" == Dict("a"=>5)
     @test py"ar.dtype==$tp"
     @test py"ar.shape" == (2,6,10)
@@ -72,12 +73,13 @@ end
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
 data = rand(Int32,2,6,10)
 py"""
+import numcodecs
 g = zarr.group($ppython)
 g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
 z1[:,:,:]=$data
 z1.attrs["test"]={"b": 6}
-z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1')
+z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
 z2[:]=[k for k in 'hallo']
 zarr.consolidate_metadata($ppython)
 """
