@@ -39,8 +39,10 @@ function zarr_req_handler(s::AbstractStore)
   end
   request -> begin
     k = request.target
-    startswith(k,"/") && (k = k[2:end])
-    k_split = split(k,"/")
+    while startswith(k,"/")
+      k = k[2:end]
+    end
+    k_split = filter(!isequal(".."),split(k,"/"))
     storenew = if length(k_split)>1
       foldl((ss,kk)->getsub(ss,kk),k_split[1:end-1],init = s)
     else
