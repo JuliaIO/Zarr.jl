@@ -23,14 +23,14 @@ function zname end
 
 Returns the data stored in the given key as a Vector{UInt8}
 """
-Base.getindex(d::AbstractStore,i::String) = error("getindex not implemented for store $(typeof(d))")
+Base.getindex(d::AbstractStore,i::AbstractString) = error("getindex not implemented for store $(typeof(d))")
 
 """
     Base.setindex!(d::AbstractStore,v,i::String)
 
 Writes the values in v to the given store and key.
 """
-Base.setindex!(d::AbstractStore,v,i::String) = error("setindex not implemented for store $(typeof(d))")
+Base.setindex!(d::AbstractStore,v,i::AbstractString) = error("setindex not implemented for store $(typeof(d))")
 
 """
     subdirs(d::AbstractStore)
@@ -112,3 +112,4 @@ include("directorystore.jl")
 include("dictstore.jl")
 include("s3store.jl")
 include("consolidated.jl")
+include("http.jl")
