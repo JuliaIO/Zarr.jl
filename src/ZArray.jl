@@ -172,8 +172,8 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   aout
 end
 
-DiskArrays.readblock!(a::ZArray,aout,i...) = readblock!(aout,a,CartesianIndices(i))
-DiskArrays.writeblock!(a::ZArray,v,i...) = readblock!(v,a,CartesianIndices(i),readmode=false)
+DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
+DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = readblock!(v,a,CartesianIndices(i),readmode=false)
 DiskArrays.haschunks(a::ZArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
