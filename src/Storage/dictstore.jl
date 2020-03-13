@@ -16,10 +16,10 @@ Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 storagesize(d::DictStore) = sum(i->i[1] ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])),d.a)
 zname(s::DictStore) = s.name
 
-Base.getindex(d::DictStore,i::String) = get(d.a,i,nothing)
-Base.setindex!(d::DictStore,v,i::String) = d.a[i] = v
+Base.getindex(d::DictStore,i::AbstractString) = get(d.a,i,nothing)
+Base.setindex!(d::DictStore,v,i::AbstractString) = d.a[i] = v
 
-Base.delete!(d::DictStore,i::String) = delete!(d.a,i)
+Base.delete!(d::DictStore,i::AbstractString) = delete!(d.a,i)
 
 subdirs(d::DictStore) = keys(d.subdirs)
 Base.keys(d::DictStore) = keys(d.a)

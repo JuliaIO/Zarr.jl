@@ -12,7 +12,7 @@ function ConsolidatedStore(s::AbstractStore)
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore(s,JSON.parse(String(d))["metadata"])
+  ConsolidatedStore(s,JSON.parse(String(copy(d)))["metadata"])
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
@@ -60,3 +60,26 @@ function getsub(d::ConsolidatedStore, n)
     ConsolidatedStore(getsub(d.parent, n), newd)
 end
 path(d::ConsolidatedStore) = path(d.parent)
+
+function consolidate_metadata(s::AbstractStore,d,prefix)
+  for k in (".zattrs",".zarray",".zgroup")
+    v = s[k]
+    if v !== nothing
+      d[string(prefix,k)] = JSON.parse(replace(String(Zarr.maybecopy(v)),": NaN,"=>": \"NaN\","))
+    end
+  end
+  foreach(subdirs(s)) do subname
+    ssub = getsub(s,subname)
+    consolidate_metadata(ssub,d,string(prefix,subname,"/"))
+  end
+  d
+end
+function consolidate_metadata(s::AbstractStore)
+  d = consolidate_metadata(s,Dict{String,Any}(),"")
+  buf = IOBuffer()
+  JSON.print(buf,Dict("metadata"=>d),4)
+  s[".zmetadata"] = take!(buf)
+  ConsolidatedStore(s)
+end
+
+consolidate_metadata(s) = consolidate_metadata(zopen(s))

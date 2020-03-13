@@ -84,6 +84,8 @@ function storefromstring(s)
     bucket = decomp[3]
     path = join(decomp[4:end],"/")
     S3Store(String(bucket),path, aws=aws_google, listversion=1)
+  elseif startswith(s,"http://")
+    return ConsolidatedStore(HTTPStore(s))
   else
     return DirectoryStore(s)
   end
@@ -116,3 +118,6 @@ function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where
   g.arrays[name] = z
   return z
 end
+
+HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, args...; kwargs...)
+consolidate_metadata(z::Union{ZArray,ZGroup}) = consolidate_metadata(z.storage)

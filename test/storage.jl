@@ -96,25 +96,37 @@ import AWSCore: aws_config
 end
 
 @testset "GCS S3 Storage" begin
-  # These tests work locally but not on Travis, not idea why, will skip them for now
-  # TODO fix
-  #if get(ENV,"TRAVIS","") != "true"
-    bucket = "cmip6"
-    store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
-    region = ""
-    aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-    cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1)
-    @test storagesize(cmip6) == 7557
-    @test Zarr.zname(cmip6) == "gn"
-    g = zopen(cmip6)
-    arr = g["tasmax"]
-    @test size(arr) == (384,192,1032)
-    @test eltype(arr) == Union{Missing, Float32}
-    @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
-    g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
-    arr = g["tasmax"]
-    @test size(arr) == (384,192,1032)
-    @test eltype(arr) == Union{Missing, Float32}
-    @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
-  #end
+  bucket = "cmip6"
+  store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
+  region = ""
+  aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+  cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1)
+  @test storagesize(cmip6) == 7557
+  @test Zarr.zname(cmip6) == "gn"
+  g = zopen(cmip6)
+  arr = g["tasmax"]
+  @test size(arr) == (384,192,1032)
+  @test eltype(arr) == Union{Missing, Float32}
+  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+  g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
+  arr = g["tasmax"]
+  @test size(arr) == (384,192,1032)
+  @test eltype(arr) == Union{Missing, Float32}
+  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+end
+
+@testset "HTTP Storage" begin
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs = Dict("groupatt"=>5))
+  a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
+  a .= reshape(1:200,10,20)
+  using Zarr.HTTP, Sockets
+  server = Sockets.listen(0)
+  ip,port = getsockname(server)
+  @async HTTP.serve(g,ip,port,server=server)
+  g2 = zopen("http://$ip:$port")
+  @test g2.attrs == Dict("groupatt"=>5)
+  @test g2["a1"].attrs == Dict("arratt"=>2.5)
+  @test g2["a1"][:,:] == reshape(1:200,10,20)
+  close(server)
 end
