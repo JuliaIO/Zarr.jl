@@ -21,14 +21,15 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor, ZlibCompressor
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, MaxLengthString
+using Random: randstring
 dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
-    Bool)
+    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32})
 compressors = ("no"=>NoCompressor(), "blosc"=>BloscCompressor(cname="zstd"),"zlib"=>ZlibCompressor())
-testarrays = Dict(t=>rand(t,10,6,2) for t in dtypes)
+testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10,1:6,1:2))] : rand(t,10,6,2) for t in dtypes)
 
 for t in dtypes, co in compressors
     compstr, comp = co
@@ -52,7 +53,7 @@ gatts = g.attrs
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",
     "float16","float32","float64",
-    "complex64", "complex128","bool")
+    "complex64", "complex128","bool","S10","U10")
 
 #Test accessing arrays from python and reading data
 for i=1:length(dtypes), co in compressors
@@ -67,7 +68,13 @@ for i=1:length(dtypes), co in compressors
     @test py"ar.attrs['This is a nested attribute']" == Dict("a"=>5)
     @test py"ar.dtype==$tp"
     @test py"ar.shape" == (2,6,10)
-    @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
+    if t<:MaxLengthString
+      pyar = py"ar[:,:,:]"
+      jar = [get(get(get(pyar,k-1),j-1),i-1) for i in 1:10, j in 1:6, k in 1:2]
+      @test jar == testarrays[t]
+    else
+      @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
+    end
 end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia

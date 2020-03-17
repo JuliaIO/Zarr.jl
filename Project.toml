@@ -35,8 +35,10 @@ julia = "1.2"
 AWSCore = "4f1ea46c-232b-54a6-9b17-cc2d0f3e6598"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
+
 [targets]
-test = ["Test", "Conda", "PyCall", "AWSCore", "Sockets"]
+test = ["Test", "Conda", "PyCall", "AWSCore", "Sockets", "Random"]

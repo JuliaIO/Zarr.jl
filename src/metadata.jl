@@ -1,4 +1,3 @@
-
 """NumPy array protocol type string (typestr) format
 
 A string providing the basic type of the homogenous array. The basic string format
@@ -9,8 +8,12 @@ type of the array, and an integer providing the number of bytes the type uses.
 https://zarr.readthedocs.io/en/stable/spec/v2.html#data-type-encoding
 """
 
+include("MaxLengthStrings.jl")
+using .MaxLengthStrings: MaxLengthString
+
 primitive type ASCIIChar <: AbstractChar 8 end
 ASCIIChar(x::UInt8) = reinterpret(ASCIIChar, x)
+ASCIIChar(x::Integer) = ASCIIChar(UInt8(x))
 UInt8(x::ASCIIChar) = reinterpret(UInt8, x)
 Base.codepoint(x::ASCIIChar) = UInt8(x)
 Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
@@ -24,11 +27,14 @@ typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
 typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
 typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t))
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
+typestr(t::Type{MaxLengthString{N,UInt32}}) where {N,T} = string('<', 'U', N)
+typestr(t::Type{MaxLengthString{N,UInt8}}) where {N,T} = string('<', 'S', N)
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
     ('S', 1) => ASCIIChar,
+    ('U', 1) => Char,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
 sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
@@ -52,8 +58,12 @@ function typestr(s::AbstractString)
         if byteorder == ">"
             throw(ArgumentError("Big-endian data not yet supported"))
         end
+        tc, ts = first(typecode), parse(Int, typesize)
+        if (tc in ('U','S')) && ts > 1
+          return MaxLengthString{ts,tc=='U' ? UInt32 : UInt8}
+        end
         # convert typecode to Char and typesize to Int
-        typemap[(first(typecode), parse(Int, typesize))]
+        typemap[(tc,ts)]
     end
 end
 

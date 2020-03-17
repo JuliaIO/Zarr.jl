@@ -85,6 +85,8 @@ end
         @test Zarr.typestr(Complex{Float64}) === "<c16"
         @test Zarr.typestr(Float16) === "<f2"
         @test Zarr.typestr(Float64) === "<f8"
+        @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
+        @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
     end
 
     @testset "Metadata struct and JSON representation" begin
@@ -121,6 +123,7 @@ end
         @test Zarr.fill_value_decoding(nothing, Int) === nothing
         @test Zarr.fill_value_decoding("-", String) === "-"
         @test Zarr.fill_value_decoding("", Zarr.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
     end
 end
 
@@ -174,6 +177,18 @@ end
   append!(a,vcat(singlerow', singlerow'), dims=1)
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
+end
+
+@testset "string array getindex/setindex" begin
+  using Zarr: MaxLengthString
+  aa = ["this", "is", "all ", "ascii"]
+  bb = ["And" "Unicode"; "ματριξ" missing]
+  a = ZArray(aa)
+  b = ZArray(bb, fill_value = MaxLengthString{7,UInt32}(""))
+  @test eltype(a) == MaxLengthString{5,UInt8}
+  @test eltype(b) == Union{MaxLengthString{7,UInt32},Missing}
+  @test a[:] == ["this", "is", "all ", "ascii"]
+  @test b[:,:] == ["And" "Unicode"; "ματριξ" missing]
 end
 
 

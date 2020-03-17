@@ -129,10 +129,13 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
     # temporary workaround to use strings as data values
-    inner = zeros(Base.nonmissingtype(eltype(z)), z.metadata.chunks)
+    inner = fill(z.metadata.fill_value, z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
-getchunkarray(z::ZArray) = zeros(eltype(z), z.metadata.chunks)
+_zero(T) = zero(T)
+_zero(T::Type{<:MaxLengthString}) = T("")
+_zero(T::Type{ASCIIChar}) = ASCIIChar(0)
+getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
@@ -160,7 +163,6 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     else
       readchunk!(maybeinner(a), z, bI)
     end
-
     if readmode
       # Read data
       copyto!(aout,inds,curchunk,inds)
@@ -276,8 +278,24 @@ function zcreate(::Type{T},storage::AbstractStore,
         metadata, storage, attrs, writeable)
 end
 
-function ZArray(a::AbstractArray{T}, args...; kwargs...) where T
-  z = zcreate(T, args..., size(a)...; kwargs...)
+
+#Not all Array types can be mapped directly to a valid ZArray encoding.
+#Here we try to determine the correct element type
+to_zarrtype(a::AbstractArray{T}) where T = T
+function to_zarrtype(a::AbstractArray{<:Union{AbstractString,Missing}})
+  isasc, maxlen = mapreduce(
+    x->ismissing(x) ? (true,0) : (isascii(x),length(x)),
+    (x,y)->((x[1] && y[1]),max(x[2],y[2])),
+    a,
+    init = (true, 0,false)
+  )
+  et = isasc ? UInt8 : UInt32
+  newt = MaxLengthString{maxlen,et}
+  return eltype(a)>:Missing ? Union{newt,Missing} : newt
+end
+
+function ZArray(a::AbstractArray, args...; kwargs...)
+  z = zcreate(to_zarrtype(a), args..., size(a)...; kwargs...)
   z[:]=a
   z
 end
