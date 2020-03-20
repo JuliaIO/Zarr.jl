@@ -188,7 +188,7 @@ end
   @test eltype(a) == MaxLengthString{5,UInt8}
   @test eltype(b) == Union{MaxLengthString{7,UInt32},Missing}
   @test a[:] == ["this", "is", "all ", "ascii"]
-  @test b[:,:] == ["And" "Unicode"; "ματριξ" missing]
+  @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
 end
 
 
