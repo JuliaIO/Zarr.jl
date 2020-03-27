@@ -12,7 +12,7 @@ function ConsolidatedStore(s::AbstractStore)
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore(s,JSON.parse(String(copy(d)))["metadata"])
+  ConsolidatedStore(s,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
