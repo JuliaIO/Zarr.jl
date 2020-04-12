@@ -75,13 +75,13 @@ end
 import AWSCore: aws_config
 
 @testset "AWS S3 Storage" begin
-  # These tests work locally but not on Travis, not idea why, will skip them for now
-  # TODO fix
-  #if get(ENV,"TRAVIS","") != "true"
+  for backend in [Zarr.awssdk, Zarr.awss3]
     bucket = "zarr-demo"
     store = "store/foo"
     region = "eu-west-2"
-    S3 = S3Store(bucket, store, aws = aws_config(creds=nothing, region = region))
+    S3 = S3Store(
+      bucket, store, aws=aws_config(creds=nothing, region = region),
+      backend=backend)
     @test storagesize(S3) == 0
     @test Zarr.zname(S3) == "foo"
     @test Zarr.is_zgroup(S3) == true
@@ -92,27 +92,47 @@ import AWSCore: aws_config
     @test eltype(S3Array) == Zarr.ASCIIChar
     @test storagesize(S3Array) == 69
     @test String(S3Array[:]) == "Hello from the cloud!"
-  #end
+  end
 end
 
 @testset "GCS S3 Storage" begin
-  bucket = "cmip6"
-  store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
-  region = ""
-  aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-  cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1)
-  @test storagesize(cmip6) == 7557
-  @test Zarr.zname(cmip6) == "gn"
-  g = zopen(cmip6)
-  arr = g["tasmax"]
-  @test size(arr) == (384,192,1032)
-  @test eltype(arr) == Union{Missing, Float32}
-  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
-  g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
-  arr = g["tasmax"]
-  @test size(arr) == (384,192,1032)
-  @test eltype(arr) == Union{Missing, Float32}
-  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+  for backend in [Zarr.awssdk, Zarr.awss3]
+    bucket = "cmip6"
+    store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
+    region = ""
+    aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+    cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1, backend=backend)
+    @test storagesize(cmip6) == 7557
+    @test Zarr.zname(cmip6) == "gn"
+    g = zopen(cmip6)
+    arr = g["tasmax"]
+    @test size(arr) == (384,192,1032)
+    @test eltype(arr) == Union{Missing, Float32}
+    @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+    g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
+    arr = g["tasmax"]
+    @test size(arr) == (384,192,1032)
+    @test eltype(arr) == Union{Missing, Float32}
+    @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+  end
+end
+
+@testset "AWS S3 Storage awss3 backend override endpoint" begin
+  bucket = "zarr-demo"
+  store = "store/foo"
+  endpoint = "https://s3.eu-west-2.amazonaws.com"
+  region="ignored"
+  genericS3 = S3Store(bucket, store, aws = aws_config(creds=nothing, endpoint=endpoint,region=region),backend=Zarr.awss3)
+  @test storagesize(genericS3) == 0
+  @test Zarr.zname(genericS3) == "foo"
+  @test Zarr.is_zgroup(genericS3) == true
+  genericS3group = zopen(genericS3)
+  @test Zarr.zname(genericS3group) == "foo"
+  genericS3Array = genericS3group.groups["bar"].arrays["baz"]
+  @test Zarr.zname(genericS3Array) == "baz"
+  @test eltype(genericS3Array) == Zarr.ASCIIChar
+  @test storagesize(genericS3Array) == 69
+  @test String(genericS3Array[:]) == "Hello from the cloud!"
 end
 
 @testset "HTTP Storage" begin
