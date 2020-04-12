@@ -1,11 +1,15 @@
 using AWSCore
 using AWSSDK.S3
+using AWSS3
+
+@enum Backend awssdk awss3
 
 struct S3Store <: AbstractStore
     bucket::String
     store::String
     listversion::Int
     aws::Dict{Symbol, Any}
+    backend::Backend
 end
 
 
@@ -14,11 +18,12 @@ function S3Store(bucket::String, store::String;
   aws = nothing,
   region = get(ENV, "AWS_DEFAULT_REGION", "us-east-1"),
   creds = nothing,
+  backend = awssdk,
   )
   if aws === nothing
     aws = aws_config(creds=creds,region=region)
   end
-  S3Store(bucket, store, listversion, aws)
+  S3Store(bucket, store, listversion, aws, backend)
 end
 
 Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
@@ -29,7 +34,9 @@ end
 
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
+    return s.backend == awss3 ?
+      s3_get(s.aws,s.bucket,joinpath(s.store,i)) :
+      S3.get_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
   catch e
     if error_is_ignorable(e)
       return nothing
@@ -38,7 +45,7 @@ function Base.getindex(s::S3Store, i::String)
     end
   end
 end
-getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.listversion, s.aws)
+getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.listversion, s.aws, s.backend)
 
 function storagesize(s::S3Store)
   r = cloud_list_objects(s)
@@ -62,6 +69,9 @@ end
 
 function isinitialized(s::S3Store, i::String)
   try
+    if s.backend == awss3
+      return s3_exists(s.aws,s.bucket,joinpath(s.store,i))
+    end
     S3.head_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
     return true
   catch e
@@ -76,9 +86,38 @@ end
 
 function cloud_list_objects(s::S3Store)
   prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
-  listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
-  listfun(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
+
+  if s.backend == awss3
+    # TODO: This doesn't list subdirectories:
+    # objects = collect(s3_list_objects(s.aws, s.bucket, prefix))
+    #
+    # https://github.com/JuliaCloud/AWSS3.jl/pull/85
+    # Dict(
+    #   "Contents" => filter(e -> haskey("Key"), objects),
+    #   "CommonPrefixes" => filter(e -> haskey("Prefix"), objects),
+    # )
+
+    # Instead request all keys without a delimiter and parse
+    objects = collect(s3_list_objects(s.aws, s.bucket, prefix, delimiter=""))
+    offset = length(prefix) + 1
+    contents = [e for e in objects if length(split(e["Key"][offset:end], "/")) == 1]
+    prefixes = Set{String}()
+    for e in objects
+      parts = split(e["Key"][offset:end], "/")
+      if length(parts) > 1
+        push!(prefixes, string(e["Key"][1:offset-1], parts[1]))
+      end
+    end
+    Dict(
+      "Contents" => contents,
+      "CommonPrefixes" => map(p -> Dict("Prefix" => p), collect(prefixes)),
+    )
+  else
+    listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
+    listfun(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
+  end
 end
+
 function subdirs(s::S3Store)
   s3_resp = cloud_list_objects(s)
   !haskey(s3_resp,"CommonPrefixes") && return String[]
