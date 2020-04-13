@@ -100,7 +100,12 @@ end
     bucket = "cmip6"
     store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
     region = ""
-    aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+    if backend == Zarr.awss3
+      # AWSS3 doesn't support service_host service_name
+      aws_google = aws_config(creds=nothing, endpoint="https://storage.googleapis.com")
+    else
+      aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+    end
     cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1, backend=backend)
     @test storagesize(cmip6) == 7557
     @test Zarr.zname(cmip6) == "gn"
