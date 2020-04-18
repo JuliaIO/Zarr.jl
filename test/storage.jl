@@ -72,7 +72,7 @@ end
   @test isempty(keys(ds.subdirs["bar"].subdirs))
 end
 
-import AWSCore: aws_config
+import AWSCore: aws_config, AWSCredentials
 
 @testset "AWS S3 Storage" begin
   for backend in [Zarr.awssdk, Zarr.awss3]
@@ -122,22 +122,20 @@ end
   end
 end
 
-@testset "AWS S3 Storage awss3 backend override endpoint" begin
-  bucket = "zarr-demo"
-  store = "store/foo"
-  endpoint = "https://s3.eu-west-2.amazonaws.com"
-  region="ignored"
-  genericS3 = S3Store(bucket, store, aws = aws_config(creds=nothing, endpoint=endpoint,region=region),backend=Zarr.awss3)
-  @test storagesize(genericS3) == 0
-  @test Zarr.zname(genericS3) == "foo"
-  @test Zarr.is_zgroup(genericS3) == true
-  genericS3group = zopen(genericS3)
-  @test Zarr.zname(genericS3group) == "foo"
-  genericS3Array = genericS3group.groups["bar"].arrays["baz"]
-  @test Zarr.zname(genericS3Array) == "baz"
-  @test eltype(genericS3Array) == Zarr.ASCIIChar
-  @test storagesize(genericS3Array) == 69
-  @test String(genericS3Array[:]) == "Hello from the cloud!"
+@testset "Local minio" begin
+  bucket = "data"
+  store = "test.zarr"
+  minio = S3Store(
+    bucket, store, aws=aws_config(creds=AWSCredentials("minio", "minio123"), endpoint="http://localhost:9000", region=""),
+    backend=Zarr.awss3)
+  @test storagesize(minio) == 0
+  minioGroup = zopen(minio)
+  minioArray = minioGroup.groups["foo"].arrays["0"]
+  @test Zarr.zname(minioArray) == "0"
+  @test eltype(minioArray) == Union{Missing, Int8}
+  @test storagesize(minioArray) == 22
+  @test size(minioArray) == (3, 2)
+  @test minioArray[:] == [1, 2, 3, 4, 5, 6]
 end
 
 @testset "HTTP Storage" begin
