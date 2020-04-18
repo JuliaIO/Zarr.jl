@@ -8,6 +8,12 @@ julia:
     - 1.3
     - nightly
 
+env:
+  global:
+    # Python3 may already be installed in the distro
+    # Force Julia to use self-installed conda instead
+    PYTHON=""
+
 matrix:
   allow_failures:
     - julia: nightly
