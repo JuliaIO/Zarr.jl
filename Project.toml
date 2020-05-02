@@ -19,7 +19,7 @@ Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [compat]
 AWSCore = "0.6.6"
-AWSS3 = "0.6"
+AWSS3 = "0.6, 0.7"
 AWSSDK = "0.4, 0.5"
 Blosc = "0.5, 0.6"
 CodecZlib = "0.6, 0.7"
@@ -38,7 +38,6 @@ PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
 
 [targets]
 test = ["Test", "Conda", "PyCall", "AWSCore", "Sockets", "Random"]
