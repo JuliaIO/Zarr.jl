@@ -15,7 +15,7 @@ The package currently implements basic functionality for reading and writing zar
 ````julia
 using Zarr
 z1 = zcreate(Int, 10000,10000,path = "data/example.zarr",chunks=(1000, 1000))
-z1[:] = 42
+z1[:] .= 42
 z1[:,1] = 1:10000
 z1[1,:] = 1:10000
 
