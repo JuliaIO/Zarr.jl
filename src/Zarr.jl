@@ -5,6 +5,7 @@ import Blosc
 
 include("metadata.jl")
 include("Storage/Storage.jl")
+include("Filters.jl")
 include("Compressors.jl")
 include("ZArray.jl")
 include("ZGroup.jl")

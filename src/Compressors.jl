@@ -7,6 +7,34 @@ abstract type Compressor end
 getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
 getCompressor(::Nothing) = NoCompressor()
 
+#Compression when no filter is given
+zcompress!(compressed,data,c,::Nothing) = zcompress!(compressed,data,c)
+zuncompress!(data,compressed,c,::Nothing) = zuncompress!(data,compressed,c)
+
+#Fallback definition of mutating form of compress and uncompress
+function zcompress!(compressed, data, c) 
+    empty!(compressed)
+    append!(compressed,zcompress(data, c))
+end
+zuncompress!(data, compressed, c) = copyto!(data, zuncompress(compressed, c, eltype(data)))
+
+
+#Function given a filter stack
+function zcompress!(compressed, data, c, f)
+    a2 = foldl(f, init=data) do anow, fnow
+        zencode(anow,fnow)
+    end
+    zcompress!(compressed, a2, c)
+end
+
+function zuncompress!(data, compressed, c, f)
+    data2 = zuncompress(compressed, c, desttype(last(f))) 
+    a2 = foldr(f, init = data2) do fnow, anow
+        zdecode(anow, fnow)
+    end
+    copyto!(data, a2)
+end
+
 
 struct BloscCompressor <: Compressor
     blocksize::Int
@@ -31,13 +59,11 @@ function getCompressor(::Type{BloscCompressor}, d::Dict)
     BloscCompressor(d["blocksize"], d["clevel"], d["cname"], d["shuffle"] > 0)
 end
 
-zuncompress(a, r::AbstractArray, ::BloscCompressor) = copyto!(a, Blosc.decompress(Base.nonmissingtype(eltype(a)), r))
+zuncompress(a, ::BloscCompressor, T) = Blosc.decompress(Base.nonmissingtype(T), a)
 
-function zcompress(a, f::AbstractArray, c::BloscCompressor)
+function zcompress(a, c::BloscCompressor)
     Blosc.set_compressor(c.cname)
-    r = Blosc.compress(a, level=c.clevel, shuffle=c.shuffle)
-    empty!(f)
-    append!(f, r)
+    Blosc.compress(a, level=c.clevel, shuffle=c.shuffle)
 end
 
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
@@ -50,14 +76,12 @@ Creates an object that can be passed to ZArray constructors without compression.
 """
 struct NoCompressor <: Compressor end
 
-function zuncompress(a, r::AbstractArray, ::NoCompressor)
-  copyto!(a, reinterpret(eltype(a),r))
+function zuncompress(a, ::NoCompressor, T)
+  reinterpret(T,a)
 end
 
-function zcompress(a, f::AbstractArray, ::NoCompressor)
-  a2 = reinterpret(UInt8,a)
-  empty!(f)
-  append!(f, a2)
+function zcompress(a, ::NoCompressor)
+  reinterpret(UInt8,a)
 end
 
 JSON.lower(::NoCompressor) = nothing
@@ -82,16 +106,14 @@ function getCompressor(::Type{ZlibCompressor}, d::Dict)
     ZlibCompressor(d["level"])
 end
 
-function zuncompress(a, r::AbstractArray, ::ZlibCompressor)
-    result = transcode(CodecZlib.ZlibDecompressor,r)
-    copyto!(a, reinterpret(Base.nonmissingtype(eltype(a)),result))
+function zuncompress(a, ::ZlibCompressor, T)
+    result = transcode(CodecZlib.ZlibDecompressor,a)
+    reinterpret(Base.nonmissingtype(T),result)
 end
 
-function zcompress(a, f::AbstractArray, ::ZlibCompressor)
-    a_uint8 = reinterpret(UInt8,a)
-    r = transcode(CodecZlib.ZlibCompressor,a_uint8[:])
-    empty!(f)
-    append!(f,r)
+function zcompress(a, ::ZlibCompressor)
+    a_uint8 = reinterpret(UInt8,a)[:]
+    transcode(CodecZlib.ZlibCompressor, a_uint8)
 end
 
 JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "level" => z.clevel)

@@ -75,6 +75,7 @@ function zinfo(io::IO,z::ZArray)
     "Order" => z.metadata.order,
     "Read-Only" => !z.writeable,
     "Compressor" => z.metadata.compressor,
+    "Filters" => z.metadata.filters, 
     "Store type" => z.storage,
     "No. bytes"  => length(z)*sizeof(eltype(z)),
     "No. bytes stored" => storagesize(z),
@@ -135,6 +136,7 @@ end
 _zero(T) = zero(T)
 _zero(T::Type{<:MaxLengthString}) = T("")
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
+_zero(::Type{<:Vector{T}}) where T = T[]
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
 maybeinner(a::Array) = a
@@ -190,7 +192,7 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
-        zuncompress(a, curchunk, z.metadata.compressor)
+        zuncompress!(a, curchunk, z.metadata.compressor, z.metadata.filters)
     end
     a
 end
@@ -209,7 +211,7 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !allmissing(z,a)
     dtemp = UInt8[]
-    zcompress(a,dtemp,z.metadata.compressor)
+    zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
     z.storage[i]=dtemp
   else
     isinitialized(z.storage,i) && delete!(z.storage,i)
@@ -249,6 +251,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
+        filters = nothing, 
         attrs=Dict(),
         writeable=true,
         ) where T
@@ -257,7 +260,7 @@ function zcreate(::Type{T},storage::AbstractStore,
     N = length(dims)
     C = typeof(compressor)
     T2 = fill_value === nothing ? T : Union{T,Missing}
-    metadata = Metadata{T2, N, C}(
+    metadata = Metadata{T2, N, C, typeof(filters)}(
         2,
         dims,
         chunks,
@@ -265,7 +268,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         compressor,
         fill_value,
         'C',
-        nothing
+        filters,
     )
 
     isempty(storage) || error("$storage is not empty")
@@ -281,7 +284,7 @@ end
 
 #Not all Array types can be mapped directly to a valid ZArray encoding.
 #Here we try to determine the correct element type
-to_zarrtype(a::AbstractArray{T}) where T = T
+to_zarrtype(::AbstractArray{T}) where T = T
 function to_zarrtype(a::AbstractArray{<:Union{AbstractString,Missing}})
   isasc, maxlen = mapreduce(
     x->ismissing(x) ? (true,0) : (isascii(x),length(x)),
@@ -299,7 +302,6 @@ function ZArray(a::AbstractArray, args...; kwargs...)
   z[:]=a
   z
 end
-
 
 """
     chunkindices(z::ZArray)
