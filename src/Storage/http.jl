@@ -13,7 +13,7 @@ struct HTTPStore <: AbstractStore
 end
 
 function Base.getindex(s::HTTPStore, k::String)
-r = HTTP.request("GET",joinpath(s.url,k),status_exception = false)
+r = HTTP.request("GET",string(s.url,"/",k),status_exception = false)
 if r.status >= 300
     if r.status == 404
         nothing
@@ -24,7 +24,7 @@ else
     r.body
 end
 end
-getsub(s::HTTPStore,n) = HTTPStore(joinpath(s.url,n))
+getsub(s::HTTPStore,n) = HTTPStore(string(s.url,"/",n))
 zname(s::HTTPStore) = split(s.url,"/")[end]
 
 

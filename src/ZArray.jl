@@ -3,8 +3,8 @@ import FillArrays: Fill
 import OffsetArrays: OffsetArray
 import DiskArrays: AbstractDiskArray
 import DiskArrays
-getfillval(target::Type{T}, t::String) where {T <: Number} = parse(T, t)
-getfillval(target::Type{T}, t::Union{T,Nothing}) where {T} = t
+getfillval(::Type{T}, t::String) where {T <: Number} = parse(T, t)
+getfillval(::Type{T}, t::Union{T,Nothing}) where {T} = t
 
 struct SenMissArray{T,N,V} <: AbstractArray{Union{T,Missing},N}
   x::Array{T,N}
@@ -256,7 +256,7 @@ function zcreate(::Type{T},storage::AbstractStore,
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
-    T2 = fill_value == nothing ? T : Union{T,Missing}
+    T2 = fill_value === nothing ? T : Union{T,Missing}
     metadata = Metadata{T2, N, C}(
         2,
         dims,

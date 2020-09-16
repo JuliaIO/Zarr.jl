@@ -56,7 +56,7 @@ end
   @test isdir(joinpath(p,"foo","bar"))
   @test isfile(joinpath(p,"foo","bar","0.0.0"))
   @test isfile(joinpath(p,"foo","bar",".zarray"))
-  @test Zarr.path(ds)==joinpath(p,"foo")
+  @test Zarr.path(ds)==replace(joinpath(p,"foo"),"\\"=>"/")
 end
 
 @testset "DictStore" begin
@@ -75,9 +75,6 @@ end
 import AWSCore: aws_config
 
 @testset "AWS S3 Storage" begin
-  # These tests work locally but not on Travis, not idea why, will skip them for now
-  # TODO fix
-  #if get(ENV,"TRAVIS","") != "true"
     bucket = "zarr-demo"
     store = "store/foo"
     region = "eu-west-2"
@@ -92,7 +89,6 @@ import AWSCore: aws_config
     @test eltype(S3Array) == Zarr.ASCIIChar
     @test storagesize(S3Array) == 69
     @test String(S3Array[:]) == "Hello from the cloud!"
-  #end
 end
 
 @testset "GCS S3 Storage" begin
