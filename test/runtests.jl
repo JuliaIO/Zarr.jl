@@ -9,8 +9,8 @@ using PyCall
 
 @testset "ZArray" begin
     @testset "fields" begin
-        z = zzeros(Int, 2, 3)
-        @test z isa ZArray{Int, 2, Zarr.BloscCompressor,
+        z = zzeros(Int64, 2, 3)
+        @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.DictStore}
 
         @test z.storage.name === "data"
@@ -31,11 +31,11 @@ using PyCall
     end
 
     @testset "methods" begin
-        z = zzeros(Int, 2, 3)
-        @test z isa ZArray{Int, 2, Zarr.BloscCompressor,
+        z = zzeros(Int64, 2, 3)
+        @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.DictStore}
 
-        @test eltype(z) === Int
+        @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)
         @test size(z, 2) === 3
@@ -47,7 +47,7 @@ using PyCall
     @testset "NoCompressor DirectoryStore" begin
         mktempdir(@__DIR__) do dir
             name = "nocompressor"
-            z = zzeros(Int, 2, 3, path="$dir/$name",
+            z = zzeros(Int64, 2, 3, path="$dir/$name",
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()

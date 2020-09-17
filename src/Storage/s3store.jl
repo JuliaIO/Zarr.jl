@@ -29,7 +29,7 @@ end
 
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
+    return S3.get_object(s.aws,Bucket=s.bucket,Key=string(s.store,"/",i))
   catch e
     if error_is_ignorable(e)
       return nothing
@@ -38,7 +38,7 @@ function Base.getindex(s::S3Store, i::String)
     end
   end
 end
-getsub(s::S3Store, d::String) = S3Store(s.bucket, joinpath(s.store,d), s.listversion, s.aws)
+getsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
 
 function storagesize(s::S3Store)
   r = cloud_list_objects(s)
@@ -62,13 +62,13 @@ end
 
 function isinitialized(s::S3Store, i::String)
   try
-    S3.head_object(s.aws,Bucket=s.bucket,Key=joinpath(s.store,i))
+    S3.head_object(s.aws,Bucket=s.bucket,Key=string(s.store,"/",i))
     return true
   catch e
     if error_is_ignorable(e)
       return false
     else
-      println(joinpath(s.store,i))
+      println(string(s.store,"/",i))
       throw(e)
     end
   end

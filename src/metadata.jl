@@ -27,8 +27,8 @@ typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
 typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
 typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t))
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
-typestr(t::Type{MaxLengthString{N,UInt32}}) where {N,T} = string('<', 'U', N)
-typestr(t::Type{MaxLengthString{N,UInt8}}) where {N,T} = string('<', 'S', N)
+typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
+typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(

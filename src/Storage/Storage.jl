@@ -66,7 +66,7 @@ function getsub end
 Deletes the given key from the store.
 """
 
-citostring(i::CartesianIndex) = join(reverse((i - one(i)).I), '.')
+citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]
 Base.delete!(s::AbstractStore, i::CartesianIndex) = delete!(s, citostring(i))
