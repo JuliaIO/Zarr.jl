@@ -29,6 +29,7 @@ typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t)
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
 typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
+typestr(::Type{<:Array}) = "|O"
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
@@ -166,15 +167,12 @@ function JSON.lower(md::Metadata)
         "shape" => md.shape[] |> reverse,
         "chunks" => md.chunks |> reverse,
         "dtype" => md.dtype,
-        "compressor" => JSON.lower(md.compressor),
+        "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
         "order" => md.order,
-        "filters" => encodefilter(md.filters)
+        "filters" => md.filters
     )
 end
-
-encodefilter(::Nothing) = nothing
-encodefilter(filter) = JSON.lower(filter)
 
 # Fill value encoding and decoding as described in
 # https://zarr.readthedocs.io/en/stable/spec/v2.html#fill-value-encoding

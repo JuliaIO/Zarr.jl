@@ -51,7 +51,7 @@ function zencode(ain,::VLenArrayFilter)
     take!(b)
 end
 
-JSON.lower(::VLenArrayFilter{T}) where T = JSON.lower(Dict("id"=>"vlen-array","dtype"=> typestr(T) ))
+JSON.lower(::VLenArrayFilter{T}) where T = JSON.json(Dict("id"=>"vlen-array","dtype"=> typestr(T) ))
 
 getfilter(::Type{<:VLenArrayFilter}, f) = VLenArrayFilter{typestr(f["dtype"])}()
 

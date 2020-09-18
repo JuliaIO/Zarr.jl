@@ -87,6 +87,7 @@ end
         @test Zarr.typestr(Float64) === "<f8"
         @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
+        @test Zarr.typestr(Vector{Int64}) === "|O"
     end
 
     @testset "Metadata struct and JSON representation" begin
@@ -189,6 +190,19 @@ end
   @test eltype(b) == Union{MaxLengthString{7,UInt32},Missing}
   @test a[:] == ["this", "is", "all ", "ascii"]
   @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
+end
+
+@testset "ragged arrays" begin
+  z = zcreate(Vector{Float64},2,3)
+  a, b, c, d = [1.0,2.0,3.0], [4.0,5.0],[2.0],[2.0,3.0]
+  z[1,1] = a
+  z[2,1:3] = [b,c,d]
+  @test z[:,:] == reshape([a,b,[],c,[],d],2,3)
+  @test storageratio(z) == "unknown"
+  @test zinfo(z) === nothing
+  @test z.metadata.filters == (Zarr.VLenArrayFilter{Float64}(),)
+  z2 = ZArray(reshape([a,b,Float64[],c,Float64[],d],2,3))
+  @test z[:,:] == z2[:,:]
 end
 
 

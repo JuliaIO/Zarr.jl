@@ -62,6 +62,11 @@ Returns the ratio of the size of the uncompressed data in `z` and the size of th
 """
 storageratio(z::ZArray) = length(z)*sizeof(eltype(z))/storagesize(z)
 
+storageratio(z::ZArray{<:Vector}) = "unknown"
+
+nobytes(z::ZArray) = length(z)*sizeof(eltype(z))
+nobytes(z::ZArray{<:Vector}) = "unknown"
+
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
@@ -77,7 +82,7 @@ function zinfo(io::IO,z::ZArray)
     "Compressor" => z.metadata.compressor,
     "Filters" => z.metadata.filters, 
     "Store type" => z.storage,
-    "No. bytes"  => length(z)*sizeof(eltype(z)),
+    "No. bytes"  => nobytes(z),
     "No. bytes stored" => storagesize(z),
     "Storage ratio" => storageratio(z),
     "Chunks initialized" => "$(ninit)/$(length(chunkindices(z)))"
@@ -251,7 +256,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
-        filters = nothing, 
+        filters = filterfromtype(T), 
         attrs=Dict(),
         writeable=true,
         ) where T
@@ -281,6 +286,12 @@ function zcreate(::Type{T},storage::AbstractStore,
         metadata, storage, attrs, writeable)
 end
 
+filterfromtype(::Type{<:Any}) = nothing
+
+function filterfromtype(::Type{<:AbstractArray{T}}) where T
+  #Here we have to apply the vlenarray filter
+  (VLenArrayFilter{T}(),)
+end
 
 #Not all Array types can be mapped directly to a valid ZArray encoding.
 #Here we try to determine the correct element type
