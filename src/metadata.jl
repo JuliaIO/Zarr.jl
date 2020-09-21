@@ -29,8 +29,9 @@ typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t)
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
 typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
+typestr(::Type{<:Array}) = "|O"
 
-const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d+)$"
+const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
     ('S', 1) => ASCIIChar,
@@ -48,8 +49,7 @@ foreach([Float16,Float32,Float64,Int8,Int16,Int32,Int64,Int128,
     typemap[(typecharf(t),sizemapf(t))] = t
 end
 
-
-function typestr(s::AbstractString)
+function typestr(s::AbstractString, filterlist=nothing)
     m = match(typestr_regex, s)
     if m === nothing
         throw(ArgumentError("$s is not a valid numpy typestr"))
@@ -58,6 +58,13 @@ function typestr(s::AbstractString)
         if byteorder == ">"
             throw(ArgumentError("Big-endian data not yet supported"))
         end
+        if typecode == "O"
+            if filterlist === nothing
+                throw(ArgumentError("Object array can only be parsed when an appropriate filter is defined"))
+            end
+            return Vector{sourcetype(first(filterlist))}
+        end
+        isempty(typesize) && throw((ArgumentError("$s is not a valid numpy typestr")))
         tc, ts = first(typecode), parse(Int, typesize)
         if (tc in ('U','S')) && ts > 1
           return MaxLengthString{ts,tc=='U' ? UInt32 : UInt8}
@@ -75,7 +82,7 @@ value of the “.zarray” key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-struct Metadata{T, N, C}
+struct Metadata{T, N, C, F}
     zarr_format::Int
     shape::Ref{NTuple{N, Int}}
     chunks::NTuple{N, Int}
@@ -83,12 +90,12 @@ struct Metadata{T, N, C}
     compressor::C
     fill_value::Union{T, Nothing}
     order::Char
-    filters::Nothing  # not yet supported
+    filters::F  # not yet supported
 end
 
 #To make unit tests pass with ref shape
 import Base.==
-function ==(m1::Metadata{T,N,C}, m2::Metadata{T,N,C}) where {T,N,C}
+function ==(m1::Metadata, m2::Metadata)
   m1.zarr_format == m2.zarr_format &&
   m1.shape[] == m2.shape[] &&
   m1.chunks == m2.chunks &&
@@ -109,7 +116,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         filters::Nothing=nothing
     ) where {T, N, C}
     T2 = fill_value === nothing ? T : Union{T,Missing}
-    Metadata{T2, N, C}(
+    Metadata{T2, N, C, typeof(filters)}(
         zarr_format,
         size(A),
         chunks,
@@ -130,15 +137,18 @@ function Metadata(d::AbstractDict)
     compdict = d["compressor"]
     compressor = getCompressor(compdict)
 
-    T = typestr(d["dtype"])
+    filters = getfilters(d)
+
+    T = typestr(d["dtype"], filters)
     N = length(d["shape"])
     C = typeof(compressor)
+    F = typeof(filters)
 
     fv = fill_value_decoding(d["fill_value"], T)
 
     TU = fv === nothing ? T : Union{T,Missing}
 
-    Metadata{TU, N, C}(
+    Metadata{TU, N, C, F}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
         NTuple{N, Int}(d["chunks"]) |> reverse,
@@ -146,7 +156,7 @@ function Metadata(d::AbstractDict)
         compressor,
         fv,
         first(d["order"]),
-        d["filters"]
+        filters,
     )
 end
 
@@ -157,13 +167,12 @@ function JSON.lower(md::Metadata)
         "shape" => md.shape[] |> reverse,
         "chunks" => md.chunks |> reverse,
         "dtype" => md.dtype,
-        "compressor" => JSON.lower(md.compressor),
+        "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
         "order" => md.order,
         "filters" => md.filters
     )
 end
-
 
 # Fill value encoding and decoding as described in
 # https://zarr.readthedocs.io/en/stable/spec/v2.html#fill-value-encoding
@@ -184,6 +193,6 @@ Base.eltype(::Metadata{T}) where T = T
 
 # this correctly parses "NaN" and "Infinity"
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
-fill_value_decoding(v::Nothing, T) = v
+fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
-fill_value_decoding(v, T::Type{ASCIIChar}) = v == "" ? nothing : v
+fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v

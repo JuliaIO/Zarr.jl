@@ -214,3 +214,25 @@ julia> z = zzeros(Int32,100000000, chunks=(1000000,), compressor=Zarr.NoCompress
 julia> storageratio(z)
 1.0
 ```
+
+### Ragged Arrays
+
+If you need to store an array of arrays, where each member array can be of any length and stores the same data type (a.k.a. a ragged array), `VLenArray` filter will be used, e.g.:
+
+```jldoctest ragged
+julia> z = zcreate(Vector{Int}, 4)
+ZArray{Array{Int64,1}} of size 4
+
+julia> z.metadata.filters
+(Zarr.VLenArrayFilter{Int64}(),)
+
+julia> z[1:3] = [[1,3,5],[4],[7,9,14]];
+
+julia> z[:]
+4-element Array{Array{Int64,1},1}:
+ [1, 3, 5]
+ [4]
+ [7, 9, 14]
+ []
+```
+
