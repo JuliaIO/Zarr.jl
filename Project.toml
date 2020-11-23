@@ -4,8 +4,13 @@ authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 version = "0.5.2"
 
 [deps]
+<<<<<<< HEAD
 AWSCore = "4f1ea46c-232b-54a6-9b17-cc2d0f3e6598"
 AWSSDK = "0d499d91-6ae5-5d63-9313-12987b87d5ad"
+=======
+AWS = "fbe9abb3-538b-5e4e-ba9e-bc94f4f92ebc"
+AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
+>>>>>>> use AWS.jl package
 Blosc = "a74b3585-a348-5f62-a45c-50e91977d574"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
@@ -16,8 +21,12 @@ OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [compat]
+<<<<<<< HEAD
 AWSCore = "0.6.6"
 AWSSDK = "0.4, 0.5"
+=======
+AWSS3 = "0.6, 0.7"
+>>>>>>> use AWS.jl package
 Blosc = "0.5, 0.6, 0.7"
 CodecZlib = "0.6, 0.7"
 DataStructures = "0.17, 0.18"

@@ -1,11 +1,12 @@
-using AWSCore
-using AWSSDK.S3
+using AWS
+
+@service S3
 
 struct S3Store <: AbstractStore
     bucket::String
     store::String
     listversion::Int
-    aws::Dict{Symbol, Any}
+    aws::AWS.AbstractAWSConfig
 end
 
 
@@ -16,20 +17,21 @@ function S3Store(bucket::String, store::String;
   creds = nothing,
   )
   if aws === nothing
-    aws = aws_config(creds=creds,region=region)
+    aws = AWS.AWSConfig(creds=creds,region=region)
   end
   S3Store(bucket, store, listversion, aws)
 end
 
-Base.show(io::IO,s::S3Store) = print(io,"S3 Object Storage")
+Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
 
 function error_is_ignorable(e)
-  isa(e,AWSCore.AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+  #isa(e,AWSException) && (e.code=="NoSuchKey" || e.code=="404")
+  true
 end
 
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.aws,Bucket=s.bucket,Key=string(s.store,"/",i))
+    return S3.get_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
   catch e
     if error_is_ignorable(e)
       return nothing
@@ -62,7 +64,7 @@ end
 
 function isinitialized(s::S3Store, i::String)
   try
-    S3.head_object(s.aws,Bucket=s.bucket,Key=string(s.store,"/",i))
+    S3.head_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
     return true
   catch e
     if error_is_ignorable(e)
@@ -73,11 +75,12 @@ function isinitialized(s::S3Store, i::String)
     end
   end
 end
+Base.haskey(s::S3Store, i::String) = isinitialized(s,i)
 
 function cloud_list_objects(s::S3Store)
   prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
   listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
-  listfun(s.aws, Bucket=s.bucket, prefix=prefix, delimiter = "/")
+  listfun(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
 function subdirs(s::S3Store)
   s3_resp = cloud_list_objects(s)

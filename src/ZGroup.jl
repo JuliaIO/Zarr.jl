@@ -55,8 +55,8 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 of large zarr groups.
 """
 function zopen(s::AbstractStore, mode="r"; consolidated = false)
-    # add interfaces to Stores later
-    consolidated && return zopen(ConsolidatedStore(s), mode)
+    # add interfaces to Stores later    
+    consolidated && haskey(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
     if is_zarray(s)
         return ZArray(s,mode)
     elseif is_zgroup(s)
@@ -76,10 +76,9 @@ function zopen(s::String, mode="r"; kwargs...)
   zopen(storefromstring(s), mode; kwargs...)
 end
 
-import AWSCore
 function storefromstring(s)
   if startswith(s,"gs://")
-    aws_google = AWSCore.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
+    aws_google = AWS.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
     decomp = split(s,"/")
     bucket = decomp[3]
     path = join(decomp[4:end],"/")
