@@ -4,7 +4,7 @@ Zarr is a Julia package providing an implementation of chunked, compressed, N-di
 
 | **Documentation**                                                               | **Build Status**                                                                                |
 |:-------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
-| [![][docs-dev-img]][docs-dev-url] | [![][travis-img]][travis-url] [![][codecov-img]][codecov-url] |
+| [![][docs-dev-img]][docs-dev-url] | [![][ci-img]][ci-url] [![][codecov-img]][codecov-url] |
 
 ## Package status
 
@@ -32,8 +32,8 @@ z2[1:10,1:10]
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://meggart.github.io/Zarr.jl/latest
 
-[travis-img]: https://travis-ci.org/meggart/Zarr.jl.svg?branch=master
-[travis-url]: https://travis-ci.org/meggart/Zarr.jl
-
 [codecov-img]: https://codecov.io/gh/meggart/Zarr.jl/branch/master/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/meggart/Zarr.jl
+
+[ci-img]: https://github.com/meggart/Zarr.jl/workflows/CI/badge.svg
+[ci-url]: https://github.com/meggart/Zarr.jl/actions?query=workflow%3ACI
