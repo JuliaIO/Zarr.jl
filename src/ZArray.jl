@@ -1,5 +1,4 @@
 import JSON
-import FillArrays: Fill
 import OffsetArrays: OffsetArray
 import DiskArrays: AbstractDiskArray
 import DiskArrays
