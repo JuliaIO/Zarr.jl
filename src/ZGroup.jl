@@ -56,7 +56,7 @@ of large zarr groups.
 """
 function zopen(s::AbstractStore, mode="r"; consolidated = false)
     # add interfaces to Stores later    
-    consolidated && haskey(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
     if is_zarray(s)
         return ZArray(s,mode)
     elseif is_zgroup(s)
@@ -77,17 +77,12 @@ function zopen(s::String, mode="r"; kwargs...)
 end
 
 function storefromstring(s)
-  if startswith(s,"gs://")
-    aws_google = AWS.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-    decomp = split(s,"/")
-    bucket = decomp[3]
-    path = join(decomp[4:end],"/")
-    S3Store(String(bucket),path, aws=aws_google, listversion=1)
-  elseif startswith(s,"http://")
-    return ConsolidatedStore(HTTPStore(s))
-  else
-    return DirectoryStore(s)
+  for (r,t) in storageregexlist
+    if match(r,s) !== nothing
+      return storefromstring(t,s)
+    end
   end
+  DirectoryStore(s)
 end
 
 """

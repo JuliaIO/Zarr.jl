@@ -108,6 +108,10 @@ Base.setindex!(s::AbstractStore,v,i::CartesianIndex) = s[citostring(i)]=v
 
 Base.isempty(s::AbstractStore) = isempty(keys(s)) && isempty(subdirs(s))
 
+#Here different storage backends can register regexes that are checked against
+#during auto-check of storage format when doing zopen
+storageregexlist = Pair[]
+
 include("directorystore.jl")
 include("dictstore.jl")
 include("s3store.jl")

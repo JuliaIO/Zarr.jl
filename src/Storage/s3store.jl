@@ -19,6 +19,7 @@ function S3Store(bucket::String, store::String;
   if aws === nothing
     aws = AWS.AWSConfig(creds=creds,region=region)
   end
+  store = rstrip(store,'/')
   S3Store(bucket, store, listversion, aws)
 end
 
@@ -34,6 +35,7 @@ function Base.getindex(s::S3Store, i::String)
     return S3.get_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
   catch e
     if error_is_ignorable(e)
+      println(e)
       return nothing
     else
       throw(e)
@@ -97,3 +99,32 @@ allstrings(v::AbstractArray,prefixkey) = map(i -> String(i[prefixkey]), v)
 allstrings(v,prefixkey) = [String(v[prefixkey])]
 
 path(s::S3Store) = s.store
+
+# Some special AWS configs
+struct AnonymousGCS <:AbstractAWSConfig end
+struct NoCredentials end
+AWS.region(::AnonymousGCS) = "" # No region
+AWS.credentials(::AnonymousGCS) = NoCredentials() # No credentials
+AWS.check_credentials(c::NoCredentials) = c # Skip credentials check
+AWS.sign!(::AnonymousGCS, ::AWS.Request) = nothing # Don't sign request
+function AWS.generate_service_url(::AnonymousGCS, service::String, resource::String)
+    service == "s3" || throw(ArgumentError("Can only handle s3 requests to GCS"))
+    return string("https://storage.googleapis.com.", resource)
+end
+
+push!(storageregexlist,r"^gs://"=>AnonymousGCS)
+push!(storageregexlist,r"^s3://"=>S3Store)
+
+function storefromstring(::Type{<:S3Store}, s)
+  decomp = split(s,"/",keepempty=false)
+  bucket = decomp[2]
+  path = join(decomp[3:end],"/")
+  S3Store(String(bucket),path, aws=AWS.global_aws_config())
+end
+
+function storefromstring(::Type{<:AnonymousGCS}, s)
+    decomp = split(s,"/",keepempty=false)
+    bucket = decomp[2]
+    path = join(decomp[3:end],"/")
+    S3Store(String(bucket),path, aws=AnonymousGCS(), listversion=1)
+end

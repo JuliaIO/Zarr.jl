@@ -7,27 +7,18 @@ a s3-compatible cloud store. Here we provide examples on how to read data from c
 
 First we show how to access the zarr-demo bucket on AWS S3. We have to setup a
 AWS configuration first, for options look at the documentation of
-[AWSCore.jl](https://github.com/JuliaCloud/AWSCore.jl). If you don't have an
+[AWSCore.jl](https://github.com/JuliaCloud/AWS.jl). If you don't have an
 account, you can access the dataset without credentials as follows:
 
 ````@example aws
-using Zarr, AWSCore
-region = "eu-west-2"
-aws = aws_config(creds=nothing, region = region)
+using Zarr, AWS
+AWS.global_aws_config(AWSConfig(creds=nothing, region = "eu-west-2"))
 ````
 
-Then we can create an S3Store based on the known bucket name and store base path.
+Then we can directly open a zarr group stored on s3
 
 ````@example aws
-bucket = "zarr-demo"
-store = "store/foo/bar"
-S3 = S3Store(bucket, store, aws = aws)
-````
-
-Let's find out what is actually stored in there:
-
-````@example aws
-z = zopen(S3)
+z = zopen("s3://zarr-demo/store/foo/bar")
 ````
 
 So we see that the store points to a zarr group with a single variable `baz`.
@@ -46,31 +37,11 @@ String(v[:])
 
 GCS is hosting a subset of the [CMIP6](https://pcmdi.llnl.gov/CMIP6/) climate model
 ensemble runs. The data is stored in zarr format and accessible using this package.
-We first have to create an anonymous config again to access the data:
-
-````julia
-using Zarr, AWSCore
-aws_google = AWSCore.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-cmip6_base = S3Store("cmip6","", aws = aws_google, listversion=1)
-keys(cmip6_base)
-````
-````
-8-element Array{String,1}:
- "cmip6-zarr-consolidated-stores-noQC.csv"
- "cmip6-zarr-consolidated-stores.csv"     
- "cmip6.csv"                              
- "pangeo-cmip3.csv"                       
- "pangeo-cmip3.json"                      
- "pangeo-cmip5.csv"                       
- "pangeo-cmip5.json"                      
- "pangeo-cmip6.json"                      
-````
-
-Looks like there is some configuration stored in these csv files. So let's read it into a DatFrame:
+There is a catalog that contains a table of all model runs available:
 
 ````julia
 using DataFrames, CSV
-overview = CSV.read(IOBuffer(cmip6_base["cmip6-zarr-consolidated-stores.csv"]))
+overview = CSV.read(download("https://storage.googleapis.com/cmip6/cmip6-zarr-consolidated-stores.csv"),DataFrame)
 ````
 ````
 138786×10 DataFrame. Omitted printing of 6 columns
@@ -105,15 +76,14 @@ end
 store.zstore[1]
 ````
 ````
-"gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/"
+"gs://cmip6/CMIP6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/3hr/tas/gn/v20190710/"
 ````
 
 So we can access the dataset and read some data from it. Note that we use `consolidated=true` reduce
 the overhead of repeatedly requesting many metadata files:
 
 ````julia
-s = S3Store("cmip6","ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/Amon/tas/gn/", aws=aws_google, listversion=1)
-g = zopen(s, consolidated=true)
+g = zopen(store.zstore[1], consolidated=true)
 ````
 
 You can access the meta-information through `g.attrs` or for example read the first
