@@ -3,6 +3,7 @@ struct ZGroup{S<:AbstractStore}
     arrays::Dict{String, ZArray}
     groups::Dict{String, ZGroup}
     attrs::Dict
+    writeable::Bool
 end
 
 zname(g::ZGroup) = zname(g.storage)
@@ -22,7 +23,7 @@ function ZGroup(s::T,mode="r") where T <: AbstractStore
     end
   end
   attrs = getattrs(s)
-  ZGroup(s, arrays, groups, attrs)
+  ZGroup(s, arrays, groups, attrs,mode=="w")
 end
 
 
@@ -97,16 +98,20 @@ function zgroup(s::AbstractStore; attrs=Dict())
     JSON.print(b,d)
     s[".zgroup"]=take!(b)
     writeattrs(s,attrs)
-    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
+    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
-zgroup(s::String;kwargs...)=zgroup(DirectoryStore(s);kwargs...)
+zgroup(s::String;kwargs...)=zgroup(storefromstring(s);kwargs...)
 
 "Create a subgroup of the group g"
-zgroup(g::ZGroup, name; attrs=Dict()) = g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
+function zgroup(g::ZGroup, name; attrs=Dict()) 
+  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
+end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
+  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   newstore = newsub(g.storage,name)
   z = zcreate(T, newstore, addargs...; kwargs...)
   g.arrays[name] = z
@@ -114,4 +119,7 @@ function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where
 end
 
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, args...; kwargs...)
-consolidate_metadata(z::Union{ZArray,ZGroup}) = consolidate_metadata(z.storage)
+function consolidate_metadata(z::Union{ZArray,ZGroup}) 
+  z.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  consolidate_metadata(z.storage)
+end

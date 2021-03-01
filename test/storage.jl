@@ -72,7 +72,20 @@ end
   @test isempty(keys(ds.subdirs["bar"].subdirs))
 end
 
-
+@testset "Minio S3 storage" begin
+  A = fill(1.0, 30, 20)
+  chunks = (5,10)
+  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  using Minio
+  s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
+  run(s, wait=false)
+  cfg = MinioConfig("http://localhost:9001")
+  Zarr.AWS.global_aws_config(cfg)
+  Zarr.S3.create_bucket("zarrdata")
+  ds = S3Store("zarrdata","foo")
+  test_store_common(ds)
+  kill(s)
+end
 
 @testset "AWS S3 Storage" begin
     Zarr.AWS.global_aws_config(Zarr.AWS.AWSConfig(creds=nothing, region="eu-west-2"))

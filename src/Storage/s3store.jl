@@ -13,11 +13,9 @@ end
 function S3Store(bucket::String, store::String;
   listversion = 2,
   aws = nothing,
-  region = get(ENV, "AWS_DEFAULT_REGION", "us-east-1"),
-  creds = nothing,
   )
   if aws === nothing
-    aws = AWS.AWSConfig(creds=creds,region=region)
+    aws = AWS.global_aws_config()
   end
   store = rstrip(store,'/')
   S3Store(bucket, store, listversion, aws)
@@ -43,6 +41,13 @@ function Base.getindex(s::S3Store, i::String)
   end
 end
 getsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
+
+function Base.setindex!(s::S3Store, v, i::String)
+  return S3.put_object(s.bucket,string(s.store,"/",i),Dict("body"=>v),aws_config=s.aws)
+end
+newsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
+
+Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,string(s.store,"/",d), aws_config=s.aws)
 
 function storagesize(s::S3Store)
   r = cloud_list_objects(s)
