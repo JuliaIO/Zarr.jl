@@ -33,7 +33,6 @@ function Base.getindex(s::S3Store, i::String)
     return S3.get_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
   catch e
     if error_is_ignorable(e)
-      println(e)
       return nothing
     else
       throw(e)
