@@ -81,7 +81,6 @@ function isinitialized(s::S3Store, i::String)
     end
   end
 end
-Base.haskey(s::S3Store, i::String) = isinitialized(s,i)
 
 function cloud_list_objects(s::S3Store)
   prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
@@ -106,10 +105,10 @@ path(s::S3Store) = s.store
 
 # Some special AWS configs
 struct AnonymousGCS <:AbstractAWSConfig end
-struct NoCredentials end
-AWS.region(::AnonymousGCS) = "" # No region
-AWS.credentials(::AnonymousGCS) = NoCredentials() # No credentials
-AWS.check_credentials(c::NoCredentials) = c # Skip credentials check
+#struct NoCredentials end
+#AWS.region(::AnonymousGCS) = "" # No region
+AWS.credentials(::AnonymousGCS) = nothing # No credentials
+#AWS.check_credentials(c::NoCredentials) = c # Skip credentials check
 AWS.sign!(::AnonymousGCS, ::AWS.Request) = nothing # Don't sign request
 function AWS.generate_service_url(::AnonymousGCS, service::String, resource::String)
     service == "s3" || throw(ArgumentError("Can only handle s3 requests to GCS"))

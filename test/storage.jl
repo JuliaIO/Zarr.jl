@@ -14,6 +14,7 @@ Function to test the interface of AbstractStore. Every complete implementation s
 function test_store_common(ds)
   @test !Zarr.is_zgroup(ds)
   ds[".zgroup"]=rand(UInt8,50)
+  @test haskey(ds,".zgroup")
   @test Zarr.is_zgroup(ds)
   @test !Zarr.is_zarray(ds)
 
@@ -84,6 +85,7 @@ end
   Zarr.S3.create_bucket("zarrdata")
   ds = S3Store("zarrdata","foo")
   test_store_common(ds)
+  @test sprint(show, ds) == "S3 Object Storage"
   kill(s)
 end
 

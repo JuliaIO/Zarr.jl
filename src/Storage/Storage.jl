@@ -70,6 +70,7 @@ citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]
 Base.delete!(s::AbstractStore, i::CartesianIndex) = delete!(s, citostring(i))
+Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
 
 maybecopy(x) = copy(x)
 maybecopy(x::String) = x
