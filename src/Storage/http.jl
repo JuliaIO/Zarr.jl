@@ -27,9 +27,10 @@ end
 getsub(s::HTTPStore,n) = HTTPStore(string(s.url,"/",n))
 zname(s::HTTPStore) = split(s.url,"/")[end]
 
-
+push!(storageregexlist,r"^https://"=>HTTPStore)
+push!(storageregexlist,r"^http://"=>HTTPStore)
+storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s))
 ## This is a server implementation for Zarr datasets
-
 
 
 
@@ -39,17 +40,13 @@ function zarr_req_handler(s::AbstractStore)
   end
   request -> begin
     k = request.target
-    while startswith(k,"/")
-      k = k[2:end]
-    end
+    k = lstrip(k,'/')
     k_split = filter(!isequal(".."),split(k,"/"))
     storenew = if length(k_split)>1
       foldl((ss,kk)->getsub(ss,kk),k_split[1:end-1],init = s)
     else
       s
     end
-    # @show zname(storenew), k_split
-    # @show keys(storenew), k_split[end]
     r = storenew[k_split[end]]
 
     try

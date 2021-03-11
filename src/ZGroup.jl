@@ -3,6 +3,7 @@ struct ZGroup{S<:AbstractStore}
     arrays::Dict{String, ZArray}
     groups::Dict{String, ZGroup}
     attrs::Dict
+    writeable::Bool
 end
 
 zname(g::ZGroup) = zname(g.storage)
@@ -22,7 +23,7 @@ function ZGroup(s::T,mode="r") where T <: AbstractStore
     end
   end
   attrs = getattrs(s)
-  ZGroup(s, arrays, groups, attrs)
+  ZGroup(s, arrays, groups, attrs,mode=="w")
 end
 
 
@@ -55,8 +56,8 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 of large zarr groups.
 """
 function zopen(s::AbstractStore, mode="r"; consolidated = false)
-    # add interfaces to Stores later
-    consolidated && return zopen(ConsolidatedStore(s), mode)
+    # add interfaces to Stores later    
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
     if is_zarray(s)
         return ZArray(s,mode)
     elseif is_zgroup(s)
@@ -76,19 +77,13 @@ function zopen(s::String, mode="r"; kwargs...)
   zopen(storefromstring(s), mode; kwargs...)
 end
 
-import AWSCore
 function storefromstring(s)
-  if startswith(s,"gs://")
-    aws_google = AWSCore.aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-    decomp = split(s,"/")
-    bucket = decomp[3]
-    path = join(decomp[4:end],"/")
-    S3Store(String(bucket),path, aws=aws_google, listversion=1)
-  elseif startswith(s,"http://")
-    return ConsolidatedStore(HTTPStore(s))
-  else
-    return DirectoryStore(s)
+  for (r,t) in storageregexlist
+    if match(r,s) !== nothing
+      return storefromstring(t,s)
+    end
   end
+  DirectoryStore(s)
 end
 
 """
@@ -103,16 +98,20 @@ function zgroup(s::AbstractStore; attrs=Dict())
     JSON.print(b,d)
     s[".zgroup"]=take!(b)
     writeattrs(s,attrs)
-    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs)
+    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
-zgroup(s::String;kwargs...)=zgroup(DirectoryStore(s);kwargs...)
+zgroup(s::String;kwargs...)=zgroup(storefromstring(s);kwargs...)
 
 "Create a subgroup of the group g"
-zgroup(g::ZGroup, name; attrs=Dict()) = g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
+function zgroup(g::ZGroup, name; attrs=Dict()) 
+  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
+end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
+  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   newstore = newsub(g.storage,name)
   z = zcreate(T, newstore, addargs...; kwargs...)
   g.arrays[name] = z
@@ -120,4 +119,7 @@ function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where
 end
 
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, args...; kwargs...)
-consolidate_metadata(z::Union{ZArray,ZGroup}) = consolidate_metadata(z.storage)
+function consolidate_metadata(z::Union{ZArray,ZGroup}) 
+  z.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  consolidate_metadata(z.storage)
+end

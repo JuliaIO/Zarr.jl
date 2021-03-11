@@ -196,10 +196,11 @@ Chunk Shape         : (1000, 1000)
 Order               : C
 Read-Only           : false
 Compressor          : Zarr.BloscCompressor(0, 3, "zstd", true)
+Filters             : nothing
 Store type          : Dictionary Storage
 No. bytes           : 400000000
-No. bytes stored    : 2406369
-Storage ratio       : 166.2255456249644
+No. bytes stored    : 2412230
+Storage ratio       : 165.82166708813008
 Chunks initialized  : 100/100
 ```
 

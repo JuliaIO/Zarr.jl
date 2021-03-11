@@ -14,6 +14,7 @@ Function to test the interface of AbstractStore. Every complete implementation s
 function test_store_common(ds)
   @test !Zarr.is_zgroup(ds)
   ds[".zgroup"]=rand(UInt8,50)
+  @test haskey(ds,".zgroup")
   @test Zarr.is_zgroup(ds)
   @test !Zarr.is_zarray(ds)
 
@@ -72,13 +73,25 @@ end
   @test isempty(keys(ds.subdirs["bar"].subdirs))
 end
 
-import AWSCore: aws_config
+@testset "Minio S3 storage" begin
+  A = fill(1.0, 30, 20)
+  chunks = (5,10)
+  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  using Minio
+  s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
+  run(s, wait=false)
+  cfg = MinioConfig("http://localhost:9001")
+  Zarr.AWS.global_aws_config(cfg)
+  Zarr.S3.create_bucket("zarrdata")
+  ds = S3Store("zarrdata","foo")
+  test_store_common(ds)
+  @test sprint(show, ds) == "S3 Object Storage"
+  kill(s)
+end
 
 @testset "AWS S3 Storage" begin
-    bucket = "zarr-demo"
-    store = "store/foo"
-    region = "eu-west-2"
-    S3 = S3Store(bucket, store, aws = aws_config(creds=nothing, region = region))
+    Zarr.AWS.global_aws_config(Zarr.AWS.AWSConfig(creds=nothing, region="eu-west-2"))
+    S3 = Zarr.storefromstring("s3://zarr-demo/store/foo")
     @test storagesize(S3) == 0
     @test Zarr.zname(S3) == "foo"
     @test Zarr.is_zgroup(S3) == true
@@ -92,23 +105,17 @@ import AWSCore: aws_config
 end
 
 @testset "GCS S3 Storage" begin
-  bucket = "cmip6"
-  store = "ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn"
-  region = ""
-  aws_google = aws_config(creds=nothing, region="", service_host="googleapis.com", service_name="storage")
-  cmip6 = S3Store(bucket,store,aws = aws_google, listversion=1)
-  @test storagesize(cmip6) == 7557
-  @test Zarr.zname(cmip6) == "gn"
+  cmip6 = Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706/")
+  @test storagesize(cmip6) == 16098
+  @test Zarr.zname(cmip6) == "v20170706"
   g = zopen(cmip6)
-  arr = g["tasmax"]
-  @test size(arr) == (384,192,1032)
+  arr = g["psl"]
+  @test size(arr) == (288, 192, 97820)
   @test eltype(arr) == Union{Missing, Float32}
-  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
-  g2 = zopen("gs://cmip6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r4i1p1f1/Amon/tasmax/gn")
-  arr = g["tasmax"]
-  @test size(arr) == (384,192,1032)
-  @test eltype(arr) == Union{Missing, Float32}
-  @test all(isapprox.(arr[1:2,1:2,2], [237.519 239.618; 237.536 239.667]))
+  lat = g["lat"]
+  @test size(lat) == (192,)
+  @test eltype(lat) == Union{Missing, Float64}
+  @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
 end
 
 @testset "HTTP Storage" begin

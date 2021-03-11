@@ -91,9 +91,6 @@ function zinfo(io::IO,z::ZArray)
   end
 end
 
-# Construction of a ZArray given a folder on a regular drive
-# A lot of the JSON parsing should be moved to a function, since
-# this will be the same for other backends
 function ZArray(s::T, mode="r") where T <: AbstractStore
   metadata = getmetadata(s)
   attrs    = getattrs(s)
@@ -103,19 +100,6 @@ function ZArray(s::T, mode="r") where T <: AbstractStore
     metadata, s, attrs, writeable)
 end
 
-"""
-    convert_index(i,s)
-
-Basic function to translate indices given by the user
-to unit ranges.
-"""
-convert_index(i::Integer, s::Int) = i:i
-convert_index(i::AbstractUnitRange, s::Int) = i
-convert_index(::Colon, s::Int) = Base.OneTo(s)
-
-# Helper function for reshaping the result in the end
-convert_index2(::Colon, s) = Base.OneTo(s)
-convert_index2(i, s) = i
 
 """
     trans_ind(r, bs)
@@ -182,7 +166,7 @@ end
 
 DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
 DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = readblock!(v,a,CartesianIndices(i),readmode=false)
-DiskArrays.haschunks(a::ZArray) = DiskArrays.Chunked()
+DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
 """

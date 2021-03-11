@@ -70,6 +70,7 @@ citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
 
 Base.getindex(s::AbstractStore, i::CartesianIndex) = s[citostring(i)]
 Base.delete!(s::AbstractStore, i::CartesianIndex) = delete!(s, citostring(i))
+Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
 
 maybecopy(x) = copy(x)
 maybecopy(x::String) = x
@@ -107,6 +108,10 @@ end
 Base.setindex!(s::AbstractStore,v,i::CartesianIndex) = s[citostring(i)]=v
 
 Base.isempty(s::AbstractStore) = isempty(keys(s)) && isempty(subdirs(s))
+
+#Here different storage backends can register regexes that are checked against
+#during auto-check of storage format when doing zopen
+storageregexlist = Pair[]
 
 include("directorystore.jl")
 include("dictstore.jl")
