@@ -88,6 +88,8 @@ end
         @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
         @test Zarr.typestr(Vector{Int64}) === "|O"
+        @test Zarr.typestr(Date) === "<M8[D]"
+        @test Zarr.typestr(DateTime) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin
