@@ -38,8 +38,8 @@ for p in strpairs
     jlperiod[p[2]] = p[1]
     pdt64string[p[1]] = p[2]
 end
-DateTime64(t::Date) = DateTime64{Dates.Day}(Dates.value(Dates.Day(t-Date(1970))))
-DateTime64(t::DateTime) = DateTime64{Dates.Millisecond}(Dates.value(Dates.Millisecond(t-DateTime(1970))))
+DateTime64(t::Date) = DateTime64{Dates.Day}(ntoh(Dates.value(Dates.Day(t-Date(1970)))))
+DateTime64(t::DateTime) = DateTime64{Dates.Millisecond}(Dates.value(Dates.Millisecond(t-DateTime(1970)) ))
 Base.convert(::Type{DateTime64{P}}, t::Date) where P = DateTime64{P}(Dates.value(P(t-Date(1970))))
 Base.convert(::Type{DateTime64{P}}, t::DateTime) where P = DateTime64{P}(Dates.value(P(t-DateTime(1970))))
 Base.convert(::Type{DateTime64{P}}, t::DateTime64{Q}) where {P,Q} = DateTime64{P}(Dates.value(P(Q(t.i))))

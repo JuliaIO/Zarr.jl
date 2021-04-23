@@ -3,6 +3,7 @@ using Zarr
 using JSON
 using Pkg
 using PyCall
+using Dates
 
 @testset "Zarr" begin
 
@@ -88,8 +89,8 @@ end
         @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
         @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(Date) === "<M8[D]"
-        @test Zarr.typestr(DateTime) === "<M8[ns]"
+        @test Zarr.typestr(Zarr.DateTime64{Day}) === "<M8[D]"
+        @test Zarr.typestr(Zarr.DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin
