@@ -5,6 +5,12 @@ using Pkg
 using PyCall
 using Dates
 
+macro test_py(ex)
+    quote
+        @test convert(Bool, $(esc(ex)))
+    end
+end
+
 @testset "Zarr" begin
 
 
@@ -210,6 +216,8 @@ end
 
 
 include("storage.jl")
+
+
 
 include("python.jl")
 

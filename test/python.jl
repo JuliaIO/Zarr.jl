@@ -146,21 +146,17 @@ for pt in [Week, Day, Hour, Minute, Second,
     end
 end
 
-@pyimport zarr
-@pyimport numpy as np
-macro test_py(ex)
-    quote
-        @test convert(Bool, $(esc(ex)))
-    end
-end
+zarr = pyimport("zarr")
+np = pyimport("numpy")
+
 g_julia = zopen(p)
 g_python = zarr.open(p)
 
 for unit in ["Week", "Day", "Hour", "Minute", "Second", 
         "Millisecond"]
-    @test_py np.datetime64(g_julia[unit][1] |> DateTime |> string) == g_python[unit][1]
-    @test_py np.datetime64(g_julia[unit][10] |> DateTime |> string) ==  g_python[unit][10]
-    @test_py np.datetime64(g_julia[unit][100] |> DateTime |> string) == g_python[unit][100]
+    @test_py np.datetime64(g_julia[unit][1] |> DateTime |> string) == get(getproperty(g_python,unit),0)
+    @test_py np.datetime64(g_julia[unit][10] |> DateTime |> string) ==  get(getproperty(g_python,unit),9)
+    @test_py np.datetime64(g_julia[unit][100] |> DateTime |> string) == get(getproperty(g_python,unit),99)
 end
 
 
