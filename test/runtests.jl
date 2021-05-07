@@ -214,24 +214,6 @@ end
   @test z[:,:] == z2[:,:]
 end
 
-@testset "Datetime64 functionality" begin
-    using Zarr: DateTime64
-    using Dates
-
-    d1 = DateTime64{Day}(5)
-
-    d2 = DateTime64{Millisecond}(1000)
-
-    @test Date(d1) === Date(1970,1,6)
-    @test DateTime(d1) === DateTime(1970,1,6)
-    @test [d1, Date(2001)] isa Vector{Date}
-    @test [d2, DateTime(2001)] isa Vector{DateTime}
-    @test [d1, d2, Date(2001)] isa Vector{DateTime}
-    @test [d2, Date(2001)] isa Vector{DateTime}
-    @test [d2, DateTime(2001)] isa Vector{DateTime}
-
-end
-
 include("storage.jl")
 
 

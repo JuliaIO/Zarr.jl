@@ -42,10 +42,10 @@ Base.convert(::Type{DateTime64{P}}, t::Date) where P = DateTime64{P}(Dates.value
 Base.convert(::Type{DateTime64{P}}, t::DateTime) where P = DateTime64{P}(Dates.value(P(t-DateTime(1970))))
 Base.convert(::Type{DateTime64{P}}, t::DateTime64{Q}) where {P,Q} = DateTime64{P}(Dates.value(P(Q(t.i))))
 Base.zero(t::Union{DateTime64, Type{<:DateTime64}}) = t(0)
-Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{Date}) = Date 
-Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{DateTime}) = DateTime
-Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{Date}) = DateTime 
-Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{DateTime}) = DateTime
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{Date}) = Date 
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{DateTime}) = DateTime
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{Date}) = DateTime 
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{DateTime}) = DateTime
 
 
 
