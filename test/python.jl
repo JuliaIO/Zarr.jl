@@ -127,8 +127,8 @@ ad = ZArray(vd)
 at = ZArray(vt)
 @test eltype(ad)==Zarr.DateTime64{Day} 
 @test eltype(at)==Zarr.DateTime64{Millisecond}
-@test at[:] == vt[:]
-@test ad[:] == vd[:]
+@test DateTime.(at[:]) == vt[:]
+@test Date.(ad[:]) == vd[:]
 
 p = tempname()
 g = zgroup(p)
