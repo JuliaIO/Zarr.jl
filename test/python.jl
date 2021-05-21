@@ -118,3 +118,47 @@ a1 = g["a1"]
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
 end
+
+@testset "Python datetime types" begin
+using Dates, Test, Zarr
+vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
+vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
+ad = ZArray(vd)
+at = ZArray(vt)
+@test eltype(ad)==Zarr.DateTime64{Day} 
+@test eltype(at)==Zarr.DateTime64{Millisecond}
+@test DateTime.(at[:]) == vt[:]
+@test Date.(ad[:]) == vd[:]
+
+p = tempname()
+g = zgroup(p)
+for pt in [Week, Day, Hour, Minute, Second, 
+        Millisecond]
+    
+    if pt <: DatePeriod
+        vd = range(Date(1970,1,1),step = pt(1), length=100)
+        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a[:] = vd
+    else
+        vd = range(DateTime(1970,1,1),step = pt(1), length=100)
+        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a[:] = vd
+    end
+end
+
+zarr = pyimport("zarr")
+np = pyimport("numpy")
+
+g_julia = zopen(p)
+g_python = zarr.open(p)
+
+for unit in ["Week", "Day", "Hour", "Minute", "Second", 
+        "Millisecond"]
+    @test_py np.datetime64(g_julia[unit][1] |> DateTime |> string) == get(getproperty(g_python,unit),0)
+    @test_py np.datetime64(g_julia[unit][10] |> DateTime |> string) ==  get(getproperty(g_python,unit),9)
+    @test_py np.datetime64(g_julia[unit][100] |> DateTime |> string) == get(getproperty(g_python,unit),99)
+end
+
+
+
+end

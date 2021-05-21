@@ -1,3 +1,5 @@
+import Dates: Date, DateTime
+
 """NumPy array protocol type string (typestr) format
 
 A string providing the basic type of the homogenous array. The basic string format
@@ -20,6 +22,33 @@ Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
 Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
 
+using Dates: Period, TimeType, Date, DateTime, Dates
+struct DateTime64{P} <: TimeType
+    i::Int64
+end
+Base.convert(::Type{Date},t::DateTime64{P}) where P = Date(1970)+P(t.i)
+Base.convert(::Type{DateTime},t::DateTime64{P}) where P = DateTime(1970)+P(t.i)
+Base.show(io::IO,t::DateTime64{P}) where P = print(io,"DateTime64[",P,"]: ",string(DateTime(t)))
+strpairs = [Dates.Year => "Y", Dates.Month => "M", Dates.Week => "W", Dates.Day=>"D", 
+    Dates.Hour => "h", Dates.Minute => "m", Dates.Second=>"s", Dates.Millisecond =>"ms",
+    Dates.Microsecond => "us", Dates.Nanosecond => "ns"]
+const jlperiod = Dict{String,Any}()
+const pdt64string = Dict{Any, String}()
+for p in strpairs
+    jlperiod[p[2]] = p[1]
+    pdt64string[p[1]] = p[2]
+end
+Base.convert(::Type{DateTime64{P}}, t::Date) where P = DateTime64{P}(Dates.value(P(t-Date(1970))))
+Base.convert(::Type{DateTime64{P}}, t::DateTime) where P = DateTime64{P}(Dates.value(P(t-DateTime(1970))))
+Base.convert(::Type{DateTime64{P}}, t::DateTime64{Q}) where {P,Q} = DateTime64{P}(Dates.value(P(Q(t.i))))
+Base.zero(t::Union{DateTime64, Type{<:DateTime64}}) = t(0)
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{Date}) = Date 
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{DateTime}) = DateTime
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{Date}) = DateTime 
+# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{DateTime}) = DateTime
+
+
+
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
 typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
@@ -30,8 +59,9 @@ typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
 typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
 typestr(::Type{<:Array}) = "|O"
+typestr(::Type{<:DateTime64{P}}) where P = "<M8[$(pdt64string[P])]"
 
-const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)$"
+const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
     ('S', 1) => ASCIIChar,
@@ -54,7 +84,8 @@ function typestr(s::AbstractString, filterlist=nothing)
     if m === nothing
         throw(ArgumentError("$s is not a valid numpy typestr"))
     else
-        byteorder, typecode, typesize = m.captures
+
+        byteorder, typecode, typesize, typespec = m.captures
         if byteorder == ">"
             throw(ArgumentError("Big-endian data not yet supported"))
         end
@@ -68,6 +99,10 @@ function typestr(s::AbstractString, filterlist=nothing)
         tc, ts = first(typecode), parse(Int, typesize)
         if (tc in ('U','S')) && ts > 1
           return MaxLengthString{ts,tc=='U' ? UInt32 : UInt8}
+        end
+        if tc == 'M' && ts == 8
+            #We have a datetime64 value
+            return DateTime64{jlperiod[String(typespec)[2:end-1]]}
         end
         # convert typecode to Char and typesize to Int
         typemap[(tc,ts)]

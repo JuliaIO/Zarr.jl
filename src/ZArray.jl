@@ -290,6 +290,8 @@ function to_zarrtype(a::AbstractArray{<:Union{AbstractString,Missing}})
   newt = MaxLengthString{maxlen,et}
   return eltype(a)>:Missing ? Union{newt,Missing} : newt
 end
+to_zarrtype(a::AbstractArray{<:Date}) = DateTime64{Dates.Day}
+to_zarrtype(a::AbstractArray{<:DateTime}) = DateTime64{Dates.Millisecond}
 
 function ZArray(a::AbstractArray, args...; kwargs...)
   z = zcreate(to_zarrtype(a), args..., size(a)...; kwargs...)
