@@ -29,7 +29,7 @@ zname(s::HTTPStore) = split(s.url,"/")[end]
 
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
-storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s))
+storefromstring(::Type{<:HTTPStore}, s, _) = ConsolidatedStore(HTTPStore(s))
 ## This is a server implementation for Zarr datasets
 
 
