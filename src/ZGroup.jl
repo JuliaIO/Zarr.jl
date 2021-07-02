@@ -15,10 +15,10 @@ function ZGroup(s::T,mode="r") where T <: AbstractStore
 
   for d in subdirs(s)
     dshort = splitpath(d)[end]
-    m = zopen(getsub(s,dshort),mode)
+    m = zopen_noerr(getsub(s,dshort),mode)
     if isa(m, ZArray)
       arrays[dshort] = m
-    else
+    elseif isa(m, ZGroup)
       groups[dshort] = m
     end
   end
@@ -26,7 +26,23 @@ function ZGroup(s::T,mode="r") where T <: AbstractStore
   ZGroup(s, arrays, groups, attrs,mode=="w")
 end
 
+"""
+    zopen_noerr(AbstractStore, mode = "r"; consolidated = false)
 
+Works like `zopen` with the single difference that no error is thrown when 
+the path or store does not point to a valid zarr array or group, but nothing 
+is returned instead. 
+"""
+function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false)
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
+    if is_zarray(s)
+        return ZArray(s,mode)
+    elseif is_zgroup(s)
+        return ZGroup(s,mode)
+    else
+        return nothing
+    end
+end
 
 function Base.show(io::IO, g::ZGroup)
     print(io, "ZarrGroup at ", g.storage)
@@ -57,14 +73,12 @@ of large zarr groups.
 """
 function zopen(s::AbstractStore, mode="r"; consolidated = false)
     # add interfaces to Stores later    
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
-    if is_zarray(s)
-        return ZArray(s,mode)
-    elseif is_zgroup(s)
-        return ZGroup(s,mode)
-    else
+    r = zopen_noerr(s,mode, consolidated=consolidated)
+    if r === nothing
         x = path(s)
         throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))
+    else
+        return r
     end
 end
 
