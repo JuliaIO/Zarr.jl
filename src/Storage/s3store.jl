@@ -118,14 +118,14 @@ end
 push!(storageregexlist,r"^gs://"=>AnonymousGCS)
 push!(storageregexlist,r"^s3://"=>S3Store)
 
-function storefromstring(::Type{<:S3Store}, s)
+function storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
   S3Store(String(bucket),path, aws=AWS.global_aws_config())
 end
 
-function storefromstring(::Type{<:AnonymousGCS}, s)
+function storefromstring(::Type{<:AnonymousGCS}, s, _)
     decomp = split(s,"/",keepempty=false)
     bucket = decomp[2]
     path = join(decomp[3:end],"/")
