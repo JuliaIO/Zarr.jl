@@ -24,31 +24,23 @@ else
     r.body
 end
 end
-getsub(s::HTTPStore,n) = HTTPStore(string(s.url,"/",n))
-zname(s::HTTPStore) = split(s.url,"/")[end]
 
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
-storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s))
+storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s)),""
 ## This is a server implementation for Zarr datasets
 
 
 
-function zarr_req_handler(s::AbstractStore)
-  if s[".zmetadata"] === nothing
+function zarr_req_handler(s::AbstractStore, p)
+  if s[p,".zmetadata"] === nothing
     consolidate_metadata(s)
   end
   request -> begin
     k = request.target
     k = lstrip(k,'/')
-    k_split = filter(!isequal(".."),split(k,"/"))
-    storenew = if length(k_split)>1
-      foldl((ss,kk)->getsub(ss,kk),k_split[1:end-1],init = s)
-    else
-      s
-    end
-    r = storenew[k_split[end]]
-
+    contains("..",k) && return nothing
+    r = s[p,k]
     try
       if r ===  nothing
         return HTTP.Response(404, "Error: Key $k not found")

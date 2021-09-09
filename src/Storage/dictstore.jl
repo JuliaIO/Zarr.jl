@@ -1,29 +1,48 @@
 # Stores data in a simple dict in memory
 struct DictStore <: AbstractStore
-  name::String
   a::Dict{String,Vector{UInt8}}
-  subdirs::Dict{String,DictStore}
 end
-function DictStore(name)
-  isempty(name) && (name="data")
-  a = Dict{String,Vector{UInt8}}()
-  subdirs = Dict{String,DictStore}()
-  DictStore(name, a, subdirs)
-end
-DictStore() = DictStore("")
+DictStore() = DictStore(Dict{String,Vector{UInt8}}())
+
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
+_pdict(d,p) = filter(((k,v),)->startswith(k,p),d.a)
+function storagesize(d::DictStore,p) 
+  sum(i->i[1] ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])), _pdict(d,p))
+end
 
-storagesize(d::DictStore) = sum(i->i[1] ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])),d.a)
-zname(s::DictStore) = s.name
+function Base.getindex(d::DictStore,i::AbstractString) 
+  get(d.a,i,nothing)
+end
+function Base.setindex!(d::DictStore,v,i::AbstractString) 
+  d.a[i] = v
+end
+Base.delete!(d::DictStore, i::AbstractString) = delete!(d.a,i)
 
-Base.getindex(d::DictStore,i::AbstractString) = get(d.a,i,nothing)
-Base.setindex!(d::DictStore,v,i::AbstractString) = d.a[i] = v
+function subdirs(d::DictStore,p) 
+  d2 = _pdict(d,p)
+  o = Set{String}()
+  lp = length(split(rstrip(p,'/'),'/'))
+  for (k,_) in d2
+    sp = split(k,'/')
+    if length(sp) > lp+1
+      push!(o,sp[lp+1])
+    end
+  end
+  collect(o)
+end
 
-Base.delete!(d::DictStore,i::AbstractString) = delete!(d.a,i)
+function subkeys(d::DictStore,p) 
+  d2 = _pdict(d,p)
+  o = Set{String}()
+  lp = length(split(rstrip(p,'/'),'/'))
+  for (k,_) in d2
+    sp = split(k,'/')
+    if length(sp) == lp+1
+      push!(o,sp[lp+1])
+    end
+  end
+  collect(o)
+end
+#getsub(d::DictStore, p, n) = _substore(d,p).subdirs[n]
 
-subdirs(d::DictStore) = keys(d.subdirs)
-Base.keys(d::DictStore) = keys(d.a)
-newsub(d::DictStore, n) = d.subdirs[n] = DictStore(n)
-getsub(d::DictStore, n) = d.subdirs[n]
-
-path(d::DictStore) = ""
+#path(d::DictStore) = ""

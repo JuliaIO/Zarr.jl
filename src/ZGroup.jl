@@ -1,21 +1,22 @@
 struct ZGroup{S<:AbstractStore}
     storage::S
+    path::String
     arrays::Dict{String, ZArray}
     groups::Dict{String, ZGroup}
     attrs::Dict
     writeable::Bool
 end
 
-zname(g::ZGroup) = zname(g.storage)
+zname(g::ZGroup) = zname(g.path)
 
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r") where T <: AbstractStore
+function ZGroup(s::T,mode="r",path="") where T <: AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
 
-  for d in subdirs(s)
+  for d in subdirs(s,path)
     dshort = splitpath(d)[end]
-    m = zopen_noerr(getsub(s,dshort),mode)
+    m = zopen_noerr(s,mode,path=joinpath(path,dshort))
     if isa(m, ZArray)
       arrays[dshort] = m
     elseif isa(m, ZGroup)
@@ -23,7 +24,8 @@ function ZGroup(s::T,mode="r") where T <: AbstractStore
     end
   end
   attrs = getattrs(s)
-  ZGroup(s, arrays, groups, attrs,mode=="w")
+  startswith(path,"/") && error("Paths should never start with a leading '/'")
+  ZGroup(s, path, arrays, groups, attrs,mode=="w")
 end
 
 """
@@ -33,12 +35,12 @@ Works like `zopen` with the single difference that no error is thrown when
 the path or store does not point to a valid zarr array or group, but nothing 
 is returned instead. 
 """
-function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false)
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode)
-    if is_zarray(s)
-        return ZArray(s,mode)
-    elseif is_zgroup(s)
-        return ZGroup(s,mode)
+function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="")
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode, path=path)
+    if is_zarray(s, path)
+        return ZArray(s,mode,path)
+    elseif is_zgroup(s,path)
+        return ZGroup(s,mode,path)
     else
         return nothing
     end
@@ -64,16 +66,16 @@ function Base.getindex(g::ZGroup, k)
 end
 
 """
-    zopen(s::AbstractStore, mode="r"; consolidated = false)
+    zopen(s::AbstractStore, mode="r"; consolidated = false, path = "")
 
 Opens a zarr Array or Group at Store `s`. If `consolidated` is set to "true",
 Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups.
 """
-function zopen(s::AbstractStore, mode="r"; consolidated = false)
+function zopen(s::AbstractStore, mode="r"; consolidated = false, path = "")
     # add interfaces to Stores later    
-    r = zopen_noerr(s,mode, consolidated=consolidated)
+    r = zopen_noerr(s,mode, consolidated=consolidated, path=path)
     if r === nothing
         x = path(s)
         throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))
@@ -88,7 +90,8 @@ end
 Open a zarr Array or group at disc path p.
 """
 function zopen(s::String, mode="r"; kwargs...)
-  zopen(storefromstring(s), mode; kwargs...)
+  store, path = storefromstring(s)
+  zopen(store, mode; path=path, kwargs...)
 end
 
 function storefromstring(s)
@@ -97,7 +100,7 @@ function storefromstring(s)
       return storefromstring(t,s)
     end
   end
-  DirectoryStore(s)
+  DirectoryStore(s),""
 end
 
 """
@@ -105,17 +108,17 @@ end
 
 Create a new zgroup in the store `s`
 """
-function zgroup(s::AbstractStore; attrs=Dict())
+function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
     d = Dict("zarr_format"=>2)
     isempty(s) || error("Store is not empty")
     b = IOBuffer()
     JSON.print(b,d)
     s[".zgroup"]=take!(b)
     writeattrs(s,attrs)
-    ZGroup(s, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
+    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
-zgroup(s::String;kwargs...)=zgroup(storefromstring(s);kwargs...)
+zgroup(s::String;kwargs...)=zgroup(storefromstring(s)...;kwargs...)
 
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 

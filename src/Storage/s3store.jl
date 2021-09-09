@@ -39,17 +39,15 @@ function Base.getindex(s::S3Store, i::String)
     end
   end
 end
-getsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
 
 function Base.setindex!(s::S3Store, v, i::String)
   return S3.put_object(s.bucket,string(s.store,"/",i),Dict("body"=>v),aws_config=s.aws)
 end
-newsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
 
 Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,string(s.store,"/",d), aws_config=s.aws)
 
-function storagesize(s::S3Store)
-  r = cloud_list_objects(s)
+function storagesize(s::S3Store,p)
+  r = cloud_list_objects(s,p)
   haskey(r,"Contents") || return 0
   contents = r["Contents"]
   datafiles = filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)
@@ -60,12 +58,6 @@ function storagesize(s::S3Store)
       parse(Int, f["Size"])
     end
   end
-end
-
-function zname(s::S3Store)
-  d = split(s.store,"/")
-  i = findlast(!isempty,d)
-  d[i]
 end
 
 function isinitialized(s::S3Store, i::String)
@@ -82,26 +74,20 @@ function isinitialized(s::S3Store, i::String)
   end
 end
 
-function cloud_list_objects(s::S3Store)
-  prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
+function cloud_list_objects(s::S3Store,p)
+  p2 = string(s.store,"/",p)
+  prefix = (isempty(p2) || endswith(p2,"/")) ? p2 : string(p2,"/")
   listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
   listfun(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
-function subdirs(s::S3Store)
-  s3_resp = cloud_list_objects(s)
-  !haskey(s3_resp,"CommonPrefixes") && return String[]
-  allstrings(s3_resp["CommonPrefixes"],"Prefix")
-end
-function Base.keys(s::S3Store)
-  s3_resp = cloud_list_objects(s)
+function Base.keys(s::S3Store,p)
+  s3_resp = cloud_list_objects(s,p)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
   map(i->splitdir(i)[2],r)
 end
 allstrings(v::AbstractArray,prefixkey) = map(i -> String(i[prefixkey]), v)
 allstrings(v,prefixkey) = [String(v[prefixkey])]
-
-path(s::S3Store) = s.store
 
 # Some special AWS configs
 struct AnonymousGCS <:AbstractAWSConfig end
@@ -122,12 +108,12 @@ function storefromstring(::Type{<:S3Store}, s)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
-  S3Store(String(bucket),path, aws=AWS.global_aws_config())
+  S3Store(String(bucket),aws=AWS.global_aws_config()),path
 end
 
 function storefromstring(::Type{<:AnonymousGCS}, s)
     decomp = split(s,"/",keepempty=false)
     bucket = decomp[2]
     path = join(decomp[3:end],"/")
-    S3Store(String(bucket),path, aws=AnonymousGCS(), listversion=1)
+    S3Store(String(bucket), aws=AnonymousGCS(), listversion=1), path
 end

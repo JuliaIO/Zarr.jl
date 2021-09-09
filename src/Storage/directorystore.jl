@@ -32,22 +32,12 @@ function Base.setindex!(d::DirectoryStore,v,i::String)
   v
 end
 
-getsub(s::DirectoryStore, d::String) = DirectoryStore(joinpath(s.folder,d))
 
-function newsub(s::DirectoryStore, d::String)
-  p = mkpath(joinpath(s.folder,d))
-  DirectoryStore(p)
-end
-
-storagesize(d::DirectoryStore) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
+storagesize(d::DirectoryStore,p) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
   filesize(joinpath(d.folder,f))
 end
 
-zname(s::DirectoryStore) = splitdir(s.folder)[2]
-
-subdirs(s::DirectoryStore) = filter(i -> isdir(joinpath(s.folder, i)), readdir(s.folder))
-Base.keys(s::DirectoryStore) = filter(i -> isfile(joinpath(s.folder, i)), readdir(s.folder))
+subdirs(s::DirectoryStore,p) = filter(i -> isdir(joinpath(s.folder,p, i)), readdir(joinpath(s.folder,p)))
+subkeys(s::DirectoryStore,p) = filter(i -> isfile(joinpath(s.folder,p, i)), readdir(joinpath(s.folder,p)))
 Base.delete!(s::DirectoryStore, k::String) = isfile(joinpath(s.folder, k)) && rm(joinpath(s.folder, k))
 
-
-path(s::DirectoryStore) = s.folder
