@@ -15,8 +15,8 @@ function ZGroup(s::T,mode="r",path="") where T <: AbstractStore
   groups = Dict{String, ZGroup}()
 
   for d in subdirs(s,path)
-    dshort = splitpath(d)[end]
-    m = zopen_noerr(s,mode,path=joinpath(path,dshort))
+    dshort = split(d,'/')[end]
+    m = zopen_noerr(s,mode,path=_concatpath(path,dshort))
     if isa(m, ZArray)
       arrays[dshort] = m
     elseif isa(m, ZGroup)
