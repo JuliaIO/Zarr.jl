@@ -93,13 +93,17 @@ function zopen(s::String, mode="r"; kwargs...)
   zopen(store, mode; path=path, kwargs...)
 end
 
-function storefromstring(s)
+function storefromstring(s, create=true)
   for (r,t) in storageregexlist
     if match(r,s) !== nothing
-      return storefromstring(t,s)
+      return storefromstring(t,s,create)
     end
   end
-  DirectoryStore(s),""
+  if create || isdir(s)
+    return DirectoryStore(s), ""
+  else
+    throw(ArgumentError("Path $s is not a directory."))
+  end
 end
 
 """
@@ -117,7 +121,7 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
-zgroup(s::String;kwargs...)=zgroup(storefromstring(s)...;kwargs...)
+zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
