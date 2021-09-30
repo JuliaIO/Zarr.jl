@@ -57,7 +57,6 @@ end
   @test isdir(joinpath(p,"foo","bar"))
   @test isfile(joinpath(p,"foo","bar","0.0.0"))
   @test isfile(joinpath(p,"foo","bar",".zarray"))
-  @test Zarr.path(ds)==replace(joinpath(p,"foo"),"\\"=>"/")
   #Test that error is thrown when path does not exist and no folder is created
   @test_throws ArgumentError zopen("thisfolderdoesnotexist")
   @test !isdir("thisfolderdoesnotexist")

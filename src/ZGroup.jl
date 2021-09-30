@@ -89,7 +89,7 @@ end
 Open a zarr Array or group at disc path p.
 """
 function zopen(s::String, mode="r"; kwargs...)
-  store, path = storefromstring(s)
+  store, path = storefromstring(s,false)
   zopen(store, mode; path=path, kwargs...)
 end
 

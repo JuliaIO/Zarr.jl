@@ -13,7 +13,6 @@ struct HTTPStore <: AbstractStore
 end
 
 function Base.getindex(s::HTTPStore, k::String)
-  @show string(s.url,"/",k)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false)
 if r.status >= 300
     if r.status == 404
