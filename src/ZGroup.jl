@@ -23,7 +23,7 @@ function ZGroup(s::T,mode="r",path="") where T <: AbstractStore
       groups[dshort] = m
     end
   end
-  attrs = getattrs(s)
+  attrs = getattrs(s,path)
   startswith(path,"/") && error("Paths should never start with a leading '/'")
   ZGroup(s, path, arrays, groups, attrs,mode=="w")
 end
@@ -36,7 +36,7 @@ the path or store does not point to a valid zarr array or group, but nothing
 is returned instead. 
 """
 function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="")
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s), mode, path=path)
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path)
     if is_zarray(s, path)
         return ZArray(s,mode,path)
     elseif is_zgroup(s,path)
@@ -77,8 +77,7 @@ function zopen(s::AbstractStore, mode="r"; consolidated = false, path = "")
     # add interfaces to Stores later    
     r = zopen_noerr(s,mode, consolidated=consolidated, path=path)
     if r === nothing
-        x = path(s)
-        throw(ArgumentError("Specified store ($x) is neither a ZArray nor a ZGroup"))
+        throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
     else
         return r
     end
@@ -110,11 +109,11 @@ Create a new zgroup in the store `s`
 """
 function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
     d = Dict("zarr_format"=>2)
-    isempty(s) || error("Store is not empty")
+    isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     JSON.print(b,d)
     s[".zgroup"]=take!(b)
-    writeattrs(s,attrs)
+    writeattrs(s,path,attrs)
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
@@ -123,20 +122,20 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s)...;kwargs...)
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  g.groups[name] = zgroup(newsub(g.storage,name),attrs=attrs)
+  g.groups[name] = zgroup(g.storage,attrs=attrs,path=_concatpath(g.path,name))
 end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  newstore = newsub(g.storage,name)
-  z = zcreate(T, newstore, addargs...; kwargs...)
+
+  z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
   g.arrays[name] = z
   return z
 end
 
-HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, args...; kwargs...)
+HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
 function consolidate_metadata(z::Union{ZArray,ZGroup}) 
-  z.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  consolidate_metadata(z.storage)
+  z.writeable || throw(Base.IOError("Zarr group is not writeable. Please re-open in write mode to create an array",0))
+  consolidate_metadata(z.storage,z.path)
 end

@@ -20,7 +20,6 @@ end
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.DictStore}
 
-        @test z.storage.name === "data"
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
         @test eltype(z.storage.a["0.0"]) === UInt8
@@ -48,7 +47,7 @@ end
         @test size(z, 2) === 3
         @test length(z) === 2 * 3
         @test lastindex(z, 2) === 3
-        @test Zarr.zname(z) === "data"
+        @test Zarr.zname(z) === "root"
     end
 
     @testset "NoCompressor DirectoryStore" begin

@@ -4,21 +4,19 @@ using AWS
 
 struct S3Store <: AbstractStore
     bucket::String
-    store::String
     listversion::Int
     aws::AWS.AbstractAWSConfig
 end
 
 
-function S3Store(bucket::String, store::String;
+function S3Store(bucket::String;
   listversion = 2,
   aws = nothing,
   )
   if aws === nothing
     aws = AWS.global_aws_config()
   end
-  store = rstrip(store,'/')
-  S3Store(bucket, store, listversion, aws)
+  S3Store(bucket, listversion, aws)
 end
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
@@ -30,7 +28,7 @@ end
 
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
+    return S3.get_object(s.bucket,i,aws_config=s.aws)
   catch e
     if error_is_ignorable(e)
       return nothing
@@ -41,10 +39,10 @@ function Base.getindex(s::S3Store, i::String)
 end
 
 function Base.setindex!(s::S3Store, v, i::String)
-  return S3.put_object(s.bucket,string(s.store,"/",i),Dict("body"=>v),aws_config=s.aws)
+  return S3.put_object(s.bucket,i,Dict("body"=>v),aws_config=s.aws)
 end
 
-Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,string(s.store,"/",d), aws_config=s.aws)
+Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,d, aws_config=s.aws)
 
 function storagesize(s::S3Store,p)
   r = cloud_list_objects(s,p)
@@ -62,32 +60,36 @@ end
 
 function isinitialized(s::S3Store, i::String)
   try
-    S3.head_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
+    S3.head_object(s.bucket,i,aws_config=s.aws)
     return true
   catch e
     if error_is_ignorable(e)
       return false
     else
-      println(string(s.store,"/",i))
+      println(i)
       throw(e)
     end
   end
 end
 
 function cloud_list_objects(s::S3Store,p)
-  p2 = string(s.store,"/",p)
-  prefix = (isempty(p2) || endswith(p2,"/")) ? p2 : string(p2,"/")
+  prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
   listfun(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
-function Base.keys(s::S3Store,p)
-  s3_resp = cloud_list_objects(s,p)
+function subdirs(s::S3Store, p)
+  s3_resp = cloud_list_objects(s, p)
+  !haskey(s3_resp,"CommonPrefixes") && return String[]
+  allstrings(s3_resp["CommonPrefixes"],"Prefix")
+end
+function subkeys(s::S3Store, p)
+  s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
   map(i->splitdir(i)[2],r)
 end
-allstrings(v::AbstractArray,prefixkey) = map(i -> String(i[prefixkey]), v)
-allstrings(v,prefixkey) = [String(v[prefixkey])]
+allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
+allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
 # Some special AWS configs
 struct AnonymousGCS <:AbstractAWSConfig end

@@ -99,8 +99,8 @@ function zinfo(io::IO,z::ZArray)
 end
 
 function ZArray(s::T, mode="r",path="") where T <: AbstractStore
-  metadata = getmetadata(s)
-  attrs    = getattrs(s)
+  metadata = getmetadata(s,path)
+  attrs    = getattrs(s,path)
   writeable = mode == "w"
   startswith(path,"/") && error("Paths should never start with a leading '/'")
   ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
@@ -340,9 +340,9 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
     z.metadata.shape[] = newsize
     #Check if array was shrunk
     if any(map(<,newsize, oldsize))
-        prune_oob_chunks(z.storage,oldsize,newsize, z.metadata.chunks)
+        prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks)
     end
-    writemetadata(z.storage, z.metadata)
+    writemetadata(z.storage, z.path, z.metadata)
     nothing
 end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
@@ -383,14 +383,14 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
     nothing
 end
 
-function prune_oob_chunks(s::AbstractStore,oldsize, newsize, chunks)
+function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
     dimstoshorten = findall(map(<,newsize, oldsize))
     for idim in dimstoshorten
         delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
         allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
         r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
         for cI in CartesianIndices(r)
-            delete!(s,cI)
+            delete!(s,path,cI)
         end
     end
 end

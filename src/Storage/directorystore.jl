@@ -27,17 +27,34 @@ function Base.getindex(d::DirectoryStore, i::String)
 end
 
 function Base.setindex!(d::DirectoryStore,v,i::String)
-  fname=joinpath(d.folder,i)
+  fname=d.folder * "/" * i
+  folder = dirname(fname)
+  isdir(folder) || mkpath(folder)
   write(fname,v)
   v
 end
 
 
-storagesize(d::DirectoryStore,p) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder))) do f
-  filesize(joinpath(d.folder,f))
+storagesize(d::DirectoryStore,p) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder * "/" * p))) do f
+  fname = d.folder * "/" * p * "/" * f
+  filesize(fname)
 end
 
-subdirs(s::DirectoryStore,p) = filter(i -> isdir(joinpath(s.folder,p, i)), readdir(joinpath(s.folder,p)))
-subkeys(s::DirectoryStore,p) = filter(i -> isfile(joinpath(s.folder,p, i)), readdir(joinpath(s.folder,p)))
+function subdirs(s::DirectoryStore,p) 
+  pbase = joinpath(s.folder,p)
+  if !isdir(pbase) 
+    return String[]
+  else
+    return filter(i -> isdir(joinpath(s.folder,p, i)), readdir(pbase))
+  end
+end
+function subkeys(s::DirectoryStore,p) 
+  pbase = joinpath(s.folder,p)
+  if !isdir(pbase) 
+    return String[]
+  else
+    return filter(i -> isfile(joinpath(s.folder,p, i)), readdir(pbase))
+  end
+end
 Base.delete!(s::DirectoryStore, k::String) = isfile(joinpath(s.folder, k)) && rm(joinpath(s.folder, k))
 

@@ -13,6 +13,7 @@ struct HTTPStore <: AbstractStore
 end
 
 function Base.getindex(s::HTTPStore, k::String)
+  @show string(s.url,"/",k)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false)
 if r.status >= 300
     if r.status == 404
@@ -27,7 +28,7 @@ end
 
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
-storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s)),""
+storefromstring(::Type{<:HTTPStore}, s) = ConsolidatedStore(HTTPStore(s),""),""
 ## This is a server implementation for Zarr datasets
 
 
@@ -54,4 +55,4 @@ function zarr_req_handler(s::AbstractStore, p)
 end
 
 
-HTTP.serve(s::AbstractStore, args...; kwargs...) = HTTP.serve(zarr_req_handler(s),args...;kwargs...)
+HTTP.serve(s::AbstractStore, p, args...; kwargs...) = HTTP.serve(zarr_req_handler(s,p),args...;kwargs...)

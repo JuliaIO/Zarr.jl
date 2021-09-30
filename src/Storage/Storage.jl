@@ -48,7 +48,7 @@ Deletes the given key from the store.
 """
 
 citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
-_concatpath(p,s) = rstrip(p,'/') * '/' * s
+_concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
 Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]
 Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p,i)]
@@ -78,14 +78,14 @@ function writeattrs(s::AbstractStore, p, att::Dict)
   att
 end
 
-is_zgroup(s::AbstractStore, p) = isinitialized(s,rstrip(p,'/') * "/.zgroup")
-is_zarray(s::AbstractStore, p) = isinitialized(s,rstrip(p,'/') * "/.zarray")
+is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
+is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
 isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
-getmetadata(s::AbstractStore, p) = Metadata(String(s[p,".zarray"]))
+getmetadata(s::AbstractStore, p) = Metadata(String(maybecopy(s[p,".zarray"])))
 function writemetadata(s::AbstractStore, p, m::Metadata)
   met = IOBuffer()
   JSON.print(met,m)
