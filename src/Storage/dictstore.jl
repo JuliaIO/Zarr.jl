@@ -1,29 +1,51 @@
 # Stores data in a simple dict in memory
 struct DictStore <: AbstractStore
-  name::String
   a::Dict{String,Vector{UInt8}}
-  subdirs::Dict{String,DictStore}
 end
-function DictStore(name)
-  isempty(name) && (name="data")
-  a = Dict{String,Vector{UInt8}}()
-  subdirs = Dict{String,DictStore}()
-  DictStore(name, a, subdirs)
-end
-DictStore() = DictStore("")
+DictStore() = DictStore(Dict{String,Vector{UInt8}}())
+
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
+_pdict(d::DictStore,p) = filter(((k,v),)->startswith(k,p),d.a)
+function storagesize(d::DictStore,p) 
+  sum(i->last(split(i[1],'/')) ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])), _pdict(d,p))
+end
 
-storagesize(d::DictStore) = sum(i->i[1] ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])),d.a)
-zname(s::DictStore) = s.name
+function Base.getindex(d::DictStore,i::AbstractString) 
+  get(d.a,i,nothing)
+end
+function Base.setindex!(d::DictStore,v,i::AbstractString) 
+  d.a[i] = v
+end
+Base.delete!(d::DictStore, i::AbstractString) = delete!(d.a,i)
 
-Base.getindex(d::DictStore,i::AbstractString) = get(d.a,i,nothing)
-Base.setindex!(d::DictStore,v,i::AbstractString) = d.a[i] = v
+function subdirs(d::DictStore,p) 
+  d2 = _pdict(d,p)
+  _searchsubdict(d2,p,(sp,lp)->length(sp) > lp+1)
+end
 
-Base.delete!(d::DictStore,i::AbstractString) = delete!(d.a,i)
+function subkeys(d::DictStore,p) 
+  d2 = _pdict(d,p)
+  _searchsubdict(d2,p,(sp,lp)->length(sp) == lp+1)
+end
 
-subdirs(d::DictStore) = keys(d.subdirs)
-Base.keys(d::DictStore) = keys(d.a)
-newsub(d::DictStore, n) = d.subdirs[n] = DictStore(n)
-getsub(d::DictStore, n) = d.subdirs[n]
+function _searchsubdict(d2,p,condition)
+  o = Set{String}()
+  pspl = split(rstrip(p,'/'),'/')
+  lp = if length(pspl) == 1 && isempty(pspl[1])
+    0
+  else
+    length(pspl)
+  end
+  for k in keys(d2)
+    sp = split(k,'/')
+    if condition(sp,lp)
+      push!(o,sp[lp+1])
+    end
+  end
+  collect(o)
+end
 
-path(d::DictStore) = ""
+
+#getsub(d::DictStore, p, n) = _substore(d,p).subdirs[n]
+
+#path(d::DictStore) = ""

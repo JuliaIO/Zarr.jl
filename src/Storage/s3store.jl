@@ -4,21 +4,19 @@ using AWS
 
 struct S3Store <: AbstractStore
     bucket::String
-    store::String
     listversion::Int
     aws::AWS.AbstractAWSConfig
 end
 
 
-function S3Store(bucket::String, store::String;
+function S3Store(bucket::String;
   listversion = 2,
   aws = nothing,
   )
   if aws === nothing
     aws = AWS.global_aws_config()
   end
-  store = rstrip(store,'/')
-  S3Store(bucket, store, listversion, aws)
+  S3Store(bucket, listversion, aws)
 end
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
@@ -30,7 +28,7 @@ end
 
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
+    return S3.get_object(s.bucket,i,aws_config=s.aws)
   catch e
     if error_is_ignorable(e)
       return nothing
@@ -39,17 +37,15 @@ function Base.getindex(s::S3Store, i::String)
     end
   end
 end
-getsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
 
 function Base.setindex!(s::S3Store, v, i::String)
-  return S3.put_object(s.bucket,string(s.store,"/",i),Dict("body"=>v),aws_config=s.aws)
+  return S3.put_object(s.bucket,i,Dict("body"=>v),aws_config=s.aws)
 end
-newsub(s::S3Store, d::String) = S3Store(s.bucket, string(s.store,"/",d), s.listversion, s.aws)
 
-Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,string(s.store,"/",d), aws_config=s.aws)
+Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,d, aws_config=s.aws)
 
-function storagesize(s::S3Store)
-  r = cloud_list_objects(s)
+function storagesize(s::S3Store,p)
+  r = cloud_list_objects(s,p)
   haskey(r,"Contents") || return 0
   contents = r["Contents"]
   datafiles = filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)
@@ -62,46 +58,38 @@ function storagesize(s::S3Store)
   end
 end
 
-function zname(s::S3Store)
-  d = split(s.store,"/")
-  i = findlast(!isempty,d)
-  d[i]
-end
-
 function isinitialized(s::S3Store, i::String)
   try
-    S3.head_object(s.bucket,string(s.store,"/",i),aws_config=s.aws)
+    S3.head_object(s.bucket,i,aws_config=s.aws)
     return true
   catch e
     if error_is_ignorable(e)
       return false
     else
-      println(string(s.store,"/",i))
+      println(i)
       throw(e)
     end
   end
 end
 
-function cloud_list_objects(s::S3Store)
-  prefix = (isempty(s.store) || endswith(s.store,"/")) ? s.store : string(s.store,"/")
+function cloud_list_objects(s::S3Store,p)
+  prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
   listfun(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
-function subdirs(s::S3Store)
-  s3_resp = cloud_list_objects(s)
+function subdirs(s::S3Store, p)
+  s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"CommonPrefixes") && return String[]
   allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
-function Base.keys(s::S3Store)
-  s3_resp = cloud_list_objects(s)
+function subkeys(s::S3Store, p)
+  s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
   map(i->splitdir(i)[2],r)
 end
-allstrings(v::AbstractArray,prefixkey) = map(i -> String(i[prefixkey]), v)
-allstrings(v,prefixkey) = [String(v[prefixkey])]
-
-path(s::S3Store) = s.store
+allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
+allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
 # Some special AWS configs
 struct AnonymousGCS <:AbstractAWSConfig end
@@ -122,12 +110,12 @@ function storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
-  S3Store(String(bucket),path, aws=AWS.global_aws_config())
+  S3Store(String(bucket),aws=AWS.global_aws_config()),path
 end
 
 function storefromstring(::Type{<:AnonymousGCS}, s, _)
     decomp = split(s,"/",keepempty=false)
     bucket = decomp[2]
     path = join(decomp[3:end],"/")
-    S3Store(String(bucket),path, aws=AnonymousGCS(), listversion=1)
+    S3Store(String(bucket), aws=AnonymousGCS(), listversion=1), path
 end

@@ -103,18 +103,22 @@ a1 = g["a1"]
 @test String(g["a2"][:])=="hallo"
 
 # And test for consolidated metadata
-# Delete files so we make sure they are note accessed
+# Delete files so we make sure they are not accessed
 rm(joinpath(ppython,".zattrs"))
 rm(joinpath(ppython,"a1",".zattrs"))
 rm(joinpath(ppython,"a1",".zarray"))
 rm(joinpath(ppython,"a2",".zarray"))
-g = zopen(ppython, consolidated=true)
+g = zopen(ppython, "w", consolidated=true)
 @test g isa Zarr.ZGroup
 @test g.attrs["groupatt"] == "Hi"
 a1 = g["a1"]
 @test a1 isa ZArray
 @test a1[:,:,:]==permutedims(data,(3,2,1))
 @test a1.attrs["test"]==Dict("b"=>6)
+@test storagesize(a1) == 960
+@test sort(Zarr.subkeys(a1.storage,"a1"))[1:5] == ["0.0.0","0.0.1","0.0.2","0.0.3","0.1.0"]
+a1[:,1,1] = 1:10
+@test a1[:,1,1] == 1:10
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
 end

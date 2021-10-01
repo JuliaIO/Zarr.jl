@@ -5,14 +5,15 @@ data will be read from the dictionary instead.
 """
 struct ConsolidatedStore{P} <: AbstractStore
   parent::P
-  cons::Dict{String}
+  path::String
+  cons::Dict{String,Any}
 end
-function ConsolidatedStore(s::AbstractStore)
-  d = s[".zmetadata"]
+function ConsolidatedStore(s::AbstractStore, p)
+  d = s[p, ".zmetadata"]
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore(s,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
+  ConsolidatedStore(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
@@ -21,65 +22,64 @@ function Base.show(io::IO,d::ConsolidatedStore)
     print(io, "Consolidated ", String(take!(b)))
 end
 
-storagesize(d::ConsolidatedStore) = storagesize(d.parent)
-zname(s::ConsolidatedStore) = zname(s.parent)
-Base.getindex(d::ConsolidatedStore,i::String) = d.parent[i]
-getmetadata(d::ConsolidatedStore) = Metadata(d.cons[".zarray"])
-getattrs(d::ConsolidatedStore) = get(d.cons,".zattrs", Dict{String,Any}())
-is_zarray(d::ConsolidatedStore) = haskey(d.cons,".zarray")
-is_zgroup(d::ConsolidatedStore) = haskey(d.cons,".zgroup")
+storagesize(d::ConsolidatedStore,p) = storagesize(d.parent,p)
+function Base.getindex(d::ConsolidatedStore,i::String) 
+    d.parent[i]
+end
+getmetadata(d::ConsolidatedStore,p) = Metadata(d.cons[_unconcpath(d,p,".zarray")])
+getattrs(d::ConsolidatedStore, p) = get(d.cons,_unconcpath(d,p,".zattrs"), Dict{String,Any}())
+function _unconcpath(d,p)
+  startswith(p,d.path) || error("Requested key is not in consolidated path")
+  lstrip(replace(p,d.path=>"", count=1),'/')
+end
+_unconcpath(d,p,s) = _concatpath(_unconcpath(d,p),s)
+is_zarray(d::ConsolidatedStore,p) = haskey(d.cons,_unconcpath(d,p,".zarray"))
+is_zgroup(d::ConsolidatedStore,p) = haskey(d.cons,_unconcpath(d,p,".zgroup"))
 check_consolidated_write(i::String) = split(i,'/')[end] in (".zattrs",".zarray",".zgroup") &&
     throw(ArgumentError("Can not modify consolidated metadata, please re-open the dataset with `consolidated=false`"))
+
+_pdict(d::ConsolidatedStore,p) = filter(((k,v),)->startswith(k,p),d.cons)
+function subdirs(d::ConsolidatedStore,p) 
+  p2 = _unconcpath(d,p)
+  d2 = _pdict(d,p2)
+  _searchsubdict(d2,p,(sp,lp)->length(sp) > lp+1)
+end
+
+function subkeys(d::ConsolidatedStore,p) 
+  subkeys(d.parent,p)
+end
+
+
+
 function Base.setindex!(d::ConsolidatedStore,v,i::String)
   #Here we check that we don't overwrite consolidated information
   check_consolidated_write(i)
-  d.parent.a[i] = v
+  d.parent[i] = v
 end
 function Base.delete!(d::ConsolidatedStore,i::String)
   check_consolidated_write(i)
-  delete!(d.a,i)
+  delete!(d.parent,i)
 end
-function subdirs(d::ConsolidatedStore)
-  o = Set{String}()
-  foreach(collect(keys(d.cons))) do k
-    tr = split(k,'/')
-    length(tr) > 1 && push!(o,first(tr))
-  end
-  collect(o)
-end
-Base.keys(d::ConsolidatedStore) = keys(d.parent)
-newsub(d::ConsolidatedStore, n) = newsub(d.parent, n)
-function getsub(d::ConsolidatedStore, n)
-    newd = Dict{String,Any}()
-    for (k,v) in d.cons
-        s = split(k,'/')
-        if s[1] == n
-            newd[join(s[2:end],'/')] = v
-        end
-    end
-    ConsolidatedStore(getsub(d.parent, n), newd)
-end
-path(d::ConsolidatedStore) = path(d.parent)
+
 
 function consolidate_metadata(s::AbstractStore,d,prefix)
   for k in (".zattrs",".zarray",".zgroup")
-    v = s[k]
+    v = s[prefix,k]
     if v !== nothing
-      d[string(prefix,k)] = JSON.parse(replace(String(Zarr.maybecopy(v)),": NaN,"=>": \"NaN\","))
+      d[_concatpath(prefix,k)] = JSON.parse(String(copy(v)))
     end
   end
-  foreach(subdirs(s)) do subname
-    ssub = getsub(s,subname)
-    consolidate_metadata(ssub,d,string(prefix,subname,"/"))
+  foreach(subdirs(s,prefix)) do subname
+    consolidate_metadata(s,d,string(prefix,subname,"/"))
   end
   d
 end
-function consolidate_metadata(s::AbstractStore)
-  d = consolidate_metadata(s,Dict{String,Any}(),"")
+function consolidate_metadata(s::AbstractStore,p)
+  d = consolidate_metadata(s,Dict{String,Any}(),p)
   buf = IOBuffer()
   JSON.print(buf,Dict("metadata"=>d),4)
-  s[".zmetadata"] = take!(buf)
-  ConsolidatedStore(s)
+  s[p,".zmetadata"] = take!(buf)
+  ConsolidatedStore(s,p,d)
 end
 
-consolidate_metadata(s) = consolidate_metadata(zopen(s))
+consolidate_metadata(s) = consolidate_metadata(zopen(s,"w"))

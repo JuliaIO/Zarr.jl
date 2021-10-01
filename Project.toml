@@ -1,7 +1,7 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
-version = "0.6.3"
+version = "0.7.0"
 
 [deps]
 AWS = "fbe9abb3-538b-5e4e-ba9e-bc94f4f92ebc"
@@ -16,7 +16,7 @@ OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [compat]
-AWS = "1.25"
+AWS = "1.25 - 1.61"
 Blosc = "0.5, 0.6, 0.7"
 CodecZlib = "0.6, 0.7"
 DataStructures = "0.17, 0.18"

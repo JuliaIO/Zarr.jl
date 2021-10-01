@@ -23,12 +23,15 @@ Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
 
 using Dates: Period, TimeType, Date, DateTime, Dates
+import Base.==
 struct DateTime64{P} <: TimeType
     i::Int64
 end
 Base.convert(::Type{Date},t::DateTime64{P}) where P = Date(1970)+P(t.i)
 Base.convert(::Type{DateTime},t::DateTime64{P}) where P = DateTime(1970)+P(t.i)
 Base.show(io::IO,t::DateTime64{P}) where P = print(io,"DateTime64[",P,"]: ",string(DateTime(t)))
+Base.isless(x::DateTime64{P}, y::DateTime64{P}) where P = isless(x.i, y.i)
+==(x::DateTime64{P}, y::DateTime64{P}) where P = x.i == y.i
 strpairs = [Dates.Year => "Y", Dates.Month => "M", Dates.Week => "W", Dates.Day=>"D", 
     Dates.Hour => "h", Dates.Minute => "m", Dates.Second=>"s", Dates.Millisecond =>"ms",
     Dates.Microsecond => "us", Dates.Nanosecond => "ns"]

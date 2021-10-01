@@ -26,6 +26,7 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
     metadata::Metadata{T, N, C}
     storage::S
+    path::String
     attrs::Dict
     writeable::Bool
 end
@@ -45,14 +46,20 @@ function Base.show(io::IO,::MIME"text/plain",z::ZArray)
     print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
-zname(z::ZArray) = zname(z.storage)
+zname(z::ZArray) = zname(z.path)
+
+function zname(s::String)
+  spl = split(rstrip(s,'/'),'/')
+  isempty(last(spl)) ? "root" : last(spl)
+end
+
 
 """
     storagesize(z::ZArray)
 
 Returns the size of the compressed data stored in the ZArray `z` in bytes
 """
-storagesize(z::ZArray) = storagesize(z.storage)
+storagesize(z::ZArray) = storagesize(z.storage,z.path)
 
 """
     storageratio(z::ZArray)
@@ -69,7 +76,7 @@ nobytes(z::ZArray{<:Vector}) = "unknown"
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
-    isinitialized(z.storage,i)
+    isinitialized(z.storage,z.path,i)
   end
   allinfos = [
     "Type" => "ZArray",
@@ -91,13 +98,13 @@ function zinfo(io::IO,z::ZArray)
   end
 end
 
-function ZArray(s::T, mode="r") where T <: AbstractStore
-  metadata = getmetadata(s)
-  attrs    = getattrs(s)
+function ZArray(s::T, mode="r",path="") where T <: AbstractStore
+  metadata = getmetadata(s,path)
+  attrs    = getattrs(s,path)
   writeable = mode == "w"
-
+  startswith(path,"/") && error("Paths should never start with a leading '/'")
   ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
-    metadata, s, attrs, writeable)
+    metadata, s, path, attrs, writeable)
 end
 
 
@@ -148,13 +155,13 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     inds    = CartesianIndices(map(boundint,r.indices,axes(curchunk)))
 
     # Uncompress current chunk
-    if !readmode && !(isinitialized(z.storage, bI) && (size(inds) != size(a)))
+    if !readmode && !(isinitialized(z.storage, z.path, bI) && (size(inds) != size(a)))
       resetbuffer!(a)
     else
       readchunk!(maybeinner(a), z, bI)
     end
     if readmode
-      # Read data
+      # Read data 
       copyto!(aout,inds,curchunk,inds)
     else
       copyto!(curchunk,inds,aout,inds)
@@ -176,7 +183,7 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = z.storage[i]
+    curchunk = z.storage[z.path,i]
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
@@ -200,9 +207,9 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
   if !allmissing(z,a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
-    z.storage[i]=dtemp
+    z.storage[z.path,i]=dtemp
   else
-    isinitialized(z.storage,i) && delete!(z.storage,i)
+    isinitialized(z.storage,z.path,i) && delete!(z.storage,z.path,i)
   end
   a
 end
@@ -227,7 +234,7 @@ function zcreate(::Type{T}, dims...;
         kwargs...
         ) where T
   if path===nothing
-    store = DictStore("")
+    store = DictStore()
   else
     store = DirectoryStore(joinpath(path,name))
   end
@@ -236,6 +243,7 @@ end
 
 function zcreate(::Type{T},storage::AbstractStore,
         dims...;
+        path = "",
         chunks=dims,
         fill_value=nothing,
         compressor=BloscCompressor(),
@@ -259,14 +267,14 @@ function zcreate(::Type{T},storage::AbstractStore,
         filters,
     )
 
-    isempty(storage) || error("$storage is not empty")
+    isemptysub(storage,path) || error("$storage $path is not empty")
 
-    writemetadata(storage, metadata)
+    writemetadata(storage, path, metadata)
 
-    writeattrs(storage, attrs)
+    writeattrs(storage, path, attrs)
 
-    z = ZArray{T2, N, typeof(compressor), typeof(storage)}(
-        metadata, storage, attrs, writeable)
+    ZArray{T2, N, typeof(compressor), typeof(storage)}(
+        metadata, storage, path, attrs, writeable)
 end
 
 filterfromtype(::Type{<:Any}) = nothing
@@ -332,9 +340,9 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
     z.metadata.shape[] = newsize
     #Check if array was shrunk
     if any(map(<,newsize, oldsize))
-        prune_oob_chunks(z.storage,oldsize,newsize, z.metadata.chunks)
+        prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks)
     end
-    writemetadata(z.storage, z.metadata)
+    writemetadata(z.storage, z.path, z.metadata)
     nothing
 end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
@@ -375,14 +383,14 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
     nothing
 end
 
-function prune_oob_chunks(s::AbstractStore,oldsize, newsize, chunks)
+function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
     dimstoshorten = findall(map(<,newsize, oldsize))
     for idim in dimstoshorten
         delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
         allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
         r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
         for cI in CartesianIndices(r)
-            delete!(s,cI)
+            delete!(s,path,cI)
         end
     end
 end

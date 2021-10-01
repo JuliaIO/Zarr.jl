@@ -20,7 +20,6 @@ end
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.DictStore}
 
-        @test z.storage.name === "data"
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
         @test eltype(z.storage.a["0.0"]) === UInt8
@@ -48,7 +47,7 @@ end
         @test size(z, 2) === 3
         @test length(z) === 2 * 3
         @test lastindex(z, 2) === 3
-        @test Zarr.zname(z) === "data"
+        @test Zarr.zname(z) === "root"
     end
 
     @testset "NoCompressor DirectoryStore" begin
@@ -79,6 +78,17 @@ end
             GC.gc()
         end
     end
+end
+
+@testset "Groups" begin
+    store = DirectoryStore(tempname())
+    g = zgroup(store,"mygroup")
+    g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
+    @test Zarr.is_zgroup(store,"mygroup")
+    @test Zarr.is_zgroup(store,"mygroup/asubgroup")
+    @test g2.attrs["a1"]==5
+    @test isdir(joinpath(store.folder,"mygroup"))
+    @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
 end
 
 @testset "Metadata" begin
