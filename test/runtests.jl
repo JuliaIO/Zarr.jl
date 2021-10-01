@@ -80,6 +80,17 @@ end
     end
 end
 
+@testset "Groups" begin
+    store = DirectoryStore(tempname())
+    g = zgroup(store,"mygroup")
+    g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
+    @test Zarr.is_zgroup(store,"mygroup")
+    @test Zarr.is_zgroup(store,"mygroup/asubgroup")
+    @test g2.attrs["a1"]==5
+    @test isdir(joinpath(store.folder,"mygroup"))
+    @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
+end
+
 @testset "Metadata" begin
     @testset "Data type encoding" begin
         @test Zarr.typestr(Bool) === "<b1"

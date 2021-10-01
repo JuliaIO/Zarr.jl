@@ -22,7 +22,7 @@ function Base.show(io::IO,d::ConsolidatedStore)
     print(io, "Consolidated ", String(take!(b)))
 end
 
-storagesize(d::ConsolidatedStore) = storagesize(d.parent,p)
+storagesize(d::ConsolidatedStore,p) = storagesize(d.parent,p)
 function Base.getindex(d::ConsolidatedStore,i::String) 
     d.parent[i]
 end
@@ -46,9 +46,7 @@ function subdirs(d::ConsolidatedStore,p)
 end
 
 function subkeys(d::ConsolidatedStore,p) 
-  p2 = _unconcpath(d,p)
-  d2 = _pdict(d,p2)
-  _searchsubdict(d2,p,(sp,lp)->length(sp) == lp+1)
+  subkeys(d.parent,p)
 end
 
 

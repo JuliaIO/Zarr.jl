@@ -267,7 +267,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         filters,
     )
 
-    isemptysub(storage,path) || error("$storage is not empty")
+    isemptysub(storage,path) || error("$storage $path is not empty")
 
     writemetadata(storage, path, metadata)
 

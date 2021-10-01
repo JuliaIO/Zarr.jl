@@ -47,7 +47,7 @@ function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="")
 end
 
 function Base.show(io::IO, g::ZGroup)
-    print(io, "ZarrGroup at ", g.storage)
+    print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
     !isempty(g.arrays) && print(io, "\nVariables: ", map(i -> string(zname(i), " "), values(g.arrays))...)
     !isempty(g.groups) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(g.groups))...)
     nothing
@@ -116,7 +116,7 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     JSON.print(b,d)
-    s[".zgroup"]=take!(b)
+    s[path,".zgroup"]=take!(b)
     writeattrs(s,path,attrs)
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
@@ -126,7 +126,7 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  g.groups[name] = zgroup(g.storage,attrs=attrs,path=_concatpath(g.path,name))
+  g.groups[name] = zgroup(g.storage,_concatpath(g.path,name),attrs=attrs)
 end
 
 "Create a new subarray of the group g"
