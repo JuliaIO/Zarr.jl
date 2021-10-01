@@ -108,7 +108,7 @@ rm(joinpath(ppython,".zattrs"))
 rm(joinpath(ppython,"a1",".zattrs"))
 rm(joinpath(ppython,"a1",".zarray"))
 rm(joinpath(ppython,"a2",".zarray"))
-g = zopen(ppython, consolidated=true)
+g = zopen(ppython, "w", consolidated=true)
 @test g isa Zarr.ZGroup
 @test g.attrs["groupatt"] == "Hi"
 a1 = g["a1"]
