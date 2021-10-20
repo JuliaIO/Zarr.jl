@@ -76,7 +76,7 @@ end
 @testset "LRU" begin
   p = tempname()
   g = zgroup(p)
-  a = zcreate(Float64,g,"foo",  1000,1000, chunks=(1000,10))
+  a = zcreate(Float64,g,"foo",  1000,1000, chunks=(1000,10), fill_value=NaN)
   a[1:500000] = 1:500000
   g2 = zopen(p,lru = 5)
   newstore = g2.storage
@@ -92,7 +92,7 @@ end
   @test all(iszero,a2[1:10,1])
   @test_throws ErrorException a2[1,1] = 5
   @test_throws ErrorException delete!(newstore,"foo/0.0")
-  @test isequal(a[1,1000], missing)
+  @test isequal(a2[1,1000], missing)
   @test storagesize(a2) == 83002
 end
 
