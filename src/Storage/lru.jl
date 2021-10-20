@@ -18,10 +18,10 @@ function LRUStore(s::AbstractStore; maxsize=5)
 end
 storagesize(d::LRUStore,p) = storagesize(d.parent,p)
 Base.getindex(d::LRUStore,i::AbstractString) = d.parent[i]
-Base.setindex!(d::LRUStore,v,i::AbstractString) = d.parent[i] = v
-Base.delete!(d::LRUStore, i::AbstractString) = delete!(d.parent,i)
+Base.setindex!(d::LRUStore,v,i::AbstractString) = error("Writing to LRU stores is currently not supported")
+Base.delete!(d::LRUStore, i::AbstractString) = error("Writing to LRU stores is currently not supported")
 subdirs(d::LRUStore,p) = subdirs(d.parent,p)
-subkeys(d::LRUStore,p) = subkeys(d.parent,p)
+#subkeys(d::LRUStore,p) = subkeys(d.parent,p)
 
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N,<:Zarr.Compressor,<:LRUStore},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
