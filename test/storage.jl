@@ -78,7 +78,7 @@ end
   g = zgroup(p)
   a = zcreate(Float64,g,"foo",  1000,1000, chunks=(1000,10), fill_value=NaN)
   a[1:500000] = 1:500000
-  g2 = zopen(p,lru = 5)
+  g2 = zopen(p,"w",lru = 5)
   newstore = g2.storage
   @test newstore isa Zarr.LRUStore
   a2 = g2["foo"]
