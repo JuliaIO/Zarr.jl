@@ -35,8 +35,9 @@ Works like `zopen` with the single difference that no error is thrown when
 the path or store does not point to a valid zarr array or group, but nothing 
 is returned instead. 
 """
-function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="")
+function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="", lru = 0)
     consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path)
+    lru !== 0 && return zopen(LRUStore(s,maxsize=lru),mode,path=path)
     if is_zarray(s, path)
         return ZArray(s,mode,path)
     elseif is_zgroup(s,path)
@@ -73,9 +74,9 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups.
 """
-function zopen(s::AbstractStore, mode="r"; consolidated = false, path = "")
+function zopen(s::AbstractStore, mode="r"; consolidated = false, path = "", lru = 0)
     # add interfaces to Stores later    
-    r = zopen_noerr(s,mode, consolidated=consolidated, path=path)
+    r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru)
     if r === nothing
         throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
     else

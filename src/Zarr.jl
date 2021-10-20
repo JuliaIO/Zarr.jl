@@ -4,11 +4,12 @@ import JSON
 import Blosc
 
 include("metadata.jl")
+include("Compressors.jl")
 include("Storage/Storage.jl")
 include("Filters.jl")
-include("Compressors.jl")
 include("ZArray.jl")
 include("ZGroup.jl")
+include("Storage/lru.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
   zinfo, DirectoryStore, S3Store, zgroup
