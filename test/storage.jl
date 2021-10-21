@@ -73,6 +73,29 @@ end
   @test sort(collect(keys(ds.a)))==[".zgroup","bar/.zarray", "bar/.zattrs", "bar/0.0.0"]
 end
 
+@testset "LRU" begin
+  p = tempname()
+  g = zgroup(p)
+  a = zcreate(Float64,g,"foo",  1000,1000, chunks=(1000,10), fill_value=NaN)
+  a[1:500000] = 1:500000
+  g2 = zopen(p,"w",lru = 5)
+  newstore = g2.storage
+  @test newstore isa Zarr.LRUStore
+  a2 = g2["foo"]
+  @test isempty(keys(newstore.lru))
+  #Read some data to fill cache
+  @test a2[1:10,1] == 1:10
+  @test haskey(newstore.lru,"foo/0.0")
+  @test newstore.lru["foo/0.0"] == reshape(1:10000,1000,10)
+  # Now we modify the lru store to test that data is actually read from there
+  newstore.lru["foo/0.0"] .= 0
+  @test all(iszero,a2[1:10,1])
+  @test_throws ErrorException a2[1,1] = 5
+  @test_throws ErrorException delete!(newstore,"foo/0.0")
+  @test isequal(a2[1,1000], missing)
+  @test storagesize(a2) == 83002
+end
+
 @testset "Minio S3 storage" begin
   A = fill(1.0, 30, 20)
   chunks = (5,10)
