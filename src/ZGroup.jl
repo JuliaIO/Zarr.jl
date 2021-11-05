@@ -7,6 +7,10 @@ struct ZGroup{S<:AbstractStore}
     writeable::Bool
 end
 
+# path can also be a SubString{String}
+ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
+    ZGroup(storage, String(path), arrays, groups, attrs, writeable)
+
 zname(g::ZGroup) = zname(g.path)
 
 #Open an existing ZGroup
