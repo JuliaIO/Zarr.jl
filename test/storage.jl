@@ -125,9 +125,9 @@ end
 end
 
 @testset "GCS Storage" begin
-  cmip6,p = Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706/"),
+  cmip6,p = Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706")
   @test cmip6 isa Zarr.GCStore
-  @test p == "CMIP6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp370/r3i1p1f1/Amon/tas/gn/v20190710"
+  @test p == "CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706"
   @test storagesize(cmip6,p) == 16098
   g = zopen(cmip6,path=p)
   arr = g["psl"]
