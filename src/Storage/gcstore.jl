@@ -132,7 +132,7 @@ end
 
 pushfirst!(storageregexlist,r"^https://storage.googleapis.com"=>GCStore)
 pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
-#push!(storageregexlist,r"^gs://"=>GCStore)
+push!(storageregexlist,r"^gs://"=>GCStore)
 
 function storefromstring(::Type{<:GCStore}, url,_)
   uri = URI(url)
