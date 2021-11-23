@@ -12,6 +12,6 @@ include("ZGroup.jl")
 include("Storage/lru.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
-  zinfo, DirectoryStore, S3Store, zgroup
+  zinfo, DirectoryStore, S3Store, GCStore, zgroup
 
 end # module

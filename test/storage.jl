@@ -124,17 +124,21 @@ end
   @test String(S3Array[:]) == "Hello from the cloud!"
 end
 
-@testset "GCS S3 Storage" begin
-  cmip6,p = Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706/")
-  @test storagesize(cmip6,p) == 16098
-  g = zopen(cmip6,path=p)
-  arr = g["psl"]
-  @test size(arr) == (288, 192, 97820)
-  @test eltype(arr) == Union{Missing, Float32}
-  lat = g["lat"]
-  @test size(lat) == (192,)
-  @test eltype(lat) == Union{Missing, Float64}
-  @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
+@testset "GCS Storage" begin
+  for (cmip6,p) in (
+      Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706/"),
+      Zarr.storefromstring(GCStore,"gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706/",false))
+
+    @test storagesize(cmip6,p) == 16098
+    g = zopen(cmip6,path=p)
+    arr = g["psl"]
+    @test size(arr) == (288, 192, 97820)
+    @test eltype(arr) == Union{Missing, Float32}
+    lat = g["lat"]
+    @test size(lat) == (192,)
+    @test eltype(lat) == Union{Missing, Float64}
+    @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
+  end
 end
 
 @testset "HTTP Storage" begin
