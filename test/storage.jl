@@ -125,18 +125,24 @@ end
 end
 
 @testset "GCS Storage" begin
-  cmip6,p = Zarr.storefromstring("gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706")
-  @test cmip6 isa Zarr.GCStore
-  @test p == "CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706"
-  @test storagesize(cmip6,p) == 16098
-  g = zopen(cmip6,path=p)
-  arr = g["psl"]
-  @test size(arr) == (288, 192, 97820)
-  @test eltype(arr) == Union{Missing, Float32}
-  lat = g["lat"]
-  @test size(lat) == (192,)
-  @test eltype(lat) == Union{Missing, Float64}
-  @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
+  for s in (
+    "gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
+    "https://storage.googleapis.com/cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
+    "http://storage.googleapis.com/cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
+  )
+    cmip6,p = Zarr.storefromstring(s)
+    @test cmip6 isa Zarr.GCStore
+    @test p == "CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706"
+    @test storagesize(cmip6,p) == 16098
+    g = zopen(cmip6,path=p)
+    arr = g["psl"]
+    @test size(arr) == (288, 192, 97820)
+    @test eltype(arr) == Union{Missing, Float32}
+    lat = g["lat"]
+    @test size(lat) == (192,)
+    @test eltype(lat) == Union{Missing, Float64}
+    @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
+  end
 end
 
 @testset "HTTP Storage" begin
