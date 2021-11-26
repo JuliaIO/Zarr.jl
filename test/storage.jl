@@ -73,6 +73,18 @@ end
   @test sort(collect(keys(ds.a)))==[".zgroup","bar/.zarray", "bar/.zattrs", "bar/0.0.0"]
 end
 
+@testset "LMDB" begin
+  A = fill(1.0, 30, 20)
+  chunks = (5,10)
+  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  p = tempname()
+  ds = Zarr.LMDBStore(p, create=true)
+  test_store_common(ds)
+  @test haskey(ds.d,".zgroup")
+  @test ds.d["bar/.zattrs"]==UInt8[0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0x62, 0x22, 0x7d]
+  @test sort(collect(keys(ds.d)))==[".zgroup","bar/.zarray", "bar/.zattrs", "bar/0.0.0"]
+end
+
 @testset "LRU" begin
   p = tempname()
   g = zgroup(p)

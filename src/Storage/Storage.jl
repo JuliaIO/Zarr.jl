@@ -12,19 +12,6 @@ This function shall return the size of all data files in a store.
 function storagesize end
 
 
-"""
-    Base.getindex(d::AbstractStore,i::String)
-
-Returns the data stored in the given key as a Vector{UInt8}
-"""
-Base.getindex(d::AbstractStore,i::AbstractString) = error("getindex not implemented for store $(typeof(d))")
-
-"""
-    Base.setindex!(d::AbstractStore,v,i::String)
-
-Writes the values in v to the given store and key.
-"""
-Base.setindex!(d::AbstractStore,v,i::AbstractString) = error("setindex not implemented for store $(typeof(d))")
 
 """
     subdirs(d::AbstractStore, p)
@@ -106,3 +93,4 @@ include("s3store.jl")
 include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
+include("lmdb.jl")
