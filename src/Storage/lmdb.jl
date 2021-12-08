@@ -8,11 +8,11 @@ function LMDBStore(p::String; create = false, readonly=false)
         ispath(p) && throw(ArgumentError("Path at $p already exists"))
         mkpath(p)
     end
-    LMDBStore(LMDB.LMDBDict{String,Vector{UInt8}}(p, readonly=readonly))
+    LMDBStore(LMDB.LMDBDict{String,Vector{UInt8}}(p, readonly=readonly, rdahead=false))
 end
 Base.show(io::IO,d::LMDBStore) = print(io,"LMDB Database at $(d.d.env.path)")
 
-Base.getindex(d::LMDBStore, i) = d.d[i]
+Base.getindex(d::LMDBStore, i) = get(d.d,i,nothing)
 Base.setindex!(d::LMDBStore, v, i) = setindex!(d.d,v,i)
 Base.delete!(d::LMDBStore,i) = delete!(d.d,i)
 storagesize(d::LMDBStore, p) = Int(LMDB.valuesize(d.d,prefix=p) - LMDB.valuesize(d.d,prefix=p*"/.zarray") - LMDB.valuesize(d.d,prefix=p*"/.zattrs"))
