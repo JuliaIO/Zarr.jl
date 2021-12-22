@@ -83,7 +83,7 @@ function Base.getindex(s::GCStore, k::String)
       @debug "get: $url: not found"
       nothing
     else
-      error("Error connecting to $(s.url) :", String(r.body))
+      error("Error connecting to $url :", String(r.body))
     end
   else
     @debug "get: $url"
