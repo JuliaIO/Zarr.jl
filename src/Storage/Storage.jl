@@ -47,16 +47,19 @@ function subkeys end
 Deletes the given key from the store.
 """
 
-citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
+function citostring(i::CartesianIndex,rev = true) 
+  i2 = (i - oneunit(i)).I
+  if rev
+    i2 = reverse(i2)
+  end
+  join(i2, '.')
+end
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
-Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]
 Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p,i)]
-Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i))
 Base.delete!(s::AbstractStore, p, i) = delete!(s, _concatpath(p,i))
 Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
 Base.setindex!(s::AbstractStore,v,p,i) = setindex!(s,v,_concatpath(p,i))
-Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i)]=v
 
 
 maybecopy(x) = copy(x)
@@ -81,7 +84,6 @@ end
 is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
 is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
-isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 

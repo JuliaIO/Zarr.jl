@@ -183,7 +183,7 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = z.storage[z.path,i]
+    curchunk = z.storage[z.path,citostring(i,z.metadata.order === 'C')]
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
@@ -207,7 +207,7 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
   if !allmissing(z,a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
-    z.storage[z.path,i]=dtemp
+    z.storage[z.path,citostring(i,z.metadata.order === 'C')]=dtemp
   else
     isinitialized(z.storage,z.path,i) && delete!(z.storage,z.path,i)
   end
@@ -248,6 +248,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         fill_value=nothing,
         compressor=BloscCompressor(),
         filters = filterfromtype(T), 
+        order = 'C', #This might default to 'F' instead
         attrs=Dict(),
         writeable=true,
         ) where T
@@ -263,7 +264,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         typestr(T),
         compressor,
         fill_value,
-        'C',
+        order,
         filters,
     )
 

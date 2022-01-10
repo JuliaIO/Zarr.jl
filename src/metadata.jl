@@ -186,10 +186,20 @@ function Metadata(d::AbstractDict)
 
     TU = fv === nothing ? T : Union{T,Missing}
 
+    ord = first(d["order"])
+
+    shape = NTuple{N, Int}(d["shape"])
+    chunks = NTuple{N, Int}(d["chunks"])
+
+    if ord === 'C'
+        shape = reverse(shape)
+        chunks = reverse(chunks)
+    end
+
     Metadata{TU, N, C, F}(
         d["zarr_format"],
-        NTuple{N, Int}(d["shape"]) |> reverse,
-        NTuple{N, Int}(d["chunks"]) |> reverse,
+        NTuple{N, Int}(d["shape"]),
+        NTuple{N, Int}(d["chunks"]),
         d["dtype"],
         compressor,
         fv,
@@ -200,10 +210,15 @@ end
 
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::Metadata)
+    shape, chunks = if md.order === 'C'
+        reverse(md.shape[]), reverse(md.chunks)
+    else
+        md.shape[], md.chunks
+    end
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
-        "shape" => md.shape[] |> reverse,
-        "chunks" => md.chunks |> reverse,
+        "shape" => shape,
+        "chunks" => chunks,
         "dtype" => md.dtype,
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
