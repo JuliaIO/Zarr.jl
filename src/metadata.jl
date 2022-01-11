@@ -198,8 +198,8 @@ function Metadata(d::AbstractDict)
 
     Metadata{TU, N, C, F}(
         d["zarr_format"],
-        NTuple{N, Int}(d["shape"]),
-        NTuple{N, Int}(d["chunks"]),
+        shape,
+        chunks,
         d["dtype"],
         compressor,
         fv,

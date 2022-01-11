@@ -76,7 +76,7 @@ nobytes(z::ZArray{<:Vector}) = "unknown"
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
-    isinitialized(z.storage,z.path,i)
+    isinitialized(z.storage,z.path,citostring(i,z))
   end
   allinfos = [
     "Type" => "ZArray",
@@ -155,7 +155,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     inds    = CartesianIndices(map(boundint,r.indices,axes(curchunk)))
 
     # Uncompress current chunk
-    if !readmode && !(isinitialized(z.storage, z.path, bI) && (size(inds) != size(a)))
+    if !readmode && !(isinitialized(z.storage, z.path, citostring(bI,z)) && (size(inds) != size(a)))
       resetbuffer!(a)
     else
       readchunk!(maybeinner(a), z, bI)
@@ -183,7 +183,7 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    curchunk = z.storage[z.path,citostring(i,z.metadata.order === 'C')]
+    curchunk = z.storage[z.path,citostring(i,z)]
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
@@ -207,9 +207,9 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
   if !allmissing(z,a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
-    z.storage[z.path,citostring(i,z.metadata.order === 'C')]=dtemp
+    z.storage[z.path,citostring(i,z)]=dtemp
   else
-    isinitialized(z.storage,z.path,i) && delete!(z.storage,z.path,i)
+    isinitialized(z.storage,z.path,citostring(i,z)) && delete!(z.storage,z.path,citostring(i,z))
   end
   a
 end
@@ -341,7 +341,7 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
     z.metadata.shape[] = newsize
     #Check if array was shrunk
     if any(map(<,newsize, oldsize))
-        prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks)
+        prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks,z.metadata.order)
     end
     writemetadata(z.storage, z.path, z.metadata)
     nothing
@@ -384,14 +384,14 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
     nothing
 end
 
-function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
+function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks,order)
     dimstoshorten = findall(map(<,newsize, oldsize))
     for idim in dimstoshorten
         delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
         allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
         r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
         for cI in CartesianIndices(r)
-            delete!(s,path,cI)
+            delete!(s,path,citostring(cI,rev=order==='C'))
         end
     end
 end

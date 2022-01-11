@@ -39,7 +39,7 @@ function test_store_common(ds)
   Zarr.writeattrs(ds,"bar",Dict("a"=>"b"))
   @test Zarr.getattrs(ds,"bar")==Dict("a"=>"b")
   delete!(ds,"bar/0.0.0")
-  @test !Zarr.isinitialized(ds,"bar",CartesianIndex((0,0,0)))
+  @test !Zarr.isinitialized(ds,"bar","0.0.0")
   @test !Zarr.isinitialized(ds,"bar/0.0.0")
   ds["bar/0.0.0"] = data
 end

@@ -47,12 +47,13 @@ function subkeys end
 Deletes the given key from the store.
 """
 
-function citostring(i::CartesianIndex,rev = true) 
+citostring(i::CartesianIndex, z) = citostring(i,rev = z.metadata.order === 'C')
+function citostring(i::CartesianIndex;rev = true, sep='.') 
   i2 = (i - oneunit(i)).I
   if rev
     i2 = reverse(i2)
   end
-  join(i2, '.')
+  join(i2, sep)
 end
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 

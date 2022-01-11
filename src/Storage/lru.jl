@@ -25,12 +25,12 @@ subdirs(d::LRUStore,p) = subdirs(d.parent,p)
 
 function readchunk!(a::DenseArray,z::ZArray{<:Any,N,<:Zarr.Compressor,<:LRUStore},i::CartesianIndex{N}) where N
     length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-    k = _concatpath(z.path,citostring(i,z.metadata.order==='C'))
+    k = _concatpath(z.path,citostring(i,z))
     if haskey(z.storage.lru,k)
         a .= z.storage.lru[k]
         return a
     end 
-    curchunk = z.storage[z.path,i]
+    curchunk = z.storage[z.path,citostring(i,z)]
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
