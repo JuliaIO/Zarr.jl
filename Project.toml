@@ -1,7 +1,7 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
-version = "0.7.0"
+version = "0.7.1"
 
 [deps]
 AWS = "fbe9abb3-538b-5e4e-ba9e-bc94f4f92ebc"
