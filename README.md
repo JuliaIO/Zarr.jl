@@ -30,7 +30,7 @@ z2[1:10,1:10]
 
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://meggart.github.io/Zarr.jl/latest
+[docs-dev-url]: https://juliaio.github.io/Zarr.jl/latest/
 
 [codecov-img]: https://codecov.io/gh/meggart/Zarr.jl/branch/master/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/meggart/Zarr.jl
