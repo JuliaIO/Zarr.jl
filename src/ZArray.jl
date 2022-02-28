@@ -98,8 +98,8 @@ function zinfo(io::IO,z::ZArray)
   end
 end
 
-function ZArray(s::T, mode="r",path="") where T <: AbstractStore
-  metadata = getmetadata(s,path)
+function ZArray(s::T, mode="r",path="";fill_as_missing=false) where T <: AbstractStore
+  metadata = getmetadata(s,path,fill_as_missing)
   attrs    = getattrs(s,path)
   writeable = mode == "w"
   startswith(path,"/") && error("Paths should never start with a leading '/'")
@@ -246,6 +246,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         path = "",
         chunks=dims,
         fill_value=nothing,
+        fill_as_missing=true,
         compressor=BloscCompressor(),
         filters = filterfromtype(T), 
         attrs=Dict(),
@@ -255,7 +256,7 @@ function zcreate(::Type{T},storage::AbstractStore,
     length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
     N = length(dims)
     C = typeof(compressor)
-    T2 = fill_value === nothing ? T : Union{T,Missing}
+    T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     metadata = Metadata{T2, N, C, typeof(filters)}(
         2,
         dims,

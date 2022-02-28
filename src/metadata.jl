@@ -151,9 +151,10 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
-        filters::Nothing=nothing
+        filters::Nothing=nothing,
+        fill_as_missing = deprec_fillvalue(),
     ) where {T, N, C}
-    T2 = fill_value === nothing ? T : Union{T,Missing}
+    T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     Metadata{T2, N, C, typeof(filters)}(
         zarr_format,
         size(A),
@@ -166,10 +167,18 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     )
 end
 
-Metadata(s::Union{AbstractString, IO}) = Metadata(JSON.parse(s))
+Metadata(s::Union{AbstractString, IO},fill_as_missing) = Metadata(JSON.parse(s),fill_as_missing)
+
+function deprec_fillvalue()
+    @warn """In the future, fill values will not be interpreted as missing values by default. 
+    Please set the keyword argument `fill_as_missing` to a boolean accordingly. Setting to `true`
+    for now, but in the future `false` will be the default.
+    """
+    true
+end
 
 "Construct Metadata from Dict"
-function Metadata(d::AbstractDict)
+function Metadata(d::AbstractDict, fill_as_missing)
     # create a Metadata struct from it
 
     compdict = d["compressor"]
@@ -184,7 +193,7 @@ function Metadata(d::AbstractDict)
 
     fv = fill_value_decoding(d["fill_value"], T)
 
-    TU = fv === nothing ? T : Union{T,Missing}
+    TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
     Metadata{TU, N, C, F}(
         d["zarr_format"],

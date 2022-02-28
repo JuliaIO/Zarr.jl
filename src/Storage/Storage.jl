@@ -85,7 +85,7 @@ isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostri
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
-getmetadata(s::AbstractStore, p) = Metadata(String(maybecopy(s[p,".zarray"])))
+getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p,".zarray"])),fill_as_missing)
 function writemetadata(s::AbstractStore, p, m::Metadata)
   met = IOBuffer()
   JSON.print(met,m)

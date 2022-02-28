@@ -14,13 +14,13 @@ ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
 zname(g::ZGroup) = zname(g.path)
 
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r",path="") where T <: AbstractStore
+function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
 
   for d in subdirs(s,path)
     dshort = split(d,'/')[end]
-    m = zopen_noerr(s,mode,path=_concatpath(path,dshort))
+    m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
     if isa(m, ZArray)
       arrays[dshort] = m
     elseif isa(m, ZGroup)
@@ -39,13 +39,17 @@ Works like `zopen` with the single difference that no error is thrown when
 the path or store does not point to a valid zarr array or group, but nothing 
 is returned instead. 
 """
-function zopen_noerr(s::AbstractStore, mode="r"; consolidated = false, path="", lru = 0)
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path)
-    lru !== 0 && return zopen(LRUStore(s,maxsize=lru),mode,path=path)
+function zopen_noerr(s::AbstractStore, mode="r"; 
+  consolidated = false, 
+  path="", 
+  lru = 0,
+  fill_as_missing = deprec_fillvalue())
+    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path,lru=lru,fill_as_missing=fill_as_missing)
+    lru !== 0 && return zopen(LRUStore(s,maxsize=lru),mode,path=path,lru=lru,fill_as_missing=fill_as_missing)
     if is_zarray(s, path)
-        return ZArray(s,mode,path)
+        return ZArray(s,mode,path;fill_as_missing=fill_as_missing)
     elseif is_zgroup(s,path)
-        return ZGroup(s,mode,path)
+        return ZGroup(s,mode,path;fill_as_missing=fill_as_missing)
     else
         return nothing
     end
@@ -80,9 +84,13 @@ of large zarr groups. Setting `lru` to a value > 0 means that chunks that have b
 accessed before will be cached and consecutive reads will happen from the cache. 
 Here, `lru` denotes the number of chunks that remain in memory. 
 """
-function zopen(s::AbstractStore, mode="r"; consolidated = false, path = "", lru = 0)
+function zopen(s::AbstractStore, mode="r"; 
+  consolidated = false, 
+  path = "", 
+  lru = 0,
+  fill_as_missing = deprec_fillvalue())
     # add interfaces to Stores later    
-    r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru)
+    r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
     if r === nothing
         throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
     else

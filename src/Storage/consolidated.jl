@@ -26,7 +26,7 @@ storagesize(d::ConsolidatedStore,p) = storagesize(d.parent,p)
 function Base.getindex(d::ConsolidatedStore,i::String) 
     d.parent[i]
 end
-getmetadata(d::ConsolidatedStore,p) = Metadata(d.cons[_unconcpath(d,p,".zarray")])
+getmetadata(d::ConsolidatedStore,p,fill_as_missing) = Metadata(d.cons[_unconcpath(d,p,".zarray")],fill_as_missing)
 getattrs(d::ConsolidatedStore, p) = get(d.cons,_unconcpath(d,p,".zattrs"), Dict{String,Any}())
 function _unconcpath(d,p)
   startswith(p,d.path) || error("Requested key is not in consolidated path")
@@ -77,7 +77,7 @@ end
 function consolidate_metadata(s::AbstractStore,p)
   d = consolidate_metadata(s,Dict{String,Any}(),p)
   buf = IOBuffer()
-  JSON.print(buf,Dict("metadata"=>d),4)
+  JSON.print(buf,Dict("metadata"=>d,"zarr_consolidated_format"=>1),4)
   s[p,".zmetadata"] = take!(buf)
   ConsolidatedStore(s,p,d)
 end
