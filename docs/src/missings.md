@@ -79,5 +79,7 @@ julia> z[8:12,1]
 
 ```
 
+The `fill_as_missing` option is also available on array construction with `zcreate`, `zopen` or `zzeros`. 
+Note also that one can also write missings into arrays opened with `fill_as_missing=true`. This means that every `missing` entry will be converted to a fillvalue in the zarr array and will appear as fill values in other software that opens the same array. 
 
 
