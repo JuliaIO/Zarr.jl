@@ -29,10 +29,9 @@ push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
 
+
+
 ## This is a server implementation for Zarr datasets
-
-
-
 function zarr_req_handler(s::AbstractStore, p)
   if s[p,".zmetadata"] === nothing
     consolidate_metadata(s)

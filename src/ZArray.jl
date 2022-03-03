@@ -136,8 +136,8 @@ getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
-resetbuffer!(a::Array) = nothing
-resetbuffer!(a::SenMissArray) = fill!(a,missing)
+resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
+resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
@@ -156,7 +156,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
 
     # Uncompress current chunk
     if !readmode && !(isinitialized(z.storage, z.path, bI) && (size(inds) != size(a)))
-      resetbuffer!(a)
+      resetbuffer!(z.metadata.fill_value,a)
     else
       readchunk!(maybeinner(a), z, bI)
     end
@@ -192,9 +192,6 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     a
 end
 
-allmissing(::ZArray,a)=false
-allmissing(z::ZArray{>:Missing},a)=all(isequal(z.metadata.fill_value),a)
-
 """
     writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
 
@@ -204,7 +201,7 @@ function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) wh
   z.writeable || error("Can not write to read-only ZArray")
   z.writeable || error("ZArray not in write mode")
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-  if !allmissing(z,a)
+  if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
     z.storage[z.path,i]=dtemp
@@ -224,6 +221,8 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
 * `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
 * `fill_value=nothing` value to represent missing values
+* `fill_as_missing=true` set to `true` shall fillvalue s be converted to `missing`s
+* `filters`=filters to be applied
 * `compressor=BloscCompressor()` compressor type and properties
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
@@ -246,7 +245,7 @@ function zcreate(::Type{T},storage::AbstractStore,
         path = "",
         chunks=dims,
         fill_value=nothing,
-        fill_as_missing=true,
+        fill_as_missing=fill_value !== nothing && deprec_fillvalue(),
         compressor=BloscCompressor(),
         filters = filterfromtype(T), 
         attrs=Dict(),
@@ -316,9 +315,9 @@ Returns the Cartesian Indices of the chunks of a given ZArray
 chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
 
 """
-    zzeros(T, dims..., )
+    zzeros(T, dims...; kwargs... )
 
-Creates a zarr array and initializes all values with zero.
+Creates a zarr array and initializes all values with zero. Accepts the same keyword arguments as `zcreate`
 """
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)

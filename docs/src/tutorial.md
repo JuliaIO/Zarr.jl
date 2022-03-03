@@ -51,7 +51,7 @@ julia> z[end,end]
 42
 
 julia> z[1,:]
-10000-element Array{Int32,1}:
+10000-element Vector{Int32}:
      1
      2
      3
@@ -75,7 +75,7 @@ julia> z[1,:]
 
 
 julia> z[1:5,1:10]
-5×10 Array{Int32,2}:
+5×10 Matrix{Int32}:
  1   2   3   4   5   6   7   8   9  10
  2  42  42  42  42  42  42  42  42  42
  3  42  42  42  42  42  42  42  42  42
@@ -199,8 +199,8 @@ Compressor          : Zarr.BloscCompressor(0, 3, "zstd", true)
 Filters             : nothing
 Store type          : Dictionary Storage
 No. bytes           : 400000000
-No. bytes stored    : 2412230
-Storage ratio       : 165.82166708813008
+No. bytes stored    : 2412289
+Storage ratio       : 165.81761140559857
 Chunks initialized  : 100/100
 ```
 
@@ -222,7 +222,7 @@ If you need to store an array of arrays, where each member array can be of any l
 
 ```jldoctest ragged
 julia> z = zcreate(Vector{Int}, 4)
-ZArray{Array{Int64,1}} of size 4
+ZArray{Vector{Int64}} of size 4
 
 julia> z.metadata.filters
 (Zarr.VLenArrayFilter{Int64}(),)
@@ -230,7 +230,7 @@ julia> z.metadata.filters
 julia> z[1:3] = [[1,3,5],[4],[7,9,14]];
 
 julia> z[:]
-4-element Array{Array{Int64,1},1}:
+4-element Vector{Vector{Int64}}:
  [1, 3, 5]
  [4]
  [7, 9, 14]

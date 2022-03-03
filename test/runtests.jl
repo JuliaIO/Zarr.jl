@@ -124,7 +124,7 @@ end
         @test metadata.filters === nothing
 
         jsonstr = json(metadata)
-        metadata_cycled = Zarr.Metadata(jsonstr)
+        metadata_cycled = Zarr.Metadata(jsonstr,false)
         @test metadata == metadata_cycled
     end
 
@@ -160,7 +160,7 @@ end
   @test a[5:6,5:6] == [1 0; 0 0]
   @test a[9:10,9:10] == fill(2,2,2)
   # Now with FillValue
-  amiss = zzeros(Int64, 10,10,chunks=(5,2), fill_value=-1)
+  amiss = zzeros(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=true)
   amiss[:,1] = 1:10
   amiss[:,2] .= missing
   amiss[1:3,4] = [1,missing,3]
@@ -172,7 +172,18 @@ end
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
   # Test that chunk containing only missings is not initialized
   @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+  #
+  amiss = zcreate(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=false)
+  amiss[:,1] = 1:10
+  amiss[1:3,4] = [1,-1,3]
+  amiss[1,10] = 5
+  amiss[1:5,9:10] .= -1
 
+  @test amiss[:,1] == 1:10
+  @test all(==(-1),amiss[:,2])
+  @test all(i->isequal(i...),zip(amiss[1:3,4],[1,-1,3]))
+  # Test that chunk containing only fill values is not initialized
+  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
 end
 
 @testset "resize" begin
