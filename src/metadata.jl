@@ -152,7 +152,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::Nothing=nothing,
-        fill_as_missing = deprec_fillvalue(),
+        fill_as_missing = fill_value !== nothing && deprec_fillvalue(),
     ) where {T, N, C}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     Metadata{T2, N, C, typeof(filters)}(

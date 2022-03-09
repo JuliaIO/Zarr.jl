@@ -13,6 +13,7 @@ makedocs(
         "Storage Backends" => "storage.md",
         "Accessing cloud data Examples" => "s3examples.md",
         "Operations on Zarr Arrays" => "operations.md",
+        "Dealing with missing values" => "missings.md",
     ]
 )
 

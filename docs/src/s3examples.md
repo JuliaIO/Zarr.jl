@@ -143,7 +143,7 @@ Next we create a new zarr group in the just created bucket:
 
 ````@example minio
 using Zarr
-g = zgroup(S3Store("zarrdata","group_1"))
+g = zgroup(S3Store("zarrdata"),"group_1")
 ````
 
 and a new array inside the group and fill it with some data:

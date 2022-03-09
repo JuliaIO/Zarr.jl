@@ -101,15 +101,19 @@ end
   chunks = (5,10)
   metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
   using Minio
-  s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
-  run(s, wait=false)
-  cfg = MinioConfig("http://localhost:9001")
-  Zarr.AWS.global_aws_config(cfg)
-  Zarr.S3.create_bucket("zarrdata")
-  ds = S3Store("zarrdata")
-  test_store_common(ds)
-  @test sprint(show, ds) == "S3 Object Storage"
-  kill(s)
+  if !isempty(Minio.getexe())
+    s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
+    run(s, wait=false)
+    cfg = MinioConfig("http://localhost:9001")
+    Zarr.AWS.global_aws_config(cfg)
+    Zarr.S3.create_bucket("zarrdata")
+    ds = S3Store("zarrdata")
+    test_store_common(ds)
+    @test sprint(show, ds) == "S3 Object Storage"
+    kill(s)
+  else
+    @warn "Skipping Minio Tests, because the package was not built correctly"
+  end
 end
 
 @testset "AWS S3 Storage" begin
