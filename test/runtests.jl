@@ -34,6 +34,10 @@ end
         @test z.metadata.compressor.shuffle === true
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
+        @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
+        @test_throws ArgumentError zzeros(Int64,0,-1)
+        @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), zarr_format = 3)
+        @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')
     end
 
     @testset "methods" begin

@@ -129,6 +129,15 @@ struct Metadata{T, N, C, F}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
+    function Metadata{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters) where {T2,N,C,F}
+        #We currently only support version 
+        zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
+        #Do some sanity checks to make sure we have a sane array
+        any(<(0), shape) && throw(ArgumentError("Size must be positive"))
+        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+        order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
+        new{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters)
+    end
 end
 
 #To make unit tests pass with ref shape
