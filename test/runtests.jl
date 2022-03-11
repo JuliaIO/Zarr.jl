@@ -212,6 +212,7 @@ end
   append!(a,vcat(singlerow', singlerow'), dims=1)
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
+  @test_throws ArgumentError resize!(a,(-1,2))
 end
 
 @testset "string array getindex/setindex" begin

@@ -336,6 +336,7 @@ Resizes a `ZArray` to the new specified size. If the size along any of the
 axes is decreased, unused chunks will be deleted from the store.
 """
 function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
+    any(<(0), newsize) && throw(ArgumentError("Size must be positive"))
     oldsize = z.metadata.shape[]
     z.metadata.shape[] = newsize
     #Check if array was shrunk
