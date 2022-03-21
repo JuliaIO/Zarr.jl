@@ -232,6 +232,7 @@ end
   a, b, c, d = [1.0,2.0,3.0], [4.0,5.0],[2.0],[2.0,3.0]
   z[1,1] = a
   z[2,1:3] = [b,c,d]
+  z[1,2:3] = [[],[]]
   @test z[:,:] == reshape([a,b,[],c,[],d],2,3)
   @test storageratio(z) == "unknown"
   @test zinfo(z) === nothing
