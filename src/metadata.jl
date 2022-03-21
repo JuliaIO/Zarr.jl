@@ -96,7 +96,7 @@ function typestr(s::AbstractString, filterlist=nothing)
             if filterlist === nothing
                 throw(ArgumentError("Object array can only be parsed when an appropriate filter is defined"))
             end
-            return Vector{sourcetype(first(filterlist))}
+            return sourcetype(first(filterlist))
         end
         isempty(typesize) && throw((ArgumentError("$s is not a valid numpy typestr")))
         tc, ts = first(typecode), parse(Int, typesize)

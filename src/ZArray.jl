@@ -21,8 +21,6 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 
 # Struct representing a Zarr Array in Julia, note that
 # chunks(chunk size) and size are always in Julia column-major order
-# Currently this is not an AbstractArray, because indexing single elements is
-# would be really slow, although most AbstractArray interface functions are implemented
 struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
     metadata::Metadata{T, N, C}
     storage::S
@@ -72,6 +70,7 @@ storageratio(z::ZArray{<:Vector}) = "unknown"
 
 nobytes(z::ZArray) = length(z)*sizeof(eltype(z))
 nobytes(z::ZArray{<:Vector}) = "unknown"
+nobytes(z::ZArray{<:String}) = "unknown"
 
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
@@ -128,11 +127,7 @@ function getchunkarray(z::ZArray{>:Missing})
     inner = fill(z.metadata.fill_value, z.metadata.chunks)
     a = SenMissArray(inner,z.metadata.fill_value)
 end
-_zero(T) = zero(T)
-_zero(T::Type{<:MaxLengthString}) = T("")
-_zero(T::Type{ASCIIChar}) = ASCIIChar(0)
-_zero(::Type{<:Vector{T}}) where T = T[]
-getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
+getchunkarray(z::ZArray) = Array{eltype(z)}(undef, z.metadata.chunks...)
 
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
