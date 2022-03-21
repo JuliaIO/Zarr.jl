@@ -228,7 +228,7 @@ end
 end
 
 @testset "ragged arrays" begin
-  z = zcreate(Vector{Float64},2,3)
+  z = zcreate(Vector{Float64},2,3,chunks=(1,1))
   a, b, c, d = [1.0,2.0,3.0], [4.0,5.0],[2.0],[2.0,3.0]
   z[1,1] = a
   z[2,1:3] = [b,c,d]
