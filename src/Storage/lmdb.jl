@@ -3,12 +3,12 @@ using LMDB: LMDB
 struct LMDBStore <: AbstractStore
     d::LMDB.LMDBDict{String,Vector{UInt8}}
 end
-function LMDBStore(p::String; create = false, readonly=false)
+function LMDBStore(p::String; create = false, kwargs...)
     if create
         ispath(p) && throw(ArgumentError("Path at $p already exists"))
         mkpath(p)
     end
-    LMDBStore(LMDB.LMDBDict{String,Vector{UInt8}}(p, readonly=readonly, rdahead=false))
+    LMDBStore(LMDB.LMDBDict{String,Vector{UInt8}}(p; kwargs...))
 end
 Base.show(io::IO,d::LMDBStore) = print(io,"LMDB Database at $(d.d.env.path)")
 
