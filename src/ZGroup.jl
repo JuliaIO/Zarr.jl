@@ -145,9 +145,9 @@ function zgroup(g::ZGroup, name; attrs=Dict())
 end
 
 "Create a new subarray of the group g"
-function zcreate(::Type{T},g::ZGroup, name::String, addargs...; kwargs...) where T
+function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs...) where T
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-
+  name = string(name)
   z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
   g.arrays[name] = z
   return z

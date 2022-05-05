@@ -227,7 +227,7 @@ Creates a new empty zarr aray with element type `T` and array dimensions `dims`.
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 """
-function zcreate(::Type{T}, dims...;
+function zcreate(::Type{T}, dims::Integer...;
         name="",
         path=nothing,
         kwargs...
