@@ -49,6 +49,8 @@ end
         @test ndims(z) === 2
         @test size(z) === (2, 3)
         @test size(z, 2) === 3
+        @inferred size(z)
+        @inferred size(z, 2)
         @test length(z) === 2 * 3
         @test lastindex(z, 2) === 3
         @test Zarr.zname(z) === "root"
