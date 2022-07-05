@@ -122,7 +122,7 @@ https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
 struct Metadata{T, N, C, F}
     zarr_format::Int
-    shape::Ref{NTuple{N, Int}}
+    shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
     dtype::String  # structured data types not yet supported
     compressor::C
@@ -136,7 +136,7 @@ struct Metadata{T, N, C, F}
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters)
+        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
     end
 end
 
