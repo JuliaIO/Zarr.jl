@@ -5,7 +5,10 @@ end
 DictStore() = DictStore(Dict{String,Vector{UInt8}}())
 
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
-_pdict(d::DictStore,p) = filter(((k,v),)->startswith(k,p),d.a)
+function _pdict(d::DictStore,p) 
+  p = (isempty(p) || endswith(p,'/')) ? p : p*'/'
+  filter(((k,v),)->startswith(k,p),d.a)
+end
 function storagesize(d::DictStore,p) 
   sum(i->last(split(i[1],'/')) ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])), _pdict(d,p))
 end

@@ -42,6 +42,11 @@ function test_store_common(ds)
   @test !Zarr.isinitialized(ds,"bar",CartesianIndex((0,0,0)))
   @test !Zarr.isinitialized(ds,"bar/0.0.0")
   ds["bar/0.0.0"] = data
+  #Add tests for empty storage
+  @test Zarr.isemptysub(ds,"ba")
+  @test Zarr.isemptysub(ds,"ba/")
+  @test !Zarr.isemptysub(ds,"bar")
+  @test !Zarr.isemptysub(ds,"bar/")
 end
 
 @testset "DirectoryStore" begin
@@ -101,7 +106,7 @@ end
   chunks = (5,10)
   metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
   using Minio
-  if !isempty(Minio.getexe())
+  if !isnothing(Minio.minio())
     s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
     run(s, wait=false)
     cfg = MinioConfig("http://localhost:9001")
