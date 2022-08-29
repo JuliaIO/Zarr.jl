@@ -6,7 +6,7 @@ DictStore() = DictStore(Dict{String,Vector{UInt8}}())
 
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 function _pdict(d::DictStore,p) 
-  p = endswith(p,'/') ? p : p*'/'
+  p = (isempty(p) || endswith(p,'/')) ? p : p*'/'
   filter(((k,v),)->startswith(k,p),d.a)
 end
 function storagesize(d::DictStore,p) 
