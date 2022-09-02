@@ -1,36 +1,27 @@
-using AWS
-
-@service S3
+using AWSS3: AWSS3, s3_put, s3_get, s3_delete, s3_list_objects, s3_exists
 
 struct S3Store <: AbstractStore
     bucket::String
-    listversion::Int
-    aws::AWS.AbstractAWSConfig
+    aws::AWSS3.AWS.AbstractAWSConfig
 end
 
 
 function S3Store(bucket::String;
-  listversion = 2,
-  aws = nothing,
+    aws = nothing,
   )
   if aws === nothing
-    aws = AWS.global_aws_config()
+    aws = AWSS3.AWS.global_aws_config()
   end
-  S3Store(bucket, listversion, aws)
+  S3Store(bucket, aws)
 end
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
 
-function error_is_ignorable(e)
-  #isa(e,AWSException) && (e.code=="NoSuchKey" || e.code=="404")
-  true
-end
-
 function Base.getindex(s::S3Store, i::String)
   try
-    return S3.get_object(s.bucket,i,aws_config=s.aws)
+    return s3_get(s.aws,s.bucket,i,raw=true,retry=false)
   catch e
-    if error_is_ignorable(e)
+    if e isa AWSS3.AWS.AWSException && e.code == "NoSuchKey"
       return nothing
     else
       throw(e)
@@ -39,43 +30,32 @@ function Base.getindex(s::S3Store, i::String)
 end
 
 function Base.setindex!(s::S3Store, v, i::String)
-  return S3.put_object(s.bucket,i,Dict("body"=>v),aws_config=s.aws)
+  return s3_put(s.aws,s.bucket,i,v)
 end
 
-Base.delete!(s::S3Store, d::String) = S3.delete_object(s.bucket,d, aws_config=s.aws)
+Base.delete!(s::S3Store, d::String) = s3_delete(s.aws,s.bucket,d)
 
 function storagesize(s::S3Store,p)
-  r = cloud_list_objects(s,p)
-  haskey(r,"Contents") || return 0
-  contents = r["Contents"]
-  datafiles = filter(entry -> !any(filename -> endswith(entry["Key"], filename), [".zattrs",".zarray",".zgroup"]), contents)
-  if isempty(datafiles)
-    0
-  else
-    sum(datafiles) do f
-      parse(Int, f["Size"])
+  prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
+  r = s3_list_objects(s.aws,s.bucket,prefix)
+  s = 0
+  for entry in r
+    filename = splitdir(entry["Key"])[2]
+    if !in(filename,(".zattrs",".zarray",".zgroup"))
+      s = s+parse(Int,entry["Size"])
     end
   end
+  s
 end
 
 function isinitialized(s::S3Store, i::String)
-  try
-    S3.head_object(s.bucket,i,aws_config=s.aws)
-    return true
-  catch e
-    if error_is_ignorable(e)
-      return false
-    else
-      println(i)
-      throw(e)
-    end
-  end
+  s3_exists(s.aws,s.bucket,i)
 end
+
 
 function cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
-  listfun = s.listversion==2 ? S3.list_objects_v2 : S3.list_objects
-  listfun(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
+  AWSS3.S3.list_objects_v2(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
 function subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
@@ -97,5 +77,5 @@ function storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
-  S3Store(String(bucket),aws=AWS.global_aws_config()),path
+  S3Store(String(bucket),aws=AWSS3.AWS.global_aws_config()),path
 end

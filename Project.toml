@@ -4,7 +4,7 @@ authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 version = "0.7.3"
 
 [deps]
-AWS = "fbe9abb3-538b-5e4e-ba9e-bc94f4f92ebc"
+AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
 Blosc = "a74b3585-a348-5f62-a45c-50e91977d574"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
@@ -18,7 +18,6 @@ Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 
 [compat]
-AWS = "1.25 - 1.61"
 Blosc = "0.5, 0.6, 0.7"
 CodecZlib = "0.6, 0.7"
 DataStructures = "0.17, 0.18"
