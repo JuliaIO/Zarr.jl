@@ -18,6 +18,7 @@ Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 
 [compat]
+AWSS3 = "0.10"
 Blosc = "0.5, 0.6, 0.7"
 CodecZlib = "0.6, 0.7"
 DataStructures = "0.17, 0.18"
