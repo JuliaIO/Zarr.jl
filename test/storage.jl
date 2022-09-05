@@ -97,7 +97,7 @@ end
   @test all(iszero,a2[1:10,1])
   @test_throws ErrorException a2[1,1] = 5
   @test_throws ErrorException delete!(newstore,"foo/0.0")
-  @test isequal(a2[1,1000], missing)
+  @test isnan(a2[1,1000])
   @test storagesize(a2) == 83002
 end
 
@@ -146,10 +146,10 @@ end
     g = zopen(cmip6,path=p)
     arr = g["psl"]
     @test size(arr) == (288, 192, 97820)
-    @test eltype(arr) == Union{Missing, Float32}
+    @test eltype(arr) == Float32
     lat = g["lat"]
     @test size(lat) == (192,)
-    @test eltype(lat) == Union{Missing, Float64}
+    @test eltype(lat) == Float64
     @test lat[1:4] == [-90.0,-89.05759162303664,-88.1151832460733,-87.17277486910994]
   end
 end

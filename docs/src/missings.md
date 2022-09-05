@@ -7,7 +7,7 @@ julia> using Zarr
 
 julia> p = tempname();
 
-julia> z = zcreate(Int64, 100, 100, path = p, chunks = (10,10), fill_value=-1, fill_as_missing=false)
+julia> z = zcreate(Int64, 100, 100, path = p, chunks = (10,10), fill_value=-1)
 ZArray{Int64} of size 100 x 100
 
 julia> z[1:2,1]

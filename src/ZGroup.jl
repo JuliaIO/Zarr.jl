@@ -88,7 +88,7 @@ function zopen(s::AbstractStore, mode="r";
   consolidated = false, 
   path = "", 
   lru = 0,
-  fill_as_missing = deprec_fillvalue())
+  fill_as_missing = false)
     # add interfaces to Stores later    
     r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
     if r === nothing

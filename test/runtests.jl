@@ -198,7 +198,7 @@ end
   @test size(a)==(5,4)
   resize!(a,10,10)
   @test size(a)==(10,10)
-  @test all(ismissing,a[6:end,:])
+  @test all(==(-1),a[6:end,:])
   xapp = rand(1:10,10,20)
   append!(a,xapp)
   @test size(a)==(10,30)
@@ -241,6 +241,22 @@ end
   z2 = ZArray(reshape([a,b,Float64[],c,Float64[],d],2,3))
   @test z[:,:] == z2[:,:]
 end
+
+@testset "Fillvalue as missing" begin 
+    p = tempname()
+    a = zcreate(Int,2,3,fill_value=-1,fill_as_missing=true,path=p)
+    @test all(ismissing,a[:,:])
+    @test eltype(a) == Union{Int,Missing}
+    a[:,1] .= 5
+    b = zopen(p,fill_as_missing=true)
+    @test eltype(b) == Union{Int, Missing}
+    @test all(ismissing,b[:,2:3])
+    @test all(==(5),b[:,1])
+    c = zopen(p)
+    @test eltype(c) == Int
+    @test all(==(-1),c[:,2:3])
+    @test all(==(5),c[:,1])
+  end
 
 include("storage.jl")
 
