@@ -28,7 +28,13 @@ dtypes = (UInt8, UInt16, UInt32, UInt64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
     Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32})
-compressors = ("no"=>NoCompressor(), "blosc"=>BloscCompressor(cname="zstd"),"zlib"=>ZlibCompressor())
+compressors = (
+    "no"=>NoCompressor(),
+    "blosc"=>BloscCompressor(cname="zstd"),
+    "blosc_autoshuffle"=>BloscCompressor(cname="zstd",shuffle=-1),
+    "blosc_noshuffle"=>BloscCompressor(cname="zstd",shuffle=0),
+    "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
+    "zlib"=>ZlibCompressor())
 testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10,1:6,1:2))] : rand(t,10,6,2) for t in dtypes)
 
 for t in dtypes, co in compressors
