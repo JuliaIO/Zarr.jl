@@ -31,7 +31,7 @@ end
         @test z.metadata.compressor.blocksize === 0
         @test z.metadata.compressor.clevel === 5
         @test z.metadata.compressor.cname === "lz4"
-        @test z.metadata.compressor.shuffle === true
+        @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
