@@ -2,6 +2,12 @@ import JSON
 import OffsetArrays: OffsetArray
 import DiskArrays: AbstractDiskArray
 import DiskArrays
+
+"""
+Number of tasks to use for async reading of chunks. Warning: setting this to very high values can lead to a large memory footprint. 
+"""
+const concurrent_io_tasks = Ref(10)
+
 getfillval(::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(::Type{T}, t::Union{T,Nothing}) where {T} = t
 
@@ -146,10 +152,12 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
   # Allocate array of the size of a chunks where uncompressed data can be held
-  a = getchunkarray(z)
-  # Now loop through the chunks
-  foreach(blockr) do bI
+  bufferdict = IdDict((current_task()=>getchunkarray(z),))
 
+  # Now loop through the chunks
+  asyncmap(blockr,ntasks=concurrent_io_tasks[]) do bI
+    a = get!(()->getchunkarray(z),bufferdict,current_task())
+    
     curchunk = OffsetArray(a,map((s,i)->s*(i-1),size(a),Tuple(bI))...)
 
     inds    = CartesianIndices(map(boundint,r.indices,axes(curchunk)))
@@ -167,6 +175,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       copyto!(curchunk,inds,aout,inds)
       writechunk!(maybeinner(a), z, bI)
     end
+    nothing
   end
   aout
 end
@@ -187,7 +196,7 @@ function readchunk!(a::DenseArray,z::ZArray{<:Any,N},i::CartesianIndex{N}) where
     if curchunk === nothing
         fill!(a, z.metadata.fill_value)
     else
-        zuncompress!(a, curchunk, z.metadata.compressor, z.metadata.filters)
+      zuncompress!(a, curchunk, z.metadata.compressor, z.metadata.filters)
     end
     a
 end

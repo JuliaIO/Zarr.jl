@@ -95,7 +95,7 @@ end
   # Now we modify the lru store to test that data is actually read from there
   newstore.lru["foo/0.0"] .= 0
   @test all(iszero,a2[1:10,1])
-  @test_throws ErrorException a2[1,1] = 5
+  @test_throws CapturedException a2[1,1] = 5
   @test_throws ErrorException delete!(newstore,"foo/0.0")
   @test isnan(a2[1,1000])
   @test storagesize(a2) == 83002

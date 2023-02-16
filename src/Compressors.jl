@@ -62,6 +62,11 @@ end
 
 zuncompress(a, ::BloscCompressor, T) = Blosc.decompress(Base.nonmissingtype(T), a)
 
+function zuncompress!(data, compressed, c::BloscCompressor) 
+    Blosc.decompress!(vec(data), compressed)
+end
+
+
 function zcompress(a, c::BloscCompressor)
     itemsize = sizeof(eltype(a))
     shuffle = c.shuffle
