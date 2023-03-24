@@ -29,6 +29,7 @@ push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
 
+store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[])
 
 
 ## This is a server implementation for Zarr datasets

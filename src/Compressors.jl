@@ -62,8 +62,16 @@ end
 
 zuncompress(a, ::BloscCompressor, T) = Blosc.decompress(Base.nonmissingtype(T), a)
 
-function zuncompress!(data, compressed, c::BloscCompressor) 
-    Blosc.decompress!(vec(data), compressed)
+function zuncompress!(data, compressed, ::BloscCompressor) 
+    if Int(pointer(data,length(data))-pointer(data)) != (length(data)-1)*sizeof(eltype(data))
+        @show size(data)
+        @show size(parent(data))
+        @show typeof(data)
+        @show Int(pointer(data,length(data))-pointer(data))
+        @show (length(data)-1)*sizeof(eltype(data))
+        error("Something is wrong")
+    end
+    Zarr.Blosc.blosc_decompress(data, compressed, sizeof(data))
 end
 
 
