@@ -6,7 +6,7 @@ import DiskArrays
 """
 Number of tasks to use for async reading of chunks. Warning: setting this to very high values can lead to a large memory footprint. 
 """
-const concurrent_io_tasks = Ref(10)
+const concurrent_io_tasks = Ref(50)
 
 getfillval(::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(::Type{T}, t::Union{T,Nothing}) where {T} = t
