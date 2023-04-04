@@ -146,18 +146,9 @@ maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
 resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 
-is_array_or_contig(a::Array) = true
-is_array_or_contig(a::SubArray) = Base.iscontiguous(a)
-
-function is_contig_subset(inds,sout,cs,rescont)
-
-  rescont && length.(inds) == cs && length.(Base.front(inds)) == Base.front(sout)
-end
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
-function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}; readmode=true) where {N}
-  
-  result_contig = is_array_or_contig(aout)
+function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
   
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
@@ -181,37 +172,8 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
 
       indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-
-      # @show bI, current_chunk_offsets
-      # @show indranges
       
-      iscont =  is_contig_subset(indranges, size(aout),z.metadata.chunks,result_contig)
-      
-      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,iscont,a,indranges)
-      # Uncompress current chunk
-      # if !readmode && !(!isnothing(chunk_compressed) && (length.(indranges) != size(a)))
-      #   if iscont
-      #     resetbuffer!(z.metadata.fill_value,a)
-      #   else
-      #     aout[(indranges .+ output_base_offsets)...] .= z.metadata.fill_value
-      #   end
-      # else
-      #   if iscont
-
-      #   else
-      #     uncompress_raw!(maybeinner(a), z, chunk_compressed)
-      #     aout[inds.indices...] = curchunk[inds.indices...]
-      #   end
-      # end
-      # if readmode
-      #   # Read data 
-
-      #   #copyto!(aout,inds,curchunk,inds)
-        
-      # else
-      #   copyto!(curchunk,inds,aout,inds)
-      #   writechunk!(maybeinner(a), z, bI)
-      # end
+      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
       nothing
     end
   finally
@@ -220,8 +182,68 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   aout
 end
 
+function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
+  
+  z.writeable || error("Can not write to read-only ZArray")
+
+  input_base_offsets = map(i->first(i)-1,r.indices)
+  # Determines which chunks are affected
+  blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
+  # Allocate array of the size of a chunks where uncompressed data can be held
+  #bufferdict = IdDict((current_task()=>getchunkarray(z),))
+  a = getchunkarray(z)
+  # Now loop through the chunks
+  readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
+  
+  readtask = @async begin 
+    read_items!(z.storage,readchannel, z.path, blockr)
+  end
+  bind(readchannel,readtask)
+
+  writechannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
+
+  writetask = @async begin
+    write_items!(z.storage,writechannel,z.path,blockr)
+  end
+  bind(writechannel,writetask)
+  
+  try 
+    for i in 1:length(blockr)
+      
+      bI,chunk_compressed = take!(readchannel)
+      
+      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
+
+      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
+
+      if isnothing(chunk_compressed) || (length.(indranges) != size(a))
+        resetbuffer!(z.metadata.fill_value,a)
+      end
+
+      curchunk = if length.(indranges) != size(a)
+        view(a,dotminus.(indranges,current_chunk_offsets)...)
+      else
+        a
+      end
+      
+      if chunk_compressed !== nothing
+        uncompress_raw!(a,z,chunk_compressed)
+      end
+
+      curchunk .= view(ain,dotminus.(indranges,input_base_offsets)...)
+
+      put!(writechannel,bI=>compress_raw(maybeinner(a),z))
+      nothing
+    end
+  finally
+    close(readchannel)
+    close(writechannel)
+  end
+  ain
+end
+
 DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
-DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = readblock!(v,a,CartesianIndices(i),readmode=false)
+DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = writeblock!(v,a,CartesianIndices(i))
 DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
@@ -241,35 +263,25 @@ end
 
 dotminus(x,y) = x.-y
 
-function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,iscont,a,indranges)
-  if iscont
-    target_array = view(aout,dotminus.(indranges, output_base_offsets)...)
-    uncompress_raw!(target_array,z,chunk_compressed)
-  else
-    curchunk = view(a,dotminus.(indranges,current_chunk_offsets)...)
-    uncompress_raw!(a,z,chunk_compressed)
-    aout[dotminus.(indranges, output_base_offsets)...] = curchunk
-  end
+function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
+  curchunk = view(a,dotminus.(indranges,current_chunk_offsets)...)
+  uncompress_raw!(a,z,chunk_compressed)
+  aout[dotminus.(indranges, output_base_offsets)...] = curchunk
 end
 
-"""
-writechunk!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N}) where {T,N}
-
-Write the data from the array `a` to the chunk `i` in the ZArray `z`
-"""
-function writechunk!(a::DenseArray, z::ZArray{<:Any,N}, i::CartesianIndex{N}) where N
-  z.writeable || error("Can not write to read-only ZArray")
-  z.writeable || error("ZArray not in write mode")
+function compress_raw(a,z)
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
-    z.storage[z.path,i]=dtemp
+    dtemp
   else
-    isinitialized(z.storage,z.path,i) && delete!(z.storage,z.path,i)
+    @show "empty chunk"
+    nothing
   end
-  a
 end
+
+
 
 """
 zcreate(T, dims...;kwargs)
@@ -382,8 +394,10 @@ Creates a zarr array and initializes all values with zero. Accepts the same keyw
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)
   as = zeros(T, z.metadata.chunks...)
+  data_encoded = compress_raw(as,z)
+  p = z.path
   for i in chunkindices(z)
-    writechunk!(as, z, i)
+    z.storage[p,i] = data_encoded
   end
   z
 end

@@ -108,9 +108,7 @@ channelsize(c::ConcurrentRead) = c.ntasks
 read_items!(s::AbstractStore,c::AbstractChannel, p, i) = read_items!(s,c,store_read_strategy(s),p,i)
 function read_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
     for ii in i
-        @show "Single", p,ii
         res = s[p,ii]
-        @show length(res)
         put!(c,(ii=>res))
     end
 end
@@ -124,6 +122,40 @@ function read_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i
         put!(c,(ii=>res))
         nothing
     end
+end
+
+write_items!(s::AbstractStore,c::AbstractChannel, p, i) = write_items!(s,c,store_read_strategy(s),p,i)
+function write_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
+  for _ in 1:length(i)
+      ii,data = take!(c)
+      @show ii,data
+      if data === nothing
+        @show ii,data
+        if isinitialized(s,p,ii)
+          @show "deleting"
+          delete!(s,p,ii)
+        end
+      else
+        s[p,ii] = data
+      end
+  end
+  close(c)
+end
+
+function write_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i)
+  ntasks = r.ntasks
+  asyncmap(i,ntasks = ntasks) do _
+      ii,data = take!(c)
+      if data === nothing
+        if isinitialized(s,ii)
+          delete!(s,ii)
+        end
+      else
+        s[p,ii] = data
+      end
+      nothing
+  end
+  close(c)
 end
 
 isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
