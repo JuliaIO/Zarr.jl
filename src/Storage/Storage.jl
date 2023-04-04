@@ -128,11 +128,8 @@ write_items!(s::AbstractStore,c::AbstractChannel, p, i) = write_items!(s,c,store
 function write_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
   for _ in 1:length(i)
       ii,data = take!(c)
-      @show ii,data
       if data === nothing
-        @show ii,data
         if isinitialized(s,p,ii)
-          @show "deleting"
           delete!(s,p,ii)
         end
       else

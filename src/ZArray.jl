@@ -276,7 +276,6 @@ function compress_raw(a,z)
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
     dtemp
   else
-    @show "empty chunk"
     nothing
   end
 end
