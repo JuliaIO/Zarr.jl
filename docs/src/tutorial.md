@@ -171,7 +171,7 @@ A number of different compressors can be used with Zarr. In this Julia package w
 julia> using Zarr
 
 julia> compressor = Zarr.BloscCompressor(cname="zstd", clevel=3, shuffle=true)
-Zarr.BloscCompressor(0, 3, "zstd", 1)
+Zarr.BloscCompressor(0, 3, "zstd", true)
 
 julia> data = Int32(1):Int32(100000000)
 1:100000000
@@ -195,7 +195,7 @@ Shape               : (10000, 10000)
 Chunk Shape         : (1000, 1000)
 Order               : C
 Read-Only           : false
-Compressor          : Zarr.BloscCompressor(0, 3, "zstd", 1)
+Compressor          : Zarr.BloscCompressor(0, 3, "zstd", true)
 Filters             : nothing
 Store type          : Dictionary Storage
 No. bytes           : 400000000
