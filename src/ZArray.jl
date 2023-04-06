@@ -264,9 +264,15 @@ end
 dotminus(x,y) = x.-y
 
 function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
-  curchunk = view(a,dotminus.(indranges,current_chunk_offsets)...)
+  
   uncompress_raw!(a,z,chunk_compressed)
-  aout[dotminus.(indranges, output_base_offsets)...] = curchunk
+  
+  if length.(indranges) == size(a)
+    aout[dotminus.(indranges, output_base_offsets)...] = a
+  else
+    curchunk = a[dotminus.(indranges,current_chunk_offsets)...]
+    aout[dotminus.(indranges, output_base_offsets)...] = curchunk
+  end
 end
 
 function compress_raw(a,z)
