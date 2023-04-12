@@ -9,7 +9,6 @@ include("Storage/Storage.jl")
 include("Filters.jl")
 include("ZArray.jl")
 include("ZGroup.jl")
-include("Storage/lru.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
   zinfo, DirectoryStore, S3Store, GCStore, zgroup

@@ -79,3 +79,5 @@ function storefromstring(::Type{<:S3Store}, s, _)
   path = join(decomp[3:end],"/")
   S3Store(String(bucket),aws=AWSS3.AWS.global_aws_config()),path
 end
+
+store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])

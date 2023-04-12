@@ -1,4 +1,5 @@
 using HTTP
+using OpenSSL: OpenSSL
 
 """
     HTTPStore
@@ -13,7 +14,7 @@ struct HTTPStore <: AbstractStore
 end
 
 function Base.getindex(s::HTTPStore, k::String)
-r = HTTP.request("GET",string(s.url,"/",k),status_exception = false)
+r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream,connection_limit=25)
 if r.status >= 300
     if r.status == 404
         nothing
@@ -25,10 +26,12 @@ else
 end
 end
 
+
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
 
+store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[])
 
 
 ## This is a server implementation for Zarr datasets

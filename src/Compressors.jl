@@ -62,6 +62,20 @@ end
 
 zuncompress(a, ::BloscCompressor, T) = Blosc.decompress(Base.nonmissingtype(T), a)
 
+function zuncompress!(data::DenseArray, compressed, ::BloscCompressor) 
+    Blosc.decompress!(vec(data),compressed)
+    # if Int(pointer(data,length(data))-pointer(data)) != (length(data)-1)*sizeof(eltype(data))
+    #     @show size(data)
+    #     @show size(parent(data))
+    #     @show typeof(data)
+    #     @show Int(pointer(data,length(data))-pointer(data))
+    #     @show (length(data)-1)*sizeof(eltype(data))
+    #     error("Something is wrong")
+    # end
+    # Zarr.Blosc.blosc_decompress(data, compressed, sizeof(data))
+end
+
+
 function zcompress(a, c::BloscCompressor)
     itemsize = sizeof(eltype(a))
     shuffle = c.shuffle

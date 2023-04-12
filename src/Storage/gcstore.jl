@@ -146,3 +146,5 @@ function storefromstring(::Type{<:GCStore}, url,_)
   @debug "path: $p"
   return GCStore(url),p
 end
+
+store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])

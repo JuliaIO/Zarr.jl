@@ -94,6 +94,67 @@ function writemetadata(s::AbstractStore, p, m::Metadata)
 end
 
 
+## Handling sequential vs parallel IO
+struct SequentialRead end
+struct ConcurrentRead
+    ntasks::Int
+end
+store_read_strategy(::AbstractStore) = SequentialRead()
+
+channelsize(s) = channelsize(store_read_strategy(s))
+channelsize(::SequentialRead) = 0
+channelsize(c::ConcurrentRead) = c.ntasks
+
+read_items!(s::AbstractStore,c::AbstractChannel, p, i) = read_items!(s,c,store_read_strategy(s),p,i)
+function read_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
+    for ii in i
+        res = s[p,ii]
+        put!(c,(ii=>res))
+    end
+end
+function read_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i)
+    ntasks = r.ntasks
+    #@show ntasks
+    asyncmap(i,ntasks = ntasks) do ii
+        #@show ii,objectid(current_task),p
+        res = s[p,ii]
+        #@show ii,length(res)
+        put!(c,(ii=>res))
+        nothing
+    end
+end
+
+write_items!(s::AbstractStore,c::AbstractChannel, p, i) = write_items!(s,c,store_read_strategy(s),p,i)
+function write_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
+  for _ in 1:length(i)
+      ii,data = take!(c)
+      if data === nothing
+        if isinitialized(s,p,ii)
+          delete!(s,p,ii)
+        end
+      else
+        s[p,ii] = data
+      end
+  end
+  close(c)
+end
+
+function write_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i)
+  ntasks = r.ntasks
+  asyncmap(i,ntasks = ntasks) do _
+      ii,data = take!(c)
+      if data === nothing
+        if isinitialized(s,ii)
+          delete!(s,ii)
+        end
+      else
+        s[p,ii] = data
+      end
+      nothing
+  end
+  close(c)
+end
+
 isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 
 #Here different storage backends can register regexes that are checked against

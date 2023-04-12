@@ -61,6 +61,7 @@ function Base.delete!(d::ConsolidatedStore,i::String)
   delete!(d.parent,i)
 end
 
+store_read_strategy(s::ConsolidatedStore) = store_read_strategy(s.parent)
 
 function consolidate_metadata(s::AbstractStore,d,prefix)
   for k in (".zattrs",".zarray",".zgroup")

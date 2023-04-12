@@ -45,7 +45,9 @@ function zopen_noerr(s::AbstractStore, mode="r";
   lru = 0,
   fill_as_missing)
     consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path,lru=lru,fill_as_missing=fill_as_missing)
-    lru !== 0 && !isa(s,LRUStore) && return zopen(LRUStore(s,maxsize=lru),mode,path=path,lru=lru,fill_as_missing=fill_as_missing)
+    if lru !== 0 
+      error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
+    end
     if is_zarray(s, path)
         return ZArray(s,mode,path;fill_as_missing=fill_as_missing)
     elseif is_zgroup(s,path)
