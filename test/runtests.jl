@@ -218,13 +218,12 @@ end
 end
 
 @testset "string array getindex/setindex" begin
-  using Zarr: MaxLengthString
   aa = ["this", "is", "all ", "ascii"]
   bb = ["And" "Unicode"; "ματριξ" missing]
   a = ZArray(aa)
-  b = ZArray(bb, fill_value = MaxLengthString{7,UInt32}(""))
-  @test eltype(a) == MaxLengthString{5,UInt8}
-  @test eltype(b) == Union{MaxLengthString{7,UInt32},Missing}
+  b = ZArray(bb, fill_value = "")
+  @test eltype(a) == String
+  @test eltype(b) == Union{String,Missing}
   @test a[:] == ["this", "is", "all ", "ascii"]
   @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
 end

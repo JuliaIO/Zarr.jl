@@ -27,7 +27,8 @@ dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
-    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32})
+    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
+    String)
 compressors = (
     "no"=>NoCompressor(),
     "blosc"=>BloscCompressor(cname="zstd"),
@@ -59,7 +60,7 @@ gatts = g.attrs
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",
     "float16","float32","float64",
-    "complex64", "complex128","bool","S10","U10")
+    "complex64", "complex128","bool","S10","U10", "O")
 
 #Test accessing arrays from python and reading data
 for i=1:length(dtypes), co in compressors

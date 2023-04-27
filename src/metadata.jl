@@ -45,6 +45,7 @@ Base.convert(::Type{DateTime64{P}}, t::Date) where P = DateTime64{P}(Dates.value
 Base.convert(::Type{DateTime64{P}}, t::DateTime) where P = DateTime64{P}(Dates.value(P(t-DateTime(1970))))
 Base.convert(::Type{DateTime64{P}}, t::DateTime64{Q}) where {P,Q} = DateTime64{P}(Dates.value(P(Q(t.i))))
 Base.zero(t::Union{DateTime64, Type{<:DateTime64}}) = t(0)
+Base.zero(t::Union{String, Type{String}}) = ""
 # Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{Date}) = Date 
 # Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{DateTime}) = DateTime
 # Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{Date}) = DateTime 
@@ -63,6 +64,7 @@ typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
 typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
 typestr(::Type{<:Array}) = "|O"
 typestr(::Type{<:DateTime64{P}}) where P = "<M8[$(pdt64string[P])]"
+typestr(::Type{<:AbstractString}) = "|O"
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
@@ -96,7 +98,7 @@ function typestr(s::AbstractString, filterlist=nothing)
             if filterlist === nothing
                 throw(ArgumentError("Object array can only be parsed when an appropriate filter is defined"))
             end
-            return Vector{sourcetype(first(filterlist))}
+            return sourcetype(first(filterlist))
         end
         isempty(typesize) && throw((ArgumentError("$s is not a valid numpy typestr")))
         tc, ts = first(typecode), parse(Int, typesize)
@@ -243,4 +245,5 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
+fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
