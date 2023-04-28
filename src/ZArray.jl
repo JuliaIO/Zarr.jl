@@ -159,11 +159,11 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # Now loop through the chunks
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
-  task = @async begin 
+  task = @async begin
     read_items!($z.storage,c, $z.path, $blockr)
   end
   bind(c,task)
-  
+
   try 
     for i in 1:length(blockr)
       
@@ -268,7 +268,7 @@ function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,curre
   uncompress_raw!(a,z,chunk_compressed)
   
   if length.(indranges) == size(a)
-    aout[dotminus.(indranges, output_base_offsets)...] = a
+    aout[dotminus.(indranges, output_base_offsets)...] = ndims(a) == 0 ? a[1] : a
   else
     curchunk = a[dotminus.(indranges,current_chunk_offsets)...]
     aout[dotminus.(indranges, output_base_offsets)...] = curchunk

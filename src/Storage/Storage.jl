@@ -48,6 +48,7 @@ Deletes the given key from the store.
 """
 
 citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
+citostring(::CartesianIndex{0}) = "0"
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
 Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]

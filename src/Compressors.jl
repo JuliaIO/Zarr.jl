@@ -2,6 +2,9 @@ import Blosc
 import CodecZlib
 import JSON
 
+_reinterpret(::Type{T}, x) where T = reinterpret(T, [x])
+_reinterpret(::Type{T}, x::AbstractArray{S, 0}) where {T, S} = reinterpret(T, reshape(x, 1))
+_reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
 abstract type Compressor end
 getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
@@ -105,11 +108,11 @@ Creates an object that can be passed to ZArray constructors without compression.
 struct NoCompressor <: Compressor end
 
 function zuncompress(a, ::NoCompressor, T)
-  reinterpret(T,a)
+  _reinterpret(T,a)
 end
 
 function zcompress(a, ::NoCompressor)
-  reinterpret(UInt8,a)
+  _reinterpret(UInt8,a)
 end
 
 JSON.lower(::NoCompressor) = nothing
@@ -136,11 +139,11 @@ end
 
 function zuncompress(a, ::ZlibCompressor, T)
     result = transcode(CodecZlib.ZlibDecompressor,a)
-    reinterpret(Base.nonmissingtype(T),result)
+    _reinterpret(Base.nonmissingtype(T),result)
 end
 
 function zcompress(a, ::ZlibCompressor)
-    a_uint8 = reinterpret(UInt8,a)[:]
+    a_uint8 = _reinterpret(UInt8,a)[:]
     transcode(CodecZlib.ZlibCompressor, a_uint8)
 end
 
