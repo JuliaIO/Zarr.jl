@@ -45,7 +45,7 @@ for t in dtypes, co in compressors
     a[:,:,:] = testarrays[t]
 
     a = zcreate(t, g,string("azerodim",t,compstr), compressor=comp)
-    a[:] = testzerodimarrays[t]
+    a[] = testzerodimarrays[t]
 end
 # Test reading in python
 py"""
