@@ -2,7 +2,6 @@ import Blosc
 import CodecZlib
 import JSON
 
-_reinterpret(::Type{T}, x) where T = reinterpret(T, [x])
 _reinterpret(::Type{T}, x::AbstractArray{S, 0}) where {T, S} = reinterpret(T, reshape(x, 1))
 _reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
