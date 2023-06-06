@@ -36,12 +36,16 @@ compressors = (
     "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
     "zlib"=>ZlibCompressor())
 testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10,1:6,1:2))] : rand(t,10,6,2) for t in dtypes)
+testzerodimarrays = Dict(t=>(t<:AbstractString) ? randstring(10) : rand(t) for t in dtypes)
 
 for t in dtypes, co in compressors
     compstr, comp = co
     att = Dict("This is a nested attribute"=>Dict("a"=>5))
     a = zcreate(t, g,string("a",t,compstr),10,6,2,attrs=att, chunks = (5,2,2),compressor=comp)
     a[:,:,:] = testarrays[t]
+
+    a = zcreate(t, g,string("azerodim",t,compstr), compressor=comp)
+    a[] = testzerodimarrays[t]
 end
 # Test reading in python
 py"""
@@ -81,6 +85,30 @@ for i=1:length(dtypes), co in compressors
     else
       @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
     end
+end
+
+for i=1:length(dtypes), co in compressors
+    compstr,comp = co
+    t = dtypes[i]
+    tp = dtypesp[i]
+    if t == UInt64
+        continue
+        # need to exclude UInt64:
+        # need explicit conversion because of https://github.com/JuliaPy/PyCall.jl/issues/744
+        # but explicit conversion uses PyLong_AsLongLongAndOverflow, which converts everything
+        # to a signed 64-bit integer, which can error out if the UInt64 is too large.
+        # Adding an overload to PyCall for unsigned ints doesn't work with NumPy scalars because
+        # they are not subtypes of integer: https://stackoverflow.com/a/58816671
+    end
+
+    arname = string("azerodim",t,compstr)
+    py"""
+    ar=g[$arname]
+    """
+
+    @test py"ar.dtype==$tp"
+    @test py"ar.shape" == ()
+    @test convert(t, py"ar[()]") == testzerodimarrays[t]
 end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
