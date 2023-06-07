@@ -88,6 +88,7 @@ end
 data = rand(Int32,2,6,10)
 py"""
 import numcodecs
+import numpy as np
 g = zarr.group($ppython)
 g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
@@ -95,6 +96,8 @@ z1[:,:,:]=$data
 z1.attrs["test"]={"b": 6}
 z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
 z2[:]=[k for k in 'hallo']
+z3 = g.create_dataset('a3', shape=(2,), dtype=str)
+z3[:]=np.asarray(['test1', 'test234'], dtype='O')
 zarr.consolidate_metadata($ppython)
 """
 
@@ -108,6 +111,7 @@ a1 = g["a1"]
 @test a1.attrs["test"]==Dict("b"=>6)
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
+@test g["a3"] == ["test1", "test234"]
 
 # And test for consolidated metadata
 # Delete files so we make sure they are not accessed
