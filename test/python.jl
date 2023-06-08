@@ -27,7 +27,8 @@ dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
-    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32})
+    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
+    String)
 compressors = (
     "no"=>NoCompressor(),
     "blosc"=>BloscCompressor(cname="zstd"),
@@ -63,7 +64,7 @@ gatts = g.attrs
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",
     "float16","float32","float64",
-    "complex64", "complex128","bool","S10","U10")
+    "complex64", "complex128","bool","S10","U10", "O")
 
 #Test accessing arrays from python and reading data
 for i=1:length(dtypes), co in compressors
@@ -115,6 +116,7 @@ end
 data = rand(Int32,2,6,10)
 py"""
 import numcodecs
+import numpy as np
 g = zarr.group($ppython)
 g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
@@ -122,6 +124,8 @@ z1[:,:,:]=$data
 z1.attrs["test"]={"b": 6}
 z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
 z2[:]=[k for k in 'hallo']
+z3 = g.create_dataset('a3', shape=(2,), dtype=str)
+z3[:]=np.asarray(['test1', 'test234'], dtype='O')
 zarr.consolidate_metadata($ppython)
 """
 
@@ -135,6 +139,7 @@ a1 = g["a1"]
 @test a1.attrs["test"]==Dict("b"=>6)
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
+@test g["a3"] == ["test1", "test234"]
 
 # And test for consolidated metadata
 # Delete files so we make sure they are not accessed

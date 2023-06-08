@@ -11,12 +11,13 @@ const concurrent_io_tasks = Ref(50)
 getfillval(::Type{T}, t::String) where {T <: Number} = parse(T, t)
 getfillval(::Type{T}, t::Union{T,Nothing}) where {T} = t
 
-struct SenMissArray{T,N,V} <: AbstractArray{Union{T,Missing},N}
+struct SenMissArray{T,N} <: AbstractArray{Union{T,Missing},N}
   x::Array{T,N}
+  senval::T
 end
-SenMissArray(x::Array{T,N},v) where {T,N} = SenMissArray{T,N,convert(T,v)}(x)
+SenMissArray(x::Array{T,N},v) where {T,N} = SenMissArray{T,N}(x,convert(T,v))
 Base.size(x::SenMissArray) = size(x.x)
-senval(x::SenMissArray{<:Any,<:Any,V}) where V = V
+senval(x::SenMissArray) = x.senval
 function Base.getindex(x::SenMissArray,i::Int)
   v = x.x[i]
   isequal(v,senval(x)) ? missing : v
@@ -78,6 +79,7 @@ storageratio(z::ZArray{<:Vector}) = "unknown"
 
 nobytes(z::ZArray) = length(z)*sizeof(eltype(z))
 nobytes(z::ZArray{<:Vector}) = "unknown"
+nobytes(z::ZArray{<:String}) = "unknown"
 
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
@@ -361,20 +363,12 @@ function filterfromtype(::Type{<:AbstractArray{T}}) where T
   (VLenArrayFilter{T}(),)
 end
 
+filterfromtype(::Type{<:Union{<:AbstractString, Union{<:AbstractString, Missing}}}) = (VLenUTF8Filter(),)
+filterfromtype(::Type{<:Union{MaxLengthString, Union{MaxLengthString, Missing}}}) = nothing
+
 #Not all Array types can be mapped directly to a valid ZArray encoding.
 #Here we try to determine the correct element type
 to_zarrtype(::AbstractArray{T}) where T = T
-function to_zarrtype(a::AbstractArray{<:Union{AbstractString,Missing}})
-  isasc, maxlen = mapreduce(
-  x->ismissing(x) ? (true,0) : (isascii(x),length(x)),
-  (x,y)->((x[1] && y[1]),max(x[2],y[2])),
-  a,
-  init = (true, 0,false)
-  )
-  et = isasc ? UInt8 : UInt32
-  newt = MaxLengthString{maxlen,et}
-  return eltype(a)>:Missing ? Union{newt,Missing} : newt
-end
 to_zarrtype(a::AbstractArray{<:Date}) = DateTime64{Dates.Day}
 to_zarrtype(a::AbstractArray{<:DateTime}) = DateTime64{Dates.Millisecond}
 
