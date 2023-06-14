@@ -7,14 +7,15 @@ using OpenSSL: OpenSSL
 A basic HTTP store without any credentials. The underlying data is supposed to be
 consolidated and only read operations are supported. This store is compatible to
 datasets being served through the [xpublish](https://xpublish.readthedocs.io/en/latest/)
-python package.
+python package. In case you experience performance options, one can try to use 
+`HTTP.set_default_connection_limit!` to increase the number of concurrent connections. 
 """
 struct HTTPStore <: AbstractStore
     url::String
 end
 
 function Base.getindex(s::HTTPStore, k::String)
-r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream,connection_limit=25)
+r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
 if r.status >= 300
     if r.status == 404
         nothing
