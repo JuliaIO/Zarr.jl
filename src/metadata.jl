@@ -2,7 +2,7 @@ import Dates: Date, DateTime
 
 """NumPy array protocol type string (typestr) format
 
-A string providing the basic type of the homogenous array. The basic string format
+A string providing the basic type of the homogeneous array. The basic string format
 consists of 3 parts: a character describing the byteorder of the data
 (<: little-endian, >: big-endian, |: not-relevant), a character code giving the basic
 type of the array, and an integer providing the number of bytes the type uses.

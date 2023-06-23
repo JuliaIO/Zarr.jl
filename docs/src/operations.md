@@ -2,7 +2,7 @@
 
 A Zarr Array consists of a collection of potentially compressed chunks, and there is a significant overhead in accessing a single item from such an array compared to Julia's Base Array type.
 
-In order to make operations on `ZArray`s still efficient, we use the [DiskArrays](https://github.com/meggart/DiskArrays.jl/) package which enbales efficient broadcast and reductions on `Zarray`s respecting their chunk sizes. This includes some modified behavior compared to a normal `AbstractArray`, including lazy broadcasting and a non-default array access order for reductions.
+In order to make operations on `ZArray`s still efficient, we use the [DiskArrays](https://github.com/meggart/DiskArrays.jl/) package which enables efficient broadcast and reductions on `Zarray`s respecting their chunk sizes. This includes some modified behavior compared to a normal `AbstractArray`, including lazy broadcasting and a non-default array access order for reductions.
 
 Please refer to the DiskArrays documentation to see which operations are supported.
 

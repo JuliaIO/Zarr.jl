@@ -1,7 +1,7 @@
 ###
 ### This test is to check against the reference zarr implementation in Python
 ### We save some data in Julia and python and test if it is still the same
-### when read from teh other language 
+### when read from the other language 
 ###
 @testset "Python zarr implementation" begin
 

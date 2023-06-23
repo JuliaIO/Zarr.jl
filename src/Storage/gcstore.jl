@@ -21,7 +21,7 @@ end
     Zarr.gcs_credentials(; metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
 
 Set (or renew) the user project, access token and and token type for the Google
-Cloud Store from the Meatadata server (assuming the function is executed from
+Cloud Store from the Metadata server (assuming the function is executed from
 the Google Cloud).
 For some data sets, the error message "Bucket is requester pays bucket but no
 user project provided" is returned if the credentials are not provided.
