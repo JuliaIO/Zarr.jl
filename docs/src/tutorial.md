@@ -171,7 +171,7 @@ A number of different compressors can be used with Zarr. In this Julia package w
 julia> using Zarr
 
 julia> compressor = Zarr.BloscCompressor(cname="zstd", clevel=3, shuffle=true)
-Zarr.BloscCompressor(0, 3, "zstd", true)
+Zarr.BloscCompressor(0, 3, "zstd", 1)
 
 julia> data = Int32(1):Int32(100000000)
 1:100000000
@@ -183,7 +183,7 @@ julia> z[:,:]=data
 1:100000000
 ```
 
-This array above will use Blosc as the primary compressor, using the Zstandard algorithm (compression level 3) internally within Blosc, and with the bit-shuffle filter applied.
+This array above will use Blosc as the primary compressor, using the Zstandard algorithm (compression level 3) internally within Blosc, and with the byte-shuffle filter applied.
 
 When using a compressor, it can be useful to get some diagnostics on the compression ratio. `ZArrays` provide a `zinfo` function which can be used to print some diagnostics, e.g.:
 
@@ -195,7 +195,7 @@ Shape               : (10000, 10000)
 Chunk Shape         : (1000, 1000)
 Order               : C
 Read-Only           : false
-Compressor          : Zarr.BloscCompressor(0, 3, "zstd", true)
+Compressor          : Zarr.BloscCompressor(0, 3, "zstd", 1)
 Filters             : nothing
 Store type          : Dictionary Storage
 No. bytes           : 400000000
