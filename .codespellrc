@@ -1,0 +1,5 @@
+[codespell]
+skip = .git,*.pdf,*.svg
+# clen - variable
+# missings - there is an .md
+ignore-words-list = clen,missings

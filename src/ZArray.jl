@@ -293,7 +293,7 @@ end
 """
 zcreate(T, dims...;kwargs)
 
-Creates a new empty zarr aray with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
+Creates a new empty zarr array with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
 
 * `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
 * `name=""` name of the zarr array, defaults to the directory name
