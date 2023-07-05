@@ -1,13 +1,22 @@
-## Array creation
+# API reference
+
+## Arrays
 
 ```@docs
 zcreate
 zzeros
 ```
 
+## Group hierarchy
+
+```@autodocs
+Modules = [Zarr]
+Pages = ["ZGroup.jl"]
+```
+
 ## Compressors
 
-```@docs
-Zarr.BloscCompressor
-Zarr.NoCompressor
+```@autodocs
+Modules = [Zarr]
+Pages = ["Compressors.jl"]
 ```
