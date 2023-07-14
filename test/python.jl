@@ -87,11 +87,11 @@ for i=1:length(dtypes), co in compressors
     @test py"ar.dtype==$tp"
     @test py"ar.shape" == (2,6,10)
     if t<:MaxLengthString
-    pyar = py"ar[:,:,:]"
-    jar = [get(get(get(pyar,k-1),j-1),i-1) for i in 1:10, j in 1:6, k in 1:2]
-    @test jar == testarrays[t]
+      pyar = py"ar[:,:,:]"
+      jar = [get(get(get(pyar,k-1),j-1),i-1) for i in 1:10, j in 1:6, k in 1:2]
+      @test jar == testarrays[t]
     else
-    @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
+      @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
     end
 end
 
