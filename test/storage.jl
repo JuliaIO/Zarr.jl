@@ -49,6 +49,77 @@ function test_store_common(ds)
   @test !Zarr.isemptysub(ds,"bar/")
 end
 
+"""
+Function to test the interface of a read only AbstractStore. Every complete implementation should pass this test.
+
+`converter` is a function that takes a Zarr.DictStore, and converts it to a read only store.
+
+`closer` is a function that gets called to close the read only store.
+"""
+function test_read_only_store_common(converter, closer=Returns(nothing))
+  ds = Zarr.DictStore()
+  rs = converter(ds)
+  @test !Zarr.is_zgroup(rs,"")
+
+  closer(rs)
+  ds[".zgroup"]=rand(UInt8,50)
+  rs = converter(ds)
+
+  @test haskey(rs,".zgroup")
+
+  @test Zarr.is_zgroup(rs,"")
+  @test !Zarr.is_zarray(rs,"")
+
+  @test isempty(Zarr.subdirs(rs,""))
+  @test sort(collect(Zarr.subkeys(rs,"")))==[".zgroup"]
+
+  #Create a subgroup
+  @test !Zarr.is_zarray(rs,"bar")
+
+  closer(rs)
+  ds["bar/.zarray"] = rand(UInt8,50)
+  rs = converter(ds)
+
+  @test Zarr.is_zarray(rs,"bar")
+  @test Zarr.subdirs(rs,"") == ["bar"]
+  @test Zarr.subdirs(rs,"bar") == String[]
+  #Test getindex and setindex
+  data = rand(UInt8,50)
+
+  closer(rs)
+  ds["bar/0.0.0"] = data
+  rs = converter(ds)
+
+  @test rs["bar/0.0.0"]==data
+  @test Zarr.storagesize(rs,"bar")==50
+  @test Zarr.isinitialized(rs,"bar/0.0.0")
+  @test !Zarr.isinitialized(rs,"bar/0.0.1")
+
+  closer(rs)
+  Zarr.writeattrs(ds,"bar",Dict("a"=>"b"))
+  rs = converter(ds)
+
+  @test Zarr.getattrs(rs,"bar")==Dict("a"=>"b")
+
+  closer(rs)
+  delete!(ds,"bar/0.0.0")
+  rs = converter(ds)
+
+  @test !Zarr.isinitialized(rs,"bar",CartesianIndex((0,0,0)))
+  @test !Zarr.isinitialized(rs,"bar/0.0.0")
+
+  closer(rs)
+  ds["bar/0.0.0"] = data
+  rs = converter(ds)
+
+  #Add tests for empty storage
+  @test Zarr.isemptysub(rs,"ba")
+  @test Zarr.isemptysub(rs,"ba/")
+  @test !Zarr.isemptysub(rs,"bar")
+  @test !Zarr.isemptysub(rs,"bar/")
+  closer(rs)
+end
+
 @testset "DirectoryStore" begin
   A = fill(1.0, 30, 20)
   chunks = (5,10)
@@ -145,6 +216,13 @@ end
   @test g2.attrs == Dict("groupatt"=>5)
   @test g2["a1"].attrs == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
+  
+  # The following test doesn't pass, but maybe should?
+  # test_read_only_store_common() do ds
+  #   # This converts a DictStore to a read only ConsolidatedStore HTTPStore
+  #   @async HTTP.serve(ds,"",ip,port,server=server)
+  #   Zarr.ConsolidatedStore(Zarr.HTTPStore("http://$ip:$port"),"")
+  # end
   close(server)
 end
 
@@ -156,8 +234,17 @@ end
   io = IOBuffer()
   Zarr.writezip(io, g)
   data = take!(io)
-  g2 = zopen(Zarr.ZipStore(data))
+  ds = Zarr.ZipStore(data)
+  @test sprint(show, ds) == "Read Only Zip Storage"
+  g2 = zopen(ds)
   @test g2.attrs == Dict("groupatt"=>5)
   @test g2["a1"].attrs == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
+
+  test_read_only_store_common() do ds
+    # This converts a DictStore to a read only ZipStore
+    io = IOBuffer()
+    Zarr.writezip(io, ds)
+    Zarr.ZipStore(take!(io))
+  end
 end

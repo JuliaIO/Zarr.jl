@@ -78,7 +78,7 @@ end
 
 Write an AbstractStore to an IO as a zip archive.
 """
-function writezip(io::IO, s::AbstractStore, p; kwargs...)
+function writezip(io::IO, s::AbstractStore, p=""; kwargs...)
     ZipArchives.ZipWriter(io; kwargs...) do w
         _writezip(w, s, String(p))
     end
