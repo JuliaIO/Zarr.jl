@@ -147,3 +147,17 @@ end
   @test g2["a1"][:,:] == reshape(1:200,10,20)
   close(server)
 end
+
+@testset "Zip Storage" begin
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs = Dict("groupatt"=>5))
+  a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
+  a .= reshape(1:200,10,20)
+  io = IOBuffer()
+  Zarr.writezip(io, g)
+  data = take!(io)
+  g2 = zopen(Zarr.ZipStore(data))
+  @test g2.attrs == Dict("groupatt"=>5)
+  @test g2["a1"].attrs == Dict("arratt"=>2.5)
+  @test g2["a1"][:,:] == reshape(1:200,10,20)
+end
