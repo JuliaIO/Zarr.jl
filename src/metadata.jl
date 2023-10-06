@@ -1,5 +1,6 @@
 import Dates: Date, DateTime
-
+using DiskArrays: RegularChunks, IrregularChunks
+const SomeChunk = Union{RegularChunks, IrregularChunks}
 """NumPy array protocol type string (typestr) format
 
 A string providing the basic type of the homogeneous array. The basic string format
@@ -114,6 +115,9 @@ function typestr(s::AbstractString, filterlist=nothing)
     end
 end
 
+arraysize_from_chunksize(cs::RegularChunks)=cs.s
+arraysize_from_chunksize(cs::IrregularChunks)=last(cs.offsets)
+
 """Metadata configuration of the stored array
 
 Each array requires essential configuration metadata to be stored, enabling correct
@@ -125,7 +129,7 @@ https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 struct Metadata{T, N, C, F}
     zarr_format::Int
     shape::Base.RefValue{NTuple{N, Int}}
-    chunks::NTuple{N, Int}
+    chunks::NTuple{N, SomeChunk}
     dtype::String  # structured data types not yet supported
     compressor::C
     fill_value::Union{T, Nothing}
@@ -136,9 +140,17 @@ struct Metadata{T, N, C, F}
         zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
-        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+        chunks = map(shape,chunks) do s,c
+            if isa(c,Int)
+                c=RegularChunks(c,0,s)
+            elseif isa(c,AbstractVector{<:Integer})
+                c=IrregularChunks(chunksizes=c)
+            end
+            arraysize_from_chunksize(c) < s && throw(ArgumentError("Size of chunks must be larger or equal the size of the array"))
+            c
+        end
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
+        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), (chunks...,), dtype, compressor,fill_value, order, filters)
     end
 end
 
@@ -157,7 +169,7 @@ end
 
 
 "Construct Metadata based on your data"
-function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
+function Metadata(A::AbstractArray{T, N}, chunks::Tuple;
         zarr_format::Integer=2,
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
@@ -196,12 +208,15 @@ function Metadata(d::AbstractDict, fill_as_missing)
 
     fv = fill_value_decoding(d["fill_value"], T)
 
+    chunks = map(d["chunks"],d["shape"]) do c,s
+        isa(c,Integer) ? RegularChunks(c,0,s) : IrregularChunks(chunksizes=c)
+    end
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
     Metadata{TU, N, C, F}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
-        NTuple{N, Int}(d["chunks"]) |> reverse,
+        chunks |> reverse,
         d["dtype"],
         compressor,
         fv,
@@ -210,12 +225,15 @@ function Metadata(d::AbstractDict, fill_as_missing)
     )
 end
 
+chunk_encoding(c::RegularChunks) = c.cs
+chunk_encoding(c::IrregularChunks) = length.(c)
+
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::Metadata)
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
         "shape" => md.shape[] |> reverse,
-        "chunks" => md.chunks |> reverse,
+        "chunks" => chunk_encoding.(md.chunks) |> reverse,
         "dtype" => md.dtype,
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
