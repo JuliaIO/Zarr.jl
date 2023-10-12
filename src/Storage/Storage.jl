@@ -7,7 +7,7 @@ abstract type AbstractStore end
 """
   storagesize(d::AbstractStore, p::AbstractString)
 
-This function shall return the size of all data files in a store at path p.
+This function shall return the size of all data files in a store at path `p`.
 """
 function storagesize end
 
