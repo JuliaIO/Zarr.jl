@@ -4,6 +4,7 @@ using JSON
 using Pkg
 using PyCall
 using Dates
+using Zarr: RegularChunks, IrregularChunks
 
 macro test_py(ex)
     quote
@@ -25,7 +26,7 @@ end
         @test eltype(z.storage.a["0.0"]) === UInt8
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
-        @test z.metadata.chunks === (2, 3)
+        @test z.metadata.chunks === (RegularChunks(2,0,2), RegularChunks(3,0,3))
         @test z.metadata.fill_value === nothing
         @test z.metadata.compressor isa Zarr.BloscCompressor
         @test z.metadata.compressor.blocksize === 0
@@ -122,7 +123,7 @@ end
         @test metadata isa Zarr.Metadata
         @test metadata.zarr_format === 2
         @test metadata.shape[] === size(A)
-        @test metadata.chunks === chunks
+        @test metadata.chunks === (RegularChunks(5,0,30),RegularChunks(10,0,20))
         @test metadata.dtype === "<f8"
         @test metadata.compressor === Zarr.BloscCompressor(0, 5, "lz4", true)
         @test metadata.fill_value === -1.5

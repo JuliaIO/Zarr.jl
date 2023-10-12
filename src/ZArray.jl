@@ -1,6 +1,6 @@
 import JSON
 import OffsetArrays: OffsetArray
-import DiskArrays: AbstractDiskArray
+import DiskArrays: AbstractDiskArray, findchunk, max_chunksize
 import DiskArrays
 
 """
@@ -122,8 +122,7 @@ trans_ind(r, bs)
 For a given index and blocksize determines which chunks of the Zarray will have to
 be accessed.
 """
-trans_ind(r::AbstractUnitRange, bs) = fld1(first(r),bs):fld1(last(r),bs)
-trans_ind(r::Integer, bs) = fld1(r,bs)
+trans_ind(r, bs) = findchunk(bs,r)
 
 function boundint(r1, s2, o2)
   r2 = range(o2+1,length=s2)
@@ -134,14 +133,14 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
   # temporary workaround to use strings as data values
-  inner = fill(z.metadata.fill_value, z.metadata.chunks)
+  inner = fill(z.metadata.fill_value, max_chunksize.(z.metadata.chunks))
   a = SenMissArray(inner,z.metadata.fill_value)
 end
 _zero(T) = zero(T)
 _zero(T::Type{<:MaxLengthString}) = T("")
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
 _zero(::Type{<:Vector{T}}) where T = T[]
-getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
+getchunkarray(z::ZArray) = fill(_zero(eltype(z)), max_chunksize.(z.metadata.chunks))
 
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
@@ -247,7 +246,7 @@ end
 DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
 DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = writeblock!(v,a,CartesianIndices(i))
 DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
-DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
+DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a.metadata.chunks...)
 
 """
 uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
@@ -278,7 +277,7 @@ function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,curre
 end
 
 function compress_raw(a,z)
-  length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  #length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
     zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
@@ -383,7 +382,7 @@ chunkindices(z::ZArray)
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
+chunkindices(z::ZArray) = CartesianIndices(length.(z.metadata.chunks))
 
 """
 zzeros(T, dims...; kwargs... )
@@ -392,7 +391,7 @@ Creates a zarr array and initializes all values with zero. Accepts the same keyw
 """
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)
-  as = zeros(T, z.metadata.chunks...)
+  as = zeros(T, max_chunksize.(z.metadata.chunks)...)
   data_encoded = compress_raw(as,z)
   p = z.path
   for i in chunkindices(z)
@@ -459,9 +458,9 @@ end
 
 function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
   dimstoshorten = findall(map(<,newsize, oldsize))
+  allchunkranges = Base.OneTo.(length.(chunks))
   for idim in dimstoshorten
-    delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
-    allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
+    delrange = (findchunk(chunks[idim],newsize[idim])+1):findchunk(chunks[idim],oldsize[idim])
     r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
     for cI in CartesianIndices(r)
       delete!(s,path,cI)
