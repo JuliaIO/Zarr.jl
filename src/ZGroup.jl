@@ -66,7 +66,11 @@ end
 Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
 
 
-function Base.getindex(g::ZGroup, k)
+const SymbolOrString = Union{Symbol,AbstractString}
+Base.haskey(x::Dict{String,ZGroup}, key::Symbol) = haskey(x, "$key")
+Base.haskey(x::Dict{String,ZArray}, key::Symbol) = haskey(x, "$key")
+
+function Base.getindex(g::ZGroup, k::SymbolOrString)
     if haskey(g.groups, k)
         return g.groups[k]
     elseif haskey(g.arrays, k)
