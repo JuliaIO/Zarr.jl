@@ -105,7 +105,7 @@ end
   @test storagesize(S3,p) == 0
   @test Zarr.is_zgroup(S3,p) == true
   S3group = zopen(S3,path=p)
-  S3Array = S3group.groups["bar"].arrays["baz"]
+  S3Array = Zarr.arrays(Zarr.groups(S3group)["bar"])["baz"]
   @test eltype(S3Array) == Zarr.ASCIIChar
   @test storagesize(S3Array) == 69
   @test String(S3Array[:]) == "Hello from the cloud!"
@@ -142,8 +142,8 @@ end
   ip,port = getsockname(server)
   @async HTTP.serve(g,ip,port,server=server)
   g2 = zopen("http://$ip:$port")
-  @test g2.attrs == Dict("groupatt"=>5)
-  @test g2["a1"].attrs == Dict("arratt"=>2.5)
+  @test attributes(g2) == Dict("groupatt"=>5)
+  @test attributes(g2["a1"]) == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
   close(server)
 end

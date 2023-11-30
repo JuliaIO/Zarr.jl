@@ -53,7 +53,7 @@ function Base.show(io::IO,::MIME"text/plain",z::ZArray)
   print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
-zname(z::ZArray) = zname(z.path)
+zname(z::ZArray) = zname(path(z))
 
 function zname(s::String)
   spl = split(rstrip(s,'/'),'/')
@@ -66,7 +66,7 @@ storagesize(z::ZArray)
 
 Returns the size of the compressed data stored in the ZArray `z` in bytes
 """
-storagesize(z::ZArray) = storagesize(z.storage,z.path)
+storagesize(z::ZArray) = storagesize(storage(z),path(z))
 
 """
 storageratio(z::ZArray)
@@ -84,7 +84,7 @@ nobytes(z::ZArray{<:String}) = "unknown"
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
-    isinitialized(z.storage,z.path,i)
+    isinitialized(storage(z),path(z),i)
   end
   allinfos = [
   "Type" => "ZArray",
@@ -92,10 +92,10 @@ function zinfo(io::IO,z::ZArray)
   "Shape" => size(z),
   "Chunk Shape" => z.metadata.chunks,
   "Order" => z.metadata.order,
-  "Read-Only" => !z.writeable,
+  "Read-Only" => !iswriteable(z),
   "Compressor" => z.metadata.compressor,
   "Filters" => z.metadata.filters, 
-  "Store type" => z.storage,
+  "Store type" => storage(z),
   "No. bytes"  => nobytes(z),
   "No. bytes stored" => storagesize(z),
   "Storage ratio" => storageratio(z),
@@ -159,10 +159,10 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   #bufferdict = IdDict((current_task()=>getchunkarray(z),))
   a = getchunkarray(z)
   # Now loop through the chunks
-  c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
+  c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(storage(z)))
   
   task = @async begin
-    read_items!($z.storage,c, $z.path, $blockr)
+    read_items!($storage(z),c, $path(z), $blockr)
   end
   bind(c,task)
 
@@ -186,7 +186,7 @@ end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
   
-  z.writeable || error("Can not write to read-only ZArray")
+  iswriteable(z) || error("Can not write to read-only ZArray")
 
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
@@ -195,17 +195,17 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   #bufferdict = IdDict((current_task()=>getchunkarray(z),))
   a = getchunkarray(z)
   # Now loop through the chunks
-  readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
+  readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(storage(z)))
   
   readtask = @async begin 
-    read_items!(z.storage,readchannel, z.path, blockr)
+    read_items!(storage(z),readchannel, path(z), blockr)
   end
   bind(readchannel,readtask)
 
-  writechannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
+  writechannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(storage(z)))
 
   writetask = @async begin
-    write_items!(z.storage,writechannel,z.path,blockr)
+    write_items!(storage(z),writechannel,path(z),blockr)
   end
   bind(writechannel,writetask)
   
@@ -394,9 +394,9 @@ function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)
   as = zeros(T, z.metadata.chunks...)
   data_encoded = compress_raw(as,z)
-  p = z.path
+  p = path(z)
   for i in chunkindices(z)
-    z.storage[p,i] = data_encoded
+    storage(z)[p,i] = data_encoded
   end
   z
 end
@@ -414,9 +414,9 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   z.metadata.shape[] = newsize
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
-    prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks)
+    prune_oob_chunks(storage(z),path(z),oldsize,newsize, z.metadata.chunks)
   end
-  writemetadata(z.storage, z.path, z.metadata)
+  writemetadata(storage(z), path(z), z.metadata)
   nothing
 end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
