@@ -19,7 +19,7 @@ export attributes
 ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
     ZGroup(storage, String(path), arrays, groups, attrs, writeable)
 
-zname(g::ZGroup) = zname(g.path)
+zname(g::ZGroup) = zname(path(g))
 
 #Open an existing ZGroup
 function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
@@ -71,12 +71,7 @@ function Base.show(io::IO, g::ZGroup)
     !isempty(groups(g)) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(groups(g)))...)
     nothing
 end
-Base.haskey(g::ZGroup,k)= haskey(groups(g),k) || haskey(arrays(g),k)
-
-
-const SymbolOrString = Union{Symbol,AbstractString}
-Base.haskey(x::Dict{String,ZGroup}, key::Symbol) = haskey(x, "$key")
-Base.haskey(x::Dict{String,ZArray}, key::Symbol) = haskey(x, "$key")
+Base.haskey(g::ZGroup,k)= haskey(groups(g),string(k)) || haskey(arrays(g),string(k))
 
 function Base.getindex(g::ZGroup, k::AbstractString)
     if haskey(groups(g), k)

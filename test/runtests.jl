@@ -102,14 +102,23 @@ end
 
     zzeros(Float64,a,"a",3,3)
     zzeros(Int,a,"b",5,4,2)
+    zgroup(a,"subgroup")
 
     @test a["a"] isa ZArray
     @test a[:a] isa ZArray
     @test a.b isa ZArray
-    @test issetequal(propertynames(a),(:a,:b))
-    @test issetequal(propertynames(a,true),(:a,:b,:attrs))
+    @test a.subgroup isa ZGroup
+    @test haskey(a,"a")
+    @test haskey(a,:a)
+    @test !haskey(a,"something")
+    @test !haskey(a,:something)
+    @test issetequal(propertynames(a),(:a,:b,:subgroup))
+    @test issetequal(propertynames(a,true),(:a,:b,:subgroup,:attrs))
     @test @test_warn "Accessing attributes" a.attrs["a"]==5
     @test attributes(a) == Dict("a"=>5)
+    buf=IOBuffer()
+    show(buf,a)
+    @test startswith(String(take!(buf)),"ZarrGroup at Dictionary Storage and path \nVariables:")
 end
 
 @testset "Metadata" begin
