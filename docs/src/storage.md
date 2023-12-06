@@ -8,13 +8,10 @@ CurrentModule = Zarr
 
 ```@docs
 storagesize
-zname
+Zarr.zname
 Base.getindex(d::AbstractStore,i::String)
 Base.setindex!(d::AbstractStore,v,i::String)
-subdirs
-Base.keys(d::AbstractStore)
-newsub
-getsub
+Zarr.subdirs
 ```
 
 You can get some inspiration on how to implement this by looking at the source code of existing storage backends.

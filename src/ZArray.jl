@@ -53,6 +53,11 @@ function Base.show(io::IO,::MIME"text/plain",z::ZArray)
   print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
 end
 
+"""
+    zname(z::ZArray)
+
+Extract the name of a Zarr array from the object
+"""
 zname(z::ZArray) = zname(path(z))
 
 function zname(s::String)
