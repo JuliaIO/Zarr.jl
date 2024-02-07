@@ -17,7 +17,7 @@ end
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
 if r.status >= 300
-    if r.status == 404
+    if 400 <= r.status < 500
         nothing
     else
         error("Error connecting to $(s.url) :", String(r.body))
