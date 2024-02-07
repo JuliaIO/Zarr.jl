@@ -12,15 +12,24 @@ python package. In case you experience performance options, one can try to use
 """
 struct HTTPStore <: AbstractStore
     url::String
+    allowed_codes::Set{Int}
 end
+HTTPStore(url) = HTTPStore(url,Set((404,)))
 
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
 if r.status >= 300
-    if 400 <= r.status < 500
+    if r.status in s.allowed_codes
         nothing
     else
-        error("Error connecting to $(s.url) :", String(r.body))
+        err_msg = 
+        """Received error code $(r.status) when connecting to $(s.url) with message $(String(r.body)).
+        This might be an actual error or an indication that the server returns a different error code 
+        than 404 for missing chunks. In the later case you can run 
+        `Zarr.missing_chunk_return_code!(a.storage,$(r.status))` where a is your Zarr array or group to
+        fix the issue.
+        """
+        throw(ErrorException(err_msg))
     end
 else
     r.body
@@ -31,7 +40,9 @@ end
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
-
+missing_chunk_return_code!(s::ConsolidatedStore,code) = missing_chunk_return_code!(s.parent,code)
+missing_chunk_return_code!(s::HTTPStore, code::Integer) = push!(s.allowed_codes,code)
+missing_chunk_return_code!(s::HTTPStore, codes::AbstractVector{<:Integer}) = foreach(c->push!(s.allowed_codes,c),codes)
 store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[])
 
 
