@@ -146,4 +146,16 @@ end
   @test g2["a1"].attrs == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
   close(server)
+  #Test server that returns 403 instead of 404 for missing chunks
+  server = Sockets.listen(0)
+  ip,port = getsockname(server)
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs = Dict("groupatt"=>5))
+  a = zcreate(Int,g,"a",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5),fill_value = -1)
+  @async HTTP.serve(Zarr.zarr_req_handler(s,g.path,403),ip,port,server=server)
+  g3 = zopen("http://$ip:$port")
+  @test_throws "Received error code 403" g3["a"][:,:]
+  Zarr.missing_chunk_return_code!(g3.storage,403)
+  @test all(==(-1),g3["a"][:,:])
+  close(server)
 end
