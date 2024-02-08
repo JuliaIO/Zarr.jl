@@ -40,6 +40,21 @@ end
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
+
+"""
+    missing_chunk_return_code!(s::HTTPStore, code::Union{Int,AbstractVector{Int}})
+
+Extends the list of HTTP return codes that signals that a certain key in a HTTPStore is not available. Most data providers
+return code 404 for missing elements, but some may use different return codes like 403. This function can be used
+to add return codes that signal missing chunks. 
+
+### Example
+
+````julia
+a = zopen("https://path/to/remote/array")
+missing_chunk_return_code!(a.storage, 403)
+````
+"""
 missing_chunk_return_code!(s::ConsolidatedStore,code) = missing_chunk_return_code!(s.parent,code)
 missing_chunk_return_code!(s::HTTPStore, code::Integer) = push!(s.allowed_codes,code)
 missing_chunk_return_code!(s::HTTPStore, codes::AbstractVector{<:Integer}) = foreach(c->push!(s.allowed_codes,c),codes)
