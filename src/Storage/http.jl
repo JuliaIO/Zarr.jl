@@ -62,7 +62,7 @@ store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[])
 
 
 ## This is a server implementation for Zarr datasets
-function zarr_req_handler(s::AbstractStore, p)
+function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   if s[p,".zmetadata"] === nothing
     consolidate_metadata(s)
   end
@@ -73,12 +73,12 @@ function zarr_req_handler(s::AbstractStore, p)
     r = s[p,k]
     try
       if r ===  nothing
-        return HTTP.Response(404, "Error: Key $k not found")
+        return HTTP.Response(notfound, "Error: Key $k not found")
       else
         return HTTP.Response(200, r)
       end
     catch e
-      return HTTP.Response(404, "Error: $e")
+      return HTTP.Response(notfound, "Error: $e")
     end
   end
 end
