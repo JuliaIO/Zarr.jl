@@ -86,7 +86,7 @@ the overhead of repeatedly requesting many metadata files:
 g = zopen(store.zstore[1], consolidated=true)
 ````
 
-You can access the meta-information through `g.attrs` or for example read the first
+You can access the meta-information through `attributes(g)` or for example read the first
 time slice through
 
 ````julia

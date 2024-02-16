@@ -4,6 +4,7 @@ using JSON
 using Pkg
 using PyCall
 using Dates
+using Zarr: storage
 
 macro test_py(ex)
     quote
@@ -20,9 +21,9 @@ end
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.DictStore}
 
-        @test length(z.storage.a) === 3
-        @test length(z.storage.a["0.0"]) === 64
-        @test eltype(z.storage.a["0.0"]) === UInt8
+        @test length(storage(z).a) === 3
+        @test length(storage(z).a["0.0"]) === 64
+        @test eltype(storage(z).a["0.0"]) === UInt8
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
@@ -32,8 +33,8 @@ end
         @test z.metadata.compressor.clevel === 5
         @test z.metadata.compressor.cname === "lz4"
         @test z.metadata.compressor.shuffle === 1
-        @test z.attrs == Dict{Any, Any}()
-        @test z.writeable === true
+        @test attributes(z) == Dict{Any, Any}()
+        @test Zarr.iswriteable(z) === true
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), zarr_format = 3)
@@ -63,7 +64,7 @@ end
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()
-            @test z.storage === Zarr.DirectoryStore("$dir/$name")
+            @test storage(z) === Zarr.DirectoryStore("$dir/$name")
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -92,9 +93,32 @@ end
     g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
     @test Zarr.is_zgroup(store,"mygroup")
     @test Zarr.is_zgroup(store,"mygroup/asubgroup")
-    @test g2.attrs["a1"]==5
+    @test attributes(g2)["a1"]==5
     @test isdir(joinpath(store.folder,"mygroup"))
     @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
+    
+    #Another test for indexing and getproperty
+    a = zgroup(Zarr.DictStore(),attrs=Dict("a"=>5))
+
+    zzeros(Float64,a,"a",3,3)
+    zzeros(Int,a,"b",5,4,2)
+    zgroup(a,"subgroup")
+
+    @test a["a"] isa ZArray
+    @test a[:a] isa ZArray
+    @test a.b isa ZArray
+    @test a.subgroup isa ZGroup
+    @test haskey(a,"a")
+    @test haskey(a,:a)
+    @test !haskey(a,"something")
+    @test !haskey(a,:something)
+    @test issetequal(propertynames(a),(:a,:b,:subgroup))
+    @test issetequal(propertynames(a,true),(:a,:b,:subgroup,:attrs))
+    @test @test_warn "Accessing attributes" a.attrs["a"]==5
+    @test attributes(a) == Dict("a"=>5)
+    buf=IOBuffer()
+    show(buf,a)
+    @test startswith(String(take!(buf)),"ZarrGroup at Dictionary Storage and path \nVariables:")
 end
 
 @testset "Metadata" begin
@@ -177,7 +201,7 @@ end
   @test all(ismissing,amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
   # Test that chunk containing only missings is not initialized
-  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+  @test !Zarr.isinitialized(Zarr.storage(amiss),Zarr.citostring(CartesianIndex((1,5))))
   #
   amiss = zcreate(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=false)
   amiss[:,1] = 1:10
@@ -189,7 +213,7 @@ end
   @test all(==(-1),amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,-1,3]))
   # Test that chunk containing only fill values is not initialized
-  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+  @test !Zarr.isinitialized(Zarr.storage(amiss),Zarr.citostring(CartesianIndex((1,5))))
 end
 
 @testset "resize" begin

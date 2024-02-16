@@ -6,12 +6,20 @@ struct ZGroup{S<:AbstractStore}
     attrs::Dict
     writeable::Bool
 end
+const ZArrayOrGroup = Union{ZArray, ZGroup}
+storage(a::ZArrayOrGroup)=getfield(a,:storage)
+path(a::ZArrayOrGroup)=getfield(a,:path)
+attributes(a::ZArrayOrGroup)=getfield(a,:attrs)
+iswriteable(a::ZArrayOrGroup)=getfield(a,:writeable)
+arrays(g::ZGroup)=getfield(g,:arrays)
+groups(g::ZGroup)=getfield(g,:groups)
+export attributes
 
 # path can also be a SubString{String}
 ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
     ZGroup(storage, String(path), arrays, groups, attrs, writeable)
 
-zname(g::ZGroup) = zname(g.path)
+zname(g::ZGroup) = zname(path(g))
 
 #Open an existing ZGroup
 function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
@@ -58,22 +66,45 @@ function zopen_noerr(s::AbstractStore, mode="r";
 end
 
 function Base.show(io::IO, g::ZGroup)
-    print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
-    !isempty(g.arrays) && print(io, "\nVariables: ", map(i -> string(zname(i), " "), values(g.arrays))...)
-    !isempty(g.groups) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(g.groups))...)
+    print(io, "ZarrGroup at ", storage(g), " and path ", path(g))
+    !isempty(arrays(g)) && print(io, "\nVariables: ", map(i -> string(zname(i), " "), values(arrays(g)))...)
+    !isempty(groups(g)) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(groups(g)))...)
     nothing
 end
-Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
+Base.haskey(g::ZGroup,k)= haskey(groups(g),string(k)) || haskey(arrays(g),string(k))
 
-
-function Base.getindex(g::ZGroup, k)
-    if haskey(g.groups, k)
-        return g.groups[k]
-    elseif haskey(g.arrays, k)
-       return g.arrays[k]
+function Base.getindex(g::ZGroup, k::AbstractString)
+    if haskey(groups(g), k)
+        return groups(g)[k]
+    elseif haskey(arrays(g), k)
+       return arrays(g)[k]
     else
        throw(KeyError("Zarr Dataset does not contain $k"))
     end
+end
+Base.getindex(g::ZGroup,k)=getindex(g,string(k))
+function Base.propertynames(g::ZGroup,private::Bool=false)
+  p = if private
+    Symbol[:attrs]
+  else
+    Symbol[]
+  end
+  for k in keys(groups(g))
+    push!(p,Symbol(k))
+  end
+  for k in keys(arrays(g))
+    push!(p,Symbol(k))
+  end
+  p
+end
+
+function Base.getproperty(g::ZGroup, k::Symbol)
+  if k === :attrs
+    @warn "Accessing attributes through `.attrs` is not recommended anymore. Please use `attributes(g)` instead."
+    return getfield(g,:attrs)
+  else
+    return g[k]
+  end
 end
 
 """
@@ -142,21 +173,21 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
-  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  g.groups[name] = zgroup(g.storage,_concatpath(g.path,name),attrs=attrs)
+  iswriteable(g) || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  groups(g)[name] = zgroup(storage(g),_concatpath(path(g),name),attrs=attrs)
 end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs...) where T
-  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  iswriteable(g) || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   name = string(name)
-  z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
-  g.arrays[name] = z
+  z = zcreate(T, storage(g), addargs...; path = _concatpath(path(g),name), kwargs...)
+  arrays(g)[name] = z
   return z
 end
 
-HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
+HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(storage(s), path(s), args...; kwargs...)
 function consolidate_metadata(z::Union{ZArray,ZGroup}) 
-  z.writeable || throw(Base.IOError("Zarr group is not writeable. Please re-open in write mode to create an array",0))
-  consolidate_metadata(z.storage,z.path)
+  iswriteable(z) || throw(Base.IOError("Zarr group is not writeable. Please re-open in write mode to create an array",0))
+  consolidate_metadata(storage(z),path(z))
 end
