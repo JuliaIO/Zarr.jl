@@ -5,6 +5,7 @@
 ###
 @testset "Python zarr implementation" begin
 
+import Mmap
 using PyCall
 import PyCall: @py_str
 #If we are on conda, import zarr
@@ -48,10 +49,16 @@ for t in dtypes, co in compressors
     a = zcreate(t, g,string("azerodim",t,compstr), compressor=comp)
     a[] = testzerodimarrays[t]
 end
+#Also save as zip file.
+open(pjulia*".zip";write=true) do io
+    Zarr.writezip(io, g)
+end
+
 # Test reading in python
+for julia_path in (pjulia, pjulia*".zip")
 py"""
 import zarr
-g = zarr.open_group($pjulia)
+g = zarr.open_group($julia_path)
 gatts = g.attrs
 """
 
@@ -111,6 +118,10 @@ for i=1:length(dtypes), co in compressors
     @test py"ar.shape" == ()
     @test convert(t, py"ar[()]") == testzerodimarrays[t]
 end
+py"""
+g.store.close()
+"""
+end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
 data = rand(Int32,2,6,10)
@@ -160,6 +171,37 @@ a1[:,1,1] = 1:10
 @test a1[:,1,1] == 1:10
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
+
+
+# Test zip file can be read
+ppythonzip = ppython*".zip"
+py"""
+import numcodecs
+import numpy as np
+store = zarr.ZipStore($ppythonzip, mode="w")
+g = zarr.group(store=store)
+g.attrs["groupatt"] = "Hi"
+z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
+z1[:,:,:]=$data
+z1.attrs["test"]={"b": 6}
+z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
+z2[:]=[k for k in 'hallo']
+z3 = g.create_dataset('a3', shape=(2,), dtype=str)
+z3[:]=np.asarray(['test1', 'test234'], dtype='O')
+store.close()
+"""
+
+g = zopen(Zarr.ZipStore(Mmap.mmap(ppythonzip)))
+@test g isa Zarr.ZGroup
+@test g.attrs["groupatt"] == "Hi"
+a1 = g["a1"]
+@test a1 isa ZArray
+@test a1[:,:,:]==permutedims(data,(3,2,1))
+@test a1.attrs["test"]==Dict("b"=>6)
+# Test reading the string array
+@test String(g["a2"][:])=="hallo"
+@test g["a3"] == ["test1", "test234"]
+
 end
 
 @testset "Python datetime types" begin

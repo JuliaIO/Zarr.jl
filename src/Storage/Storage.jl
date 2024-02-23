@@ -5,9 +5,9 @@ abstract type AbstractStore end
 
 #Define the interface
 """
-  storagesize(d::AbstractStore)
+  storagesize(d::AbstractStore, p::AbstractString)
 
-This function shall return the size of all data files in a store.
+This function shall return the size of all data files in a store at path `p`.
 """
 function storagesize end
 
@@ -168,3 +168,4 @@ include("s3store.jl")
 include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
+include("zipstore.jl")

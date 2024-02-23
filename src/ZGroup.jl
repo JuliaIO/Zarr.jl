@@ -156,6 +156,7 @@ function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs..
 end
 
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
+writezip(io::IO, s::Union{ZArray,ZGroup}; kwargs...) = writezip(io, s.storage, s.path; kwargs...)
 function consolidate_metadata(z::Union{ZArray,ZGroup}) 
   z.writeable || throw(Base.IOError("Zarr group is not writeable. Please re-open in write mode to create an array",0))
   consolidate_metadata(z.storage,z.path)
