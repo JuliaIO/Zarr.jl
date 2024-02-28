@@ -29,9 +29,7 @@ julia> readdir(p)
 and only after writing some non-fillvalue data there will be chunks on disk:
 
 ````jldoctest fillval
-julia> z[1:20,1:10] .= 5
-Disk Array with size 20 x 10
-
+julia> z[1:20,1:10] .= 5;
 
 julia> readdir(p)
 4-element Vector{String}:
@@ -44,9 +42,7 @@ julia> readdir(p)
 Also be aware that during `setindex!`, when chunks only contain FillValues, the chunk will not be written to disk or deleted if it existed before. So if we write `-1`s again into our array, the corresponding chunks will be deleted.
 
 ````jldoctest fillval
-julia> z[1:10,1:10] .= -1
-Disk Array with size 10 x 10
-
+julia> z[1:10,1:10] .= -1;
 
 julia> readdir(p)
 3-element Vector{String}:

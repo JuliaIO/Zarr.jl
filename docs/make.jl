@@ -6,6 +6,7 @@ makedocs(
     format = Documenter.HTML(),
     sitename = "Zarr.jl",
     authors = "Fabian Gans, Martijn Visser",
+    warnonly=[:missing_docs,],
     pages = [
         "Home" => "index.md",
         "Tutorial" => "tutorial.md",
