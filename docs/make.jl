@@ -22,5 +22,5 @@ zarrpath = joinpath(@__DIR__, "data", "example.zarr")
 isdir(zarrpath) && rm(zarrpath, recursive=true)
 
 deploydocs(
-    repo = "github.com/meggart/Zarr.jl.git",
+    repo = "github.com/JuliaIO/Zarr.jl.git",
 )
