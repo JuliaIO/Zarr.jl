@@ -66,7 +66,7 @@ julia> eltype(z)
 Union{Missing, Int64}
 
 julia> z[8:12,1]
-5-element reshape(::Matrix{Union{Missing, Int64}}, 5) with eltype Union{Missing, Int64}:
+5-element Vector{Union{Missing, Int64}}:
   missing
   missing
   missing
