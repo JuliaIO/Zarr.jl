@@ -2,6 +2,8 @@ import JSON
 import OffsetArrays: OffsetArray
 import DiskArrays: AbstractDiskArray
 import DiskArrays
+using DateTimes64: DateTime64
+using Dates: Day, Millisecond
 
 """
 Number of tasks to use for async reading of chunks. Warning: setting this to very high values can lead to a large memory footprint. 
@@ -369,8 +371,8 @@ filterfromtype(::Type{<:Union{MaxLengthString, Union{MaxLengthString, Missing}}}
 #Not all Array types can be mapped directly to a valid ZArray encoding.
 #Here we try to determine the correct element type
 to_zarrtype(::AbstractArray{T}) where T = T
-to_zarrtype(a::AbstractArray{<:Date}) = DateTime64{Dates.Day}
-to_zarrtype(a::AbstractArray{<:DateTime}) = DateTime64{Dates.Millisecond}
+to_zarrtype(a::AbstractArray{<:Date}) = DateTime64{Day}
+to_zarrtype(a::AbstractArray{<:DateTime}) = DateTime64{Millisecond}
 
 function ZArray(a::AbstractArray, args...; kwargs...)
   z = zcreate(to_zarrtype(a), args..., size(a)...; kwargs...)

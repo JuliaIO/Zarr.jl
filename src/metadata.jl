@@ -78,7 +78,7 @@ function typestr(s::AbstractString, filterlist=nothing)
         end
         if tc == 'M' && ts == 8
             #We have a datetime64 value
-            return datetime_from_pystring(String(typespec))
+            return datetime_from_pystring(s)
         end
         # convert typecode to Char and typesize to Int
         typemap[(tc,ts)]
