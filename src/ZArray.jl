@@ -256,6 +256,9 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
   if curchunk === nothing
+    if isnothing(z.metadata.fill_value) 
+      throw(ArgumentError("The array $z got missing chunks and no fill_value"))
+    end
     fill!(a, z.metadata.fill_value)
   else
     zuncompress!(a, curchunk, z.metadata.compressor, z.metadata.filters)
