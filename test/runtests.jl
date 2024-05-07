@@ -257,6 +257,14 @@ end
     @test all(==(5),c[:,1])
   end
 
+  @testset "Fill_Value nothing with missing chunk" begin
+    # See issue #146
+    p = tempname()
+    a = zcreate(Int64, 10,10,chunks=(5,2))
+    @test_throws ArgumentError a[:,:]
+    
+  end
+
 include("storage.jl")
 
 
