@@ -22,6 +22,7 @@ function Base.getindex(s::S3Store, i::String)
     return s3_get(s.aws,s.bucket,i,raw=true,retry=false)
   catch e
     if e isa AWSS3.AWS.AWSException && e.code == "NoSuchKey"
+      @info "getindex(::S3Store, $i)" s.aws s.bucket i
       return nothing
     else
       throw(e)
