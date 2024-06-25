@@ -333,6 +333,14 @@ function zcreate(::Type{T},storage::AbstractStore,
   attrs=Dict(),
   writeable=true,
   ) where T
+
+  if compressor isa AbstractString
+    if haskey(compressortypes, String(compressor))
+      compressor = compressortypes[compressor]()
+    else
+      throw(UnknownCompressorException(compressor))
+    end
+  end
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)

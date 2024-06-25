@@ -1,4 +1,5 @@
 [deps]
+CodecZstd = "6b39b394-51ab-5f42-8807-6242bab2b4c2"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
