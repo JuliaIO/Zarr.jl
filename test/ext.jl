@@ -6,6 +6,15 @@ using Test
     @test_throws Zarr.UnknownCompressorException("asdf") zzeros(UInt8, 512, compressor="asdf")
     d = Dict("id" => "zstd")
     @test_throws Zarr.UnknownCompressorException("zstd") Zarr.getCompressor(d)
+
+    iob = IOBuffer()
+    show(iob, Zarr.UnknownCompressorException("zstd"))
+    @test "CodecZstd.jl" ∈ String(take!(iob))
+
+    iob = IOBuffer()
+    show(iob, Zarr.UnknownCompressorException("asdf"))
+    @test "issue" ∈ String(take!(iob))
+    @test Zarr.getCompressor(nothing) == Zarr.NoCompressor()
 end
 
 using CodecZstd
