@@ -36,9 +36,7 @@ function Zarr.getCompressor(::Type{ZstdZarrCompressor}, d::Dict)
 end
 
 function Zarr.zuncompress(a, z::ZstdZarrCompressor, T)
-    @info "1" a
     result = transcode(z.decompressor, a)
-    @info "2" result
     return Zarr._reinterpret(Base.nonmissingtype(T), result)
 end
 
