@@ -9,11 +9,11 @@ using Test
 
     iob = IOBuffer()
     show(iob, Zarr.UnknownCompressorException("zstd"))
-    @test "CodecZstd.jl" ∈ String(take!(iob))
+    @test occursin("CodecZstd.jl", String(take!(iob)))
 
     iob = IOBuffer()
     show(iob, Zarr.UnknownCompressorException("asdf"))
-    @test "issue" ∈ String(take!(iob))
+    @test occursin("issue", String(take!(iob)))
     @test Zarr.getCompressor(nothing) == Zarr.NoCompressor()
 end
 
