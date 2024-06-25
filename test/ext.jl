@@ -3,6 +3,9 @@ using Test
 
 @testset "Zarr Extension Packages" begin
     @test_throws Zarr.UnknownCompressorException("zstd") zzeros(UInt8, 512, compressor="zstd")
+    @test_throws Zarr.UnknownCompressorException("asdf") zzeros(UInt8, 512, compressor="asdf")
+    d = Dict("id" => "zstd")
+    @test_throws Zarr.UnknownCompressorException("zstd") Zarr.getCompressor(d)
 end
 
 using CodecZstd
