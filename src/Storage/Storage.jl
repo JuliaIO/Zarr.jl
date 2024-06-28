@@ -48,8 +48,8 @@ Deletes the given key from the store.
 """
 
 citostring(i::CartesianIndex, sep::Char='.') = join(reverse((i - oneunit(i)).I), sep)
-citostring(::CartesianIndex{0}, _) = "0"
-citostring(i::CartesianIndex, s::AbstractStore, p) = (@info("citostring",i,s,p);citostring(i, only(getmetadata(s, p, true).dimension_separator)))
+citostring(::CartesianIndex{0}, _::Char) = "0"
+citostring(i::CartesianIndex, s::AbstractStore, p) = citostring(i, only(getmetadata(s, p, true).dimension_separator))
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
 Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i, s, p)]
