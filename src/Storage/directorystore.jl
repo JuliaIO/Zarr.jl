@@ -30,7 +30,10 @@ function Base.setindex!(d::DirectoryStore,v,i::String)
   fname=d.folder * "/" * i
   folder = dirname(fname)
   isdir(folder) || mkpath(folder)
-  write(fname,v)
+  #Write to tempfile first before overwriting
+  tn = joinpath(folder, tempname())
+  write(tn, v)
+  mv(tn, fname, force=true)
   v
 end
 
