@@ -122,7 +122,8 @@ value of the “.zarray” key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-struct Metadata{T, N, C, F}
+abstract type AbstractMetadata{T,N} end
+struct Metadata{T,N,C,F} <: AbstractMetadata{T,N}
     zarr_format::Int
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}

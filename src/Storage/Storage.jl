@@ -17,14 +17,14 @@ function storagesize end
 
 Returns the data stored in the given key as a Vector{UInt8}
 """
-Base.getindex(d::AbstractStore,i::AbstractString) = error("getindex not implemented for store $(typeof(d))")
+Base.getindex(d::AbstractStore, i::AbstractString) = error("getindex not implemented for store $(typeof(d))")
 
 """
     Base.setindex!(d::AbstractStore,v,i::String)
 
 Writes the values in v to the given store and key.
 """
-Base.setindex!(d::AbstractStore,v,i::AbstractString) = error("setindex not implemented for store $(typeof(d))")
+Base.setindex!(d::AbstractStore, v, i::AbstractString) = error("setindex not implemented for store $(typeof(d))")
 
 """
     subdirs(d::AbstractStore, p)
@@ -38,7 +38,7 @@ function subdirs end
 
 Returns the keys of files in the given store.
 """
-function subkeys end 
+function subkeys end
 
 
 """
@@ -49,15 +49,15 @@ Deletes the given key from the store.
 
 citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
 citostring(::CartesianIndex{0}) = "0"
-_concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
+_concatpath(p, s) = isempty(p) ? s : rstrip(p, '/') * '/' * s
 
 Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]
-Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p,i)]
+Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p, i)]
 Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i))
-Base.delete!(s::AbstractStore, p, i) = delete!(s, _concatpath(p,i))
-Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
-Base.setindex!(s::AbstractStore,v,p,i) = setindex!(s,v,_concatpath(p,i))
-Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i)]=v
+Base.delete!(s::AbstractStore, p, i) = delete!(s, _concatpath(p, i))
+Base.haskey(s::AbstractStore, k) = isinitialized(s, k)
+Base.setindex!(s::AbstractStore, v, p, i) = setindex!(s, v, _concatpath(p, i))
+Base.setindex!(s::AbstractStore, v, p, i::CartesianIndex) = s[p, citostring(i)] = v
 
 
 maybecopy(x) = copy(x)
@@ -65,32 +65,67 @@ maybecopy(x::String) = x
 
 
 function getattrs(s::AbstractStore, p)
-  atts = s[p,".zattrs"]
+  atts = s[p, ".zattrs"]
   if atts === nothing
     Dict()
   else
-    JSON.parse(replace(String(maybecopy(atts)),": NaN,"=>": \"NaN\","))
+    JSON.parse(replace(String(maybecopy(atts)), ": NaN," => ": \"NaN\","))
   end
 end
 function writeattrs(s::AbstractStore, p, att::Dict)
   b = IOBuffer()
-  JSON.print(b,att)
-  s[p,".zattrs"] = take!(b)
+  JSON.print(b, att)
+  s[p, ".zattrs"] = take!(b)
   att
 end
 
-is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
-is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
+is_zgroup(s::AbstractStore, p, ::V2) = isinitialized(s, _concatpath(p, ".zgroup"))
+is_zarray(s::AbstractStore, p, ::V2) = isinitialized(s, _concatpath(p, ".zarray"))
+is_zgroup(s::AbstractStore, p, ::V3) = is_zgroup(NodeInfo(s, p), V3())
+is_zarray(s::AbstractStore, p, ::V3) = is_zarray(NodeInfo(s, p), V3())
+function is_zgroup(i, ::V3)
+  if i === nothing
+    return true # Implicit groups
+  else
+    return i.node_type == "group"
+  end
+end
+function is_zarray(i, ::V3)
+  if i === nothing
+    return false
+  else
+    return i.node_type == "array"
+  end
+end
+function NodeInfo(s::AbstractStore, p)
+  r = s[p, "zarr.json"]
+  r === nothing ? r : NodeInfo(r)
+end
 
-isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
-isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
+function determine_zarr_version(s::AbstractStore, p)
+  v3json = s[p, "zarr.json"]
+  if v3json !== nothing
+    nodeinfo = NodeInfo(v3json)
+    if nodeinfo.zarr_format == 3
+      return V3()
+    else
+      error("Unable to parse zarr format V$(nodeinfo.zarr_format)")
+    end
+  end
+  if is_zgroup(s, p, V2()) || is_zarray(s, p, V2())
+    return V2()
+  end
+end
+
+isinitialized(s::AbstractStore, p, i::CartesianIndex) = isinitialized(s, p, citostring(i))
+isinitialized(s::AbstractStore, p, i) = isinitialized(s, _concatpath(p, i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
-getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p,".zarray"])),fill_as_missing)
+getmetadata(s::AbstractStore, p, fill_as_missing) = Metadata(String(maybecopy(s[p, ".zarray"])), fill_as_missing)
 function writemetadata(s::AbstractStore, p, m::Metadata)
   met = IOBuffer()
-  JSON.print(met,m)
-  s[p,".zarray"] = take!(met)
+  JSON.print(met, m)
+  s[p, ".zarray"] = take!(met)
   m
 end
 
@@ -98,7 +133,7 @@ end
 ## Handling sequential vs parallel IO
 struct SequentialRead end
 struct ConcurrentRead
-    ntasks::Int
+  ntasks::Int
 end
 store_read_strategy(::AbstractStore) = SequentialRead()
 
@@ -106,57 +141,57 @@ channelsize(s) = channelsize(store_read_strategy(s))
 channelsize(::SequentialRead) = 0
 channelsize(c::ConcurrentRead) = c.ntasks
 
-read_items!(s::AbstractStore,c::AbstractChannel, p, i) = read_items!(s,c,store_read_strategy(s),p,i)
-function read_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
-    for ii in i
-        res = s[p,ii]
-        put!(c,(ii=>res))
-    end
-end
-function read_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i)
-    ntasks = r.ntasks
-    #@show ntasks
-    asyncmap(i,ntasks = ntasks) do ii
-        #@show ii,objectid(current_task),p
-        res = s[p,ii]
-        #@show ii,length(res)
-        put!(c,(ii=>res))
-        nothing
-    end
-end
-
-write_items!(s::AbstractStore,c::AbstractChannel, p, i) = write_items!(s,c,store_read_strategy(s),p,i)
-function write_items!(s::AbstractStore,c::AbstractChannel, ::SequentialRead ,p,i)
-  for _ in 1:length(i)
-      ii,data = take!(c)
-      if data === nothing
-        if isinitialized(s,p,ii)
-          delete!(s,p,ii)
-        end
-      else
-        s[p,ii] = data
-      end
+read_items!(s::AbstractStore, c::AbstractChannel, p, i) = read_items!(s, c, store_read_strategy(s), p, i)
+function read_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, p, i)
+  for ii in i
+    res = s[p, ii]
+    put!(c, (ii => res))
   end
-  close(c)
 end
-
-function write_items!(s::AbstractStore,c::AbstractChannel, r::ConcurrentRead ,p,i)
+function read_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, p, i)
   ntasks = r.ntasks
-  asyncmap(i,ntasks = ntasks) do _
-      ii,data = take!(c)
-      if data === nothing
-        if isinitialized(s,ii)
-          delete!(s,ii)
-        end
-      else
-        s[p,ii] = data
+  #@show ntasks
+  asyncmap(i, ntasks=ntasks) do ii
+    #@show ii,objectid(current_task),p
+    res = s[p, ii]
+    #@show ii,length(res)
+    put!(c, (ii => res))
+    nothing
+  end
+end
+
+write_items!(s::AbstractStore, c::AbstractChannel, p, i) = write_items!(s, c, store_read_strategy(s), p, i)
+function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, p, i)
+  for _ in 1:length(i)
+    ii, data = take!(c)
+    if data === nothing
+      if isinitialized(s, p, ii)
+        delete!(s, p, ii)
       end
-      nothing
+    else
+      s[p, ii] = data
+    end
   end
   close(c)
 end
 
-isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
+function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, p, i)
+  ntasks = r.ntasks
+  asyncmap(i, ntasks=ntasks) do _
+    ii, data = take!(c)
+    if data === nothing
+      if isinitialized(s, ii)
+        delete!(s, ii)
+      end
+    else
+      s[p, ii] = data
+    end
+    nothing
+  end
+  close(c)
+end
+
+isemptysub(s::AbstractStore, p) = isempty(subkeys(s, p)) && isempty(subdirs(s, p))
 
 #Here different storage backends can register regexes that are checked against
 #during auto-check of storage format when doing zopen
