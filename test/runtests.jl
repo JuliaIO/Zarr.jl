@@ -267,7 +267,7 @@ end
 
 include("storage.jl")
 
-
+include("Compressors.jl")
 
 include("python.jl")
 
