@@ -23,6 +23,15 @@ If the filter has type parameters, it MUST also implement:
 Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletcher32Filter`](@ref).
 """
 abstract type Filter{T,TENC} end
+
+function zencode end
+function zdecode end
+function getfilter end
+function sourcetype end
+function desttype end
+
+filterdict = Dict{String,Type{<:Filter}}()
+
 function getfilters(d::Dict) 
     if !haskey(d,"filters")
         return nothing
@@ -40,6 +49,7 @@ sourcetype(::Filter{T}) where T = T
 desttype(::Filter{<:Any,T}) where T = T
 
 zencode(ain,::Nothing) = ain
+
 
 """
     VLenArrayFilter(T)
@@ -109,4 +119,3 @@ JSON.lower(::VLenUTF8Filter) = Dict("id"=>"vlen-utf8")
 getfilter(::Type{<:VLenArrayFilter}, f) = VLenArrayFilter{typestr(f["dtype"])}()
 getfilter(::Type{<:VLenUTF8Filter}, f) = VLenUTF8Filter()
 
-filterdict = Dict("vlen-array"=>VLenArrayFilter, "vlen-utf8"=>VLenUTF8Filter)
