@@ -1,6 +1,27 @@
 import JSON
 
+"""
+    abstract type Filter{T,TENC}
 
+The supertype for all Zarr filters.  
+
+## Interface
+
+All subtypes MUST implement the following methods:
+
+- [`zencode(ain, filter::Filter)`](@ref zencode): Encodes data `ain` using the filter, and returns a vector of bytes.
+- [`zdecode(ain, filter::Filter)`](@ref zdecode): Decodes data `ain`, a vector of bytes, using the filter, and returns the original data.
+- [`JSON.lower`](@ref): Returns a JSON-serializable dictionary representing the filter, according to the Zarr specification.
+- [`getfilter(::Type{<: Filter}, filterdict)`](@ref getfilter): Returns the filter type read from a given filter dictionary.
+
+If the filter has type parameters, it MUST also implement:
+- [`sourcetype(::Filter)::T`](@ref sourcetype): equivalent to `dtype` in the Python Zarr implementation.
+- [`desttype(::Filter)::T`](@ref desttype): equivalent to `atype` in the Python Zarr implementation.
+
+
+
+Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletcher32Filter`](@ref).
+"""
 abstract type Filter{T,TENC} end
 function getfilters(d::Dict) 
     if !haskey(d,"filters")
