@@ -7,7 +7,7 @@ using OpenSSL: OpenSSL
 A basic HTTP store without any credentials. The underlying data is supposed to be
 consolidated and only read operations are supported. This store is compatible to
 datasets being served through the [xpublish](https://xpublish.readthedocs.io/en/latest/)
-python package. In case you experience performance options, one can try to use 
+python package. In case you experience performance issues, one can try to use 
 `HTTP.set_default_connection_limit!` to increase the number of concurrent connections. 
 """
 struct HTTPStore <: AbstractStore
@@ -24,10 +24,10 @@ if r.status >= 300
     else
         err_msg = 
         """Received error code $(r.status) when connecting to $(s.url) with message $(String(r.body)).
-        This might be an actual error or an indication that the server returns a different error code 
-        than 404 for missing chunks. In the later case you can run 
-        `Zarr.missing_chunk_return_code!(a.storage,$(r.status))` where a is your Zarr array or group to
-        fix the issue.
+        This might be an actual error, or an indication that the server returns a different error code 
+        than 404 for missing chunks. In the latter case, you can run 
+        `Zarr.missing_chunk_return_code!(a.storage,$(r.status))` where `a` is your Zarr array or group, 
+        to fix the issue.
         """
         throw(ErrorException(err_msg))
     end
