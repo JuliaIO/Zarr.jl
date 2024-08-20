@@ -1,8 +1,5 @@
 using Test
 
-using Zarr: zcompress, zuncompress
-using Zarr: Fletcher32Compressor
-
 @testset "Fletcher32Compressor" begin
     # These tests are copied exactly from the [`numcodecs`](https://github.com/zarr-developers/numcodecs/) Python package,
     # specifically [this file](https://github.com/zarr-developers/numcodecs/blob/main/numcodecs/tests/test_fletcher32.py).
