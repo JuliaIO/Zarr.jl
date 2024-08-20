@@ -18,6 +18,7 @@ struct VLenArrayFilter{T} <: Filter{T,UInt8} end
 
 JSON.lower(::VLenArrayFilter{T}) where T = Dict("id"=>"vlen-array","dtype"=> typestr(T) )
 getfilter(::Type{<:VLenArrayFilter}, f) = VLenArrayFilter{typestr(f["dtype"])}()
+filterdict["vlen-array"] = VLenArrayFilter
 
 function zdecode(ain, ::VLenArrayFilter{T}) where T
     f = IOBuffer(ain)
@@ -54,6 +55,7 @@ struct VLenUTF8Filter <: Filter{String, UInt8} end
 
 JSON.lower(::VLenUTF8Filter) = Dict("id"=>"vlen-utf8")
 getfilter(::Type{<:VLenUTF8Filter}, f) = VLenUTF8Filter()
+filterdict["vlen-utf8"] = VLenUTF8Filter
 
 function zdecode(ain, ::VLenUTF8Filter)
     f = IOBuffer(ain)
