@@ -18,6 +18,9 @@ If the filter has type parameters, it MUST also implement:
 - [`sourcetype(::Filter)::T`](@ref sourcetype): equivalent to `dtype` in the Python Zarr implementation.
 - [`desttype(::Filter)::T`](@ref desttype): equivalent to `atype` in the Python Zarr implementation.
 
+Finally, an entry MUST be added to the `filterdict` dictionary for each filter type.  
+This must also follow the Zarr specification's name for that filter.  The name of the filter
+is the key, and the value is the filter type (e.g. `VLenUInt8Filter` or `Fletcher32Filter`).
 
 
 Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletcher32Filter`](@ref).
@@ -80,4 +83,4 @@ desttype(::Filter{<:Any,T}) where T = T
 zencode(ain,::Nothing) = ain
 
 include("vlenfilters.jl")
-
+include("fletcher32.jl")
