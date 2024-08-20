@@ -24,10 +24,39 @@ Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletche
 """
 abstract type Filter{T,TENC} end
 
+"""
+    zencode(ain, filter::Filter)
+
+Encodes data `ain` using the filter, and returns a vector of bytes.
+"""
 function zencode end
+
+"""
+    zdecode(ain, filter::Filter)
+
+Decodes data `ain`, a vector of bytes, using the filter, and returns the original data.
+"""
 function zdecode end
+
+"""
+    getfilter(::Type{<: Filter}, filterdict)
+
+Returns the filter type read from a given specification dictionary, which must follow the Zarr specification.
+"""
 function getfilter end
+
+"""
+    sourcetype(::Filter)::T
+
+Returns the source type of the filter.
+"""
 function sourcetype end
+
+"""
+    desttype(::Filter)::T
+
+Returns the destination type of the filter.
+"""
 function desttype end
 
 filterdict = Dict{String,Type{<:Filter}}()
