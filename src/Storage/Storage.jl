@@ -1,6 +1,29 @@
 
 # Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
+
+"""
+    abstract type AbstractStore 
+
+This the abstract supertype for all Zarr store implementations.  Currently only regular files ([`DirectoryStore`](@ref))
+and Dictionaries are supported.
+
+## Interface
+
+All subtypes of `AbstractStore` must implement the following methods:
+
+- [`storagesize(d::AbstractStore, p::AbstractString)`](@ref storagesize)
+- [`subdirs(d::AbstractStore, p::AbstractString)`](@ref subdirs)
+- [`subkeys(d::AbstractStore, p::AbstractString)`](@ref subkeys)
+- [`isinitialized(d::AbstractStore, p::AbstractString)`](@ref isinitialized)
+- [`storefromstring(::Type{<: AbstractStore}, s, _)`](@ref storefromstring)
+- `Base.getindex(d::AbstractStore, i::AbstractString)`: return the data stored in key `i` as a Vector{UInt8}
+- `Base.setindex!(d::AbstractStore, v, i::AbstractString)`: write the values in `v` to the key `i` of the given store `d`
+
+They may optionally implement the following methods:
+
+- [`store_read_strategy(s::AbstractStore)`](@ref store_read_strategy): return the read strategy for the given store.  See [`SequentialRead`](@ref) and [`ConcurrentRead`](@ref).
+"""
 abstract type AbstractStore end
 
 #Define the interface
