@@ -36,7 +36,7 @@ must be added to `compressortypes` as `compressortypes["blosc"] = BloscCompresso
 """
 abstract type Compressor end
 
-compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
+const compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
 
 # function getCompressor end
 # function zcompress end
