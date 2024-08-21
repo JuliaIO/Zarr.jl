@@ -23,4 +23,5 @@ isdir(zarrpath) && rm(zarrpath, recursive=true)
 
 deploydocs(
     repo = "github.com/JuliaIO/Zarr.jl.git",
+    push_preview = true,
 )

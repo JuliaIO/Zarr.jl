@@ -1,4 +1,5 @@
 import Dates: Date, DateTime
+using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
 
 """NumPy array protocol type string (typestr) format
 
@@ -21,37 +22,7 @@ Base.codepoint(x::ASCIIChar) = UInt8(x)
 Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
 Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
-
-using Dates: Period, TimeType, Date, DateTime, Dates
-import Base.==
-struct DateTime64{P} <: TimeType
-    i::Int64
-end
-Base.convert(::Type{Date},t::DateTime64{P}) where P = Date(1970)+P(t.i)
-Base.convert(::Type{DateTime},t::DateTime64{P}) where P = DateTime(1970)+P(t.i)
-Base.show(io::IO,t::DateTime64{P}) where P = print(io,"DateTime64[",P,"]: ",string(DateTime(t)))
-Base.isless(x::DateTime64{P}, y::DateTime64{P}) where P = isless(x.i, y.i)
-==(x::DateTime64{P}, y::DateTime64{P}) where P = x.i == y.i
-strpairs = [Dates.Year => "Y", Dates.Month => "M", Dates.Week => "W", Dates.Day=>"D", 
-    Dates.Hour => "h", Dates.Minute => "m", Dates.Second=>"s", Dates.Millisecond =>"ms",
-    Dates.Microsecond => "us", Dates.Nanosecond => "ns"]
-const jlperiod = Dict{String,Any}()
-const pdt64string = Dict{Any, String}()
-for p in strpairs
-    jlperiod[p[2]] = p[1]
-    pdt64string[p[1]] = p[2]
-end
-Base.convert(::Type{DateTime64{P}}, t::Date) where P = DateTime64{P}(Dates.value(P(t-Date(1970))))
-Base.convert(::Type{DateTime64{P}}, t::DateTime) where P = DateTime64{P}(Dates.value(P(t-DateTime(1970))))
-Base.convert(::Type{DateTime64{P}}, t::DateTime64{Q}) where {P,Q} = DateTime64{P}(Dates.value(P(Q(t.i))))
-Base.zero(t::Union{DateTime64, Type{<:DateTime64}}) = t(0)
 Base.zero(t::Union{String, Type{String}}) = ""
-# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{Date}) = Date 
-# Base.promote_rule(::Type{<:DateTime64{<:Dates.DatePeriod}}, ::Type{DateTime}) = DateTime
-# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{Date}) = DateTime 
-# Base.promote_rule(::Type{<:DateTime64{<:Dates.TimePeriod}}, ::Type{DateTime}) = DateTime
-
-
 
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
@@ -63,7 +34,7 @@ typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)
 typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
 typestr(::Type{<:Array}) = "|O"
-typestr(::Type{<:DateTime64{P}}) where P = "<M8[$(pdt64string[P])]"
+typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
@@ -107,7 +78,7 @@ function typestr(s::AbstractString, filterlist=nothing)
         end
         if tc == 'M' && ts == 8
             #We have a datetime64 value
-            return DateTime64{jlperiod[String(typespec)[2:end-1]]}
+            return datetime_from_pystring(s)
         end
         # convert typecode to Char and typesize to Int
         typemap[(tc,ts)]
