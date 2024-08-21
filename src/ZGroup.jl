@@ -1,35 +1,22 @@
 struct ZGroup{S<:AbstractStore}
     storage::S
     path::String
-    arrays::Dict{String, ZArray}
-    groups::Dict{String, ZGroup}
     attrs::Dict
     writeable::Bool
+    fill_as_missing::Bool
 end
 
 # path can also be a SubString{String}
-ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
-    ZGroup(storage, String(path), arrays, groups, attrs, writeable)
+ZGroup(storage, path::AbstractString, attrs, writeable, fill_as_missing) =
+    ZGroup(storage, String(path), attrs, writeable, fill_as_missing)
 
 zname(g::ZGroup) = zname(g.path)
 
 #Open an existing ZGroup
 function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
-  arrays = Dict{String, ZArray}()
-  groups = Dict{String, ZGroup}()
-
-  for d in subdirs(s,path)
-    dshort = split(d,'/')[end]
-    m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
-    if isa(m, ZArray)
-      arrays[dshort] = m
-    elseif isa(m, ZGroup)
-      groups[dshort] = m
-    end
-  end
-  attrs = getattrs(s,path)
-  startswith(path,"/") && error("Paths should never start with a leading '/'")
-  ZGroup(s, path, arrays, groups, attrs,mode=="w")
+    attrs = getattrs(s,path)
+    startswith(path,"/") && error("Paths should never start with a leading '/'")
+    ZGroup(s, path, attrs, mode == "w", fill_as_missing)
 end
 
 """
@@ -57,23 +44,15 @@ function zopen_noerr(s::AbstractStore, mode="r";
     end
 end
 
-function Base.show(io::IO, g::ZGroup)
-    print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
-    !isempty(g.arrays) && print(io, "\nVariables: ", map(i -> string(zname(i), " "), values(g.arrays))...)
-    !isempty(g.groups) && print(io, "\nGroups: ", map(i -> string(zname(i), " "), values(g.groups))...)
-    nothing
+Base.show(io::IO, g::ZGroup) = print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
+function Base.haskey(g::ZGroup, k)
+    path = _concatpath(g.path, k)
+    is_zarray(g.storage, path) || is_zgroup(g.storage, path)
 end
-Base.haskey(g::ZGroup,k)= haskey(g.groups,k) || haskey(g.arrays,k)
-
 
 function Base.getindex(g::ZGroup, k)
-    if haskey(g.groups, k)
-        return g.groups[k]
-    elseif haskey(g.arrays, k)
-       return g.arrays[k]
-    else
-       throw(KeyError("Zarr Dataset does not contain $k"))
-    end
+    m = zopen_noerr(g.storage, g.writeable ? "w" : "r", path = _concatpath(g.path, k), fill_as_missing = g.fill_as_missing)
+    m !== nothing ? m : throw(KeyError(k))
 end
 
 """
@@ -135,7 +114,7 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
     JSON.print(b,d)
     s[path,".zgroup"]=take!(b)
     writeattrs(s,path,attrs)
-    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
+    ZGroup(s, path, attrs, true, false)
 end
 
 zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
@@ -143,16 +122,14 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
-  g.groups[name] = zgroup(g.storage,_concatpath(g.path,name),attrs=attrs)
+  zgroup(g.storage, _concatpath(g.path, name), attrs = attrs)
 end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs...) where T
   g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   name = string(name)
-  z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
-  g.arrays[name] = z
-  return z
+  zcreate(T, g.storage, addargs...; path = _concatpath(g.path, name), kwargs...)
 end
 
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
