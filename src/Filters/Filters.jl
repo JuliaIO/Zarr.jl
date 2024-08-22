@@ -85,3 +85,4 @@ zencode(ain,::Nothing) = ain
 include("vlenfilters.jl")
 include("fletcher32.jl")
 include("fixedscaleoffset.jl")
+include("shuffle.jl")
