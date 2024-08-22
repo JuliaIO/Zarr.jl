@@ -29,3 +29,32 @@ using Zarr: Fletcher32Filter
     enc[begin] += 1
     @test_throws "Checksum mismatch in Fletcher32 decoding" zdecode(enc, Fletcher32Filter())
 end
+
+#=
+@testset "FixedScaleOffsetFilter" begin
+    arrays = [
+        LinRange{Float64}(1000, 1001, 1000),
+        randn(1000) .+ 1000,
+        reshape(LinRange{Float64}(1000, 1001, 1000), (100, 10)),
+        reshape(LinRange{Float64}(1000, 1001, 1000), (10, 10, 10)),
+    ]
+
+    codecs = [
+        FixedScaleOffsetFilter(offset = 1000, scale = 1, T = Float64, Tenc = Int8),
+        FixedScaleOffsetFilter(offset = 1000, scale = 10^2, T = Float64, Tenc = Int16),
+        FixedScaleOffsetFilter(offset = 1000, scale = 10^6, T = Float64, Tenc = Int32),
+        FixedScaleOffsetFilter(offset = 1000, scale = 10^12, T = Float64, Tenc = Int64),
+        FixedScaleOffsetFilter(offset = 1000, scale = 10^12, T = Float64),
+    ]
+
+    for array in arrays
+        for codec in codecs
+            encoded = Zarr.zencode(array, codec)
+            decoded = Zarr.zdecode(encoded, codec)
+            decimal = round(log10(codec.scale))
+            @test decoded ≈ array rtol=1.5*10^(-decimal)
+        end
+    end
+end
+
+=#
