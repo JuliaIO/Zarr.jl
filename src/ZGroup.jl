@@ -44,7 +44,22 @@ function zopen_noerr(s::AbstractStore, mode="r";
     end
 end
 
-Base.show(io::IO, g::ZGroup) = print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
+function Base.show(io::IO, g::ZGroup)
+    print(io, "ZarrGroup at ", g.storage, " and path ", g.path)
+    for (i, d) in enumerate(subdirs(g.storage, g.path))
+        if i > 10  # don't print too many
+            print(io, "\n  ...")
+            break
+        end
+        path = _concatpath(g.path, d)
+        if is_zarray(g.storage, path)
+            print(io, "\n  ", d, " (Array)")
+        elseif is_zgroup(g.storage, path)
+            print(io, "\n  ", d, " (Group)")
+        end
+    end
+end
+
 function Base.haskey(g::ZGroup, k)
     path = _concatpath(g.path, k)
     is_zarray(g.storage, path) || is_zgroup(g.storage, path)
