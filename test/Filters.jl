@@ -2,7 +2,7 @@ using Test
 using Zarr: DateTime64 # for datetime reinterpret
 
 using Zarr: zencode, zdecode
-using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter
+using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter
 
 @testset "Fletcher32Filter" begin
     # These tests are copied exactly from the [`numcodecs`](https://github.com/zarr-developers/numcodecs/) Python package,
@@ -68,11 +68,11 @@ end
     ]
 
     arrays = [
-        Int32.(collect(1:1000)),                                                                # equivalent to np.arange(1000, dtype='i4')
+        Int32.(collect(1:1000)),                                                        # equivalent to np.arange(1000, dtype='i4')
         LinRange(1000, 1001, 1000),                                                     # equivalent to np.linspace(1000, 1001, 1000, dtype='f8')
         reshape(randn(1000) .* 1 .+ 1000, (100, 10)),                                   # equivalent to np.random.normal(loc=1000, scale=1, size=(100, 10))
         reshape(rand(Bool, 1000), (10, 100)),                                           # equivalent to np.random.randint(0, 2, size=1000, dtype=bool).reshape(100, 10, order='F')
-        reshape(rand(Zarr.MaxLengthString{3, UInt8}["a", "bb", "ccc"], 1000), (10, 10, 10)),                          # equivalent to np.random.choice([b'a', b'bb', b'ccc'], size=1000).reshape(10, 10, 10)
+        reshape(rand(Zarr.MaxLengthString{3, UInt8}["a", "bb", "ccc"], 1000), (10, 10, 10)), # equivalent to np.random.choice([b'a', b'bb', b'ccc'], size=1000).reshape(10, 10, 10)
         reinterpret(DateTime64{Dates.Nanosecond}, rand(UInt64(0):UInt64(2^60)-1, 1000)), # equivalent to np.random.randint(0, 2**60, size=1000, dtype='u8').view('M8[ns]')
         Nanosecond.(rand(UInt64(0):UInt64(2^60-1), 1000)),                              # equivalent to np.random.randint(0, 2**60, size=1000, dtype='u8').view('m8[ns]')
         reinterpret(DateTime64{Dates.Minute}, rand(UInt64(0):UInt64(2^25-1), 1000)),    # equivalent to np.random.randint(0, 2**25, size=1000, dtype='u8').view('M8[m]')
