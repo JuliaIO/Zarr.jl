@@ -91,3 +91,47 @@ end
         end
     end
 end
+
+
+@testset "QuantizeFilter" begin
+
+    codecs = [
+        QuantizeFilter{Float64, Float16}(digits=-1),
+        QuantizeFilter{Float64, Float16}(digits=0),
+        QuantizeFilter{Float64, Float16}(digits=1),
+        QuantizeFilter{Float64, Float32}(digits=5),
+        QuantizeFilter{Float64, Float64}(digits=12),
+    ]
+
+    arrays = [
+        LinRange(100, 200, 1000),                         # np.linspace(100, 200, 1000, dtype='<f8')
+        randn(1000) .+ 0,                                 # np.random.normal(loc=0, scale=1, size=1000).astype('<f8')
+        reshape(LinRange(100, 200, 1000), (100, 10)),     # np.linspace(100, 200, 1000, dtype='<f8').reshape(100, 10)
+        permutedims(reshape(LinRange(100, 200, 1000), (10, 100))),  # np.linspace(100, 200, 1000, dtype='<f8').reshape(100, 10, order='F')
+        reshape(LinRange(100, 200, 1000), (10, 10, 10)),  # np.linspace(100, 200, 1000, dtype='<f8').reshape(10, 10, 10)
+    ]
+
+    @testset "Encoding accuracy" begin
+        for codec in codecs
+            @testset "$(codec.digits) digits" begin
+                for array in arrays
+                    encoded = Zarr.zencode(array, codec)
+                    decoded = reshape(reinterpret(eltype(array), Zarr.zdecode(encoded, codec)), size(array))
+                    @test decoded ≈ array rtol=(1.5*10.0^(-codec.digits))
+                end
+            end
+        end
+    end
+
+    @testset "Decode is a no-op" begin
+        for codec in codecs
+            @testset "$(codec.digits) digits" begin
+                for array in arrays
+                    encoded = Zarr.zencode(array, codec)
+                    decoded = Zarr.zdecode(encoded, codec)
+                    @test decoded === encoded
+                end
+            end
+        end
+    end
+end

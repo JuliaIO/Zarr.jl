@@ -40,6 +40,17 @@ function zencode(data::AbstractArray, filter::QuantizeFilter{DecodingType, Encod
     end
 end
 
+# Decoding is a no-op; quantization is a lossy filter but data is encoded directly.
 function zdecode(data::AbstractArray, filter::QuantizeFilter{DecodingType, EncodingType}) where {DecodingType, EncodingType}
     return data
 end
+
+function JSON.lower(filter::QuantizeFilter{T, Tenc}) where {T, Tenc}
+    return Dict("type" => "quantize", "digits" => filter.digits, "dtype" => typestring(T), "atype" => typestring(Tenc))
+end
+
+function getFilter(::Type{<: QuantizeFilter}, d)
+    return QuantizeFilter{typestr(d["dtype"], typestr(d["atype"]))}(; digits = d["digits"])
+end
+
+filterdict["quantize"] = QuantizeFilter
