@@ -1,7 +1,8 @@
 using Test
+using Zarr: DateTime64 # for datetime reinterpret
 
 using Zarr: zencode, zdecode
-using Zarr: Fletcher32Filter
+using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter
 
 @testset "Fletcher32Filter" begin
     # These tests are copied exactly from the [`numcodecs`](https://github.com/zarr-developers/numcodecs/) Python package,
@@ -56,5 +57,37 @@ end
         end
     end
 end
-
 =#
+@testset "ShuffleFilter" begin
+
+    codecs = [
+        ShuffleFilter(),
+        ShuffleFilter(elementsize=0),
+        ShuffleFilter(elementsize=4),
+        ShuffleFilter(elementsize=8),
+    ]
+
+    arrays = [
+        Int32.(collect(1:1000)),                                                                # equivalent to np.arange(1000, dtype='i4')
+        LinRange(1000, 1001, 1000),                                                     # equivalent to np.linspace(1000, 1001, 1000, dtype='f8')
+        reshape(randn(1000) .* 1 .+ 1000, (100, 10)),                                   # equivalent to np.random.normal(loc=1000, scale=1, size=(100, 10))
+        reshape(rand(Bool, 1000), (10, 100)),                                           # equivalent to np.random.randint(0, 2, size=1000, dtype=bool).reshape(100, 10, order='F')
+        reshape(rand(Zarr.MaxLengthString{3, UInt8}["a", "bb", "ccc"], 1000), (10, 10, 10)),                          # equivalent to np.random.choice([b'a', b'bb', b'ccc'], size=1000).reshape(10, 10, 10)
+        reinterpret(DateTime64{Dates.Nanosecond}, rand(UInt64(0):UInt64(2^60)-1, 1000)), # equivalent to np.random.randint(0, 2**60, size=1000, dtype='u8').view('M8[ns]')
+        Nanosecond.(rand(UInt64(0):UInt64(2^60-1), 1000)),                              # equivalent to np.random.randint(0, 2**60, size=1000, dtype='u8').view('m8[ns]')
+        reinterpret(DateTime64{Dates.Minute}, rand(UInt64(0):UInt64(2^25-1), 1000)),    # equivalent to np.random.randint(0, 2**25, size=1000, dtype='u8').view('M8[m]')
+        Minute.(rand(UInt64(0):UInt64(2^25-1), 1000)),                                  # equivalent to np.random.randint(0, 2**25, size=1000, dtype='u8').view('m8[m]')
+        reinterpret(DateTime64{Dates.Nanosecond}, rand(Int64(-(2^63)):Int64(-(2^63)+20), 1000)),    # equivalent to np.random.randint(-(2**63), -(2**63) + 20, size=1000, dtype='i8').view('M8[ns]')
+        Nanosecond.(rand(Int64(-(2^63)):Int64(-(2^63)+20), 1000)),                      # equivalent to np.random.randint(-(2**63), -(2**63) + 20, size=1000, dtype='i8').view('m8[ns]')
+        reinterpret(DateTime64{Dates.Minute}, rand(Int64(-(2^63)):Int64(-(2^63)+20), 1000)),    # equivalent to np.random.randint(-(2**63), -(2**63) + 20, size=1000, dtype='i8').view('M8[m]')
+        Minute.(rand(Int64(-(2^63)):Int64(-(2^63)+20), 1000)),                          # equivalent to np.random.randint(-(2**63), -(2**63) + 20, size=1000, dtype='i8').view('m8[m]')
+    ]
+
+    for codec in codecs
+        for array in arrays
+            encoded = Zarr.zencode(array, codec)
+            decoded = reshape(reinterpret(eltype(array), Zarr.zdecode(encoded, codec)), size(array))
+            @test decoded == array
+        end
+    end
+end

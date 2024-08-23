@@ -11,7 +11,7 @@ end
 ShuffleFilter(; elementsize = 4) = ShuffleFilter(elementsize)
 
 function _do_shuffle!(dest::AbstractVector{UInt8}, source::AbstractVector{UInt8}, elementsize::Csize_t)
-    count = fld(length(source)-1, elementsize) # elementsize is in bytes, so this works
+    count = fld(length(source), elementsize) # elementsize is in bytes, so this works
     for i in 0:(count-1)
         offset = i * elementsize
         for byte_index in 0:(elementsize-1)
@@ -22,7 +22,7 @@ function _do_shuffle!(dest::AbstractVector{UInt8}, source::AbstractVector{UInt8}
 end
 
 function _do_unshuffle!(dest::AbstractVector{UInt8}, source::AbstractVector{UInt8}, elementsize::Csize_t)
-    count = fld(length(source)-1, elementsize) # elementsize is in bytes, so this works
+    count = fld(length(source), elementsize) # elementsize is in bytes, so this works
     for i in 0:(elementsize-1)
         offset = i * count
         for byte_index in 0:(count-1)
