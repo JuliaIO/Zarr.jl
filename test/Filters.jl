@@ -31,7 +31,6 @@ using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFil
     @test_throws "Checksum mismatch in Fletcher32 decoding" zdecode(enc, Fletcher32Filter())
 end
 
-#=
 @testset "FixedScaleOffsetFilter" begin
     arrays = [
         LinRange{Float64}(1000, 1001, 1000),
@@ -57,7 +56,7 @@ end
         end
     end
 end
-=#
+
 @testset "ShuffleFilter" begin
 
     codecs = [
