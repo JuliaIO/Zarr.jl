@@ -8,9 +8,9 @@
 import Mmap
 using PythonCall, CondaPkg
 # Import the zarr, numcodecs, and numpy libraries from Python
-const zarr = pyimport("zarr")
-const numcodecs = pyimport("numcodecs")
-const np = pyimport("numpy")
+zarr = pyimport("zarr")
+numcodecs = pyimport("numcodecs")
+np = pyimport("numpy")
 
 #Create some directories
 proot = tempname()
