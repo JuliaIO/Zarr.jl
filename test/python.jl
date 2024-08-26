@@ -122,7 +122,7 @@ data = rand(Int32,2,6,10)
 g = zarr.group(ppython)
 g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
-z1[:,:,:]=$data
+z1[:,:,:]=data
 z1.attrs["test"]={"b": 6}
 z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
 z2[:]=[k for k in "hallo"]
@@ -167,11 +167,11 @@ a1[:,1,1] = 1:10
 # Test zip file can be read
 ppythonzip = ppython*".zip"
 
-store = zarr.ZipStore($ppythonzip, mode="w")
+store = zarr.ZipStore(ppythonzip, mode="w")
 g = zarr.group(store=store)
 g.attrs["groupatt"] = "Hi"
 z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
-z1[:,:,:]=$data
+z1[:,:,:]=data
 z1.attrs["test"]={"b": 6}
 z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
 z2[:]=[k for k in "hallo"]
