@@ -2,7 +2,7 @@ using Test
 using Zarr
 using JSON
 using Pkg
-using PyCall
+using PythonCall, CondaPkg
 using Dates
 
 macro test_py(ex)
@@ -11,6 +11,7 @@ macro test_py(ex)
     end
 end
 
+CondaPkg.withenv() do
 @testset "Zarr" begin
 
 
@@ -272,3 +273,5 @@ include("Filters.jl")
 include("python.jl")
 
 end  # @testset "Zarr"
+
+end # CondaPkg.withenv()

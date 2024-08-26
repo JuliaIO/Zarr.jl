@@ -1,0 +1,4 @@
+[deps]
+zarr = ""
+numpy = ""
+numcodecs = ""
