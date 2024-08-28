@@ -19,7 +19,7 @@ the checksum and cropping the last 4 bytes of the data during decoding.
 struct Fletcher32Filter <: Filter{UInt8, UInt8}
 end
 
-getFilter(::Type{<: Fletcher32Filter}, d::Dict) = Fletcher32Filter()
+getfilter(::Type{<: Fletcher32Filter}, d::Dict) = Fletcher32Filter()
 JSON.lower(::Fletcher32Filter) = Dict("id" => "fletcher32")
 filterdict["fletcher32"] = Fletcher32Filter
 

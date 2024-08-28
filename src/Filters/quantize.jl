@@ -49,7 +49,7 @@ function JSON.lower(filter::QuantizeFilter{T, Tenc}) where {T, Tenc}
     return Dict("type" => "quantize", "digits" => filter.digits, "dtype" => typestring(T), "atype" => typestring(Tenc))
 end
 
-function getFilter(::Type{<: QuantizeFilter}, d)
+function getfilter(::Type{<: QuantizeFilter}, d)
     return QuantizeFilter{typestr(d["dtype"], typestr(d["atype"]))}(; digits = d["digits"])
 end
 

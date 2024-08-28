@@ -27,7 +27,7 @@ function zdecode(a::AbstractArray, c::FixedScaleOffsetFilter{ScaleOffsetType, T,
 end
 
 
-function getFilter(::Type{<: FixedScaleOffsetFilter}, d::Dict)
+function getfilter(::Type{<: FixedScaleOffsetFilter}, d::Dict)
     scale = d["scale"]
     offset = d["offset"]
     # Types must be converted from strings to the actual Julia types they represent.
