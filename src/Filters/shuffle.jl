@@ -52,7 +52,7 @@ function zdecode(a::AbstractArray, c::ShuffleFilter)
     return dest
 end
 
-function getFilter(::Type{ShuffleFilter}, d::Dict)
+function getfilter(::Type{ShuffleFilter}, d::Dict)
     return ShuffleFilter(d["elementsize"])
 end
 
