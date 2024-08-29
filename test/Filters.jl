@@ -2,7 +2,7 @@ using Test
 using Zarr: DateTime64 # for datetime reinterpret
 
 using Zarr: zencode, zdecode
-using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter
+using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
 
 @testset "Fletcher32Filter" begin
     # These tests are copied exactly from the [`numcodecs`](https://github.com/zarr-developers/numcodecs/) Python package,
@@ -132,5 +132,32 @@ end
                 end
             end
         end
+    end
+end
+
+@testset "DeltaFilter" begin
+    
+    arrays = [
+        Int32.(collect(0:999)),  # np.arange(1000, dtype='<i4')
+        Float32.(reshape(LinRange(1000, 1001, 1000), (100, 10))),  # np.linspace(1000, 1001, 1000, dtype='<f4').reshape(100, 10)
+        Float64.(reshape(randn(1000) .* 1 .+ 1000, (10, 10, 10))),  # np.random.normal(loc=1000, scale=1, size=(10, 10, 10)).astype('<f8')
+        UInt16.(permutedims(reshape(rand(UInt16, 1000) .% 200, (100, 10))))  # np.random.randint(0, 200, size=1000, dtype='u2').astype('<u2').reshape(100, 10, order='F')
+    ]
+
+    for array in arrays
+        encoded = Zarr.zencode(array, DeltaFilter{eltype(array)}())
+        decoded = Zarr.zdecode(encoded, DeltaFilter{eltype(array)}())
+        @test decoded == array
+    end
+
+    @testset "DeltaFilter with different dtypes" begin
+        dtype = Int64
+        astype = Int32
+        codec = Zarr.DeltaFilter{dtype, astype}()
+        arr = collect(Int64, 10:19)
+        expect = Int32[10; fill(1, 9)]
+        actual = Zarr.zencode(arr, codec)
+        @test Int64.(expect) == Int64.(actual)
+        @test eltype(actual) == astype
     end
 end
