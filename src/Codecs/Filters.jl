@@ -72,7 +72,13 @@ function getfilters(d::Dict)
             return nothing
         end
         f = map(d["filters"]) do f
-            getfilter(filterdict[f["id"]], f)
+            if haskey(filterdict, f["id"])
+                getfilter(filterdict[f["id"]], f)
+            elseif haskey(compressortypes, f["id"])
+                getCompressor(compressortypes[f["id"]], f)
+            else
+                throw(ArgumentError("filter `$(get(f, "id", ""))` ($f) not found"))
+            end
         end
         return (f...,)
     end
