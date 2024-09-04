@@ -30,11 +30,11 @@ function zcompress!(compressed, data, c, f)
 end
 
 function zuncompress!(data, compressed, c, f)
-    data2 = zuncompress(compressed, c, desttype(last(f))) 
+    data2 = zuncompress(compressed, c, desttype(last(f)))
     a2 = foldr(f, init = data2) do fnow, anow
         zdecode(anow, fnow)
     end
-    copyto!(data, a2)
+    copyto!(data, _reinterpret(Base.nonmissingtype(eltype(data)), a2))
 end
 
 

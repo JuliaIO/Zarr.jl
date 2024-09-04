@@ -156,6 +156,12 @@ function Metadata(d::AbstractDict, fill_as_missing)
     # create a Metadata struct from it
 
     compdict = d["compressor"]
+    if isnothing(compdict)
+        # try the last filter, for Kerchunk compat
+        if !isnothing(d["filters"]) && haskey(compressortypes, d["filters"][end]["id"])
+            compdict = pop!(d["filters"]) # TODO: this will not work with JSON3!
+        end
+    end
     compressor = getCompressor(compdict)
 
     filters = getfilters(d)
