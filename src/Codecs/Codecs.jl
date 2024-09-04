@@ -20,8 +20,7 @@ All codecs MUST implement the following methods:
 Additionally, they MUST add an entry to the `CODEC_REGISTRY` dictionary, with the key being the name of the codec and the value being the type of the codec, that can be passed into `getcodec`.
 
 Depending on their definition, codecs MAY also implement:
-- [`encodingtype(::Codec)`](@ref sourcetype): Returns the type of data when encoded.  Equivalent to `dtype` in Python.  Usually useful for [`ArrayToArray`](@ref) codecs.
-- [`decodingtype(::Codec)`](@ref desttype): Returns the type of data when decoded.  Equivalent to `astype` in Python.  Usually useful for [`ArrayToArray`](@ref) or [`ArrayToBytes`](@ref) codecs.
+- [`decode!(c::Codec, aout, ain)`](@ref decode!): Decode `ain` and store the result in `aout`, ideally without making a copy.  This is a more efficient method but codecs may choose whether or not to implement this.
 
 ## Extended help
 
@@ -37,11 +36,11 @@ Each codec has an encoded representation and a decoded representation; each of t
 - a byte string.
 
 Based on the input and output representations for the encode transform, codecs can be classified as one of three kinds:
-- [`ArrayToArray`](@ref): The input and output representations are both multi-dimensional arrays.
-- [`ArrayToBytes`](@ref): The input representation is a multi-dimensional array and the output representation is a byte string.
-- [`BytesToBytes`](@ref): The input and output representations are both byte strings.
+- [`ArrayToArrayCodec`](@ref): The input and output representations are both multi-dimensional arrays.
+- [`ArrayToBytesCodec`](@ref): The input representation is a multi-dimensional array and the output representation is a byte string.
+- [`BytesToBytesCodec`](@ref): The input and output representations are both byte strings.
 
-Note that [`BytesToArray`](@ref) codecs are disallowed by the Zarr v3 spec at this point.  
+Note that `BytesToArrayCodec` codecs are disallowed by the Zarr v3 spec at this point.  
 However, the inverse transform of an ArrayToBytes codec must go from bytes to some array.
 
 ## Zarr v2 equivalent
@@ -54,18 +53,18 @@ However, they all had fundamentally similar interfaces.
 abstract type Codec end
 
 """
-    abstract type ArrayToArrayCodec <: Codec end
+    abstract type ArrayToArrayCodec{EncodingType, DecodingType} <: Codec end
 
 The supertype for all array-to-array codecs.
 """
-abstract type ArrayToArrayCodec <: Codec end
+abstract type ArrayToArrayCodec{EncodingType, DecodingType} <: Codec end
 
 """
-    abstract type ArrayToBytesCodec <: Codec end
+    abstract type ArrayToBytesCodec{DecodingType} <: Codec end
 
 The supertype for all array-to-bytes codecs.
 """
-abstract type ArrayToBytesCodec <: Codec end
+abstract type ArrayToBytesCodec{DecodingType} <: Codec end
 
 """
     abstract type BytesToBytesCodec <: Codec end
@@ -103,15 +102,15 @@ end
 
 # Don't want to inject an extra docstring for this function since we don't own it and it could cause confusion for end users.
 function JSON.lower(codec::Codec)
-    error("Codec $codec has not implemented JSON.lower(::Codec).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
+    error("Codec $codec has not implemented JSON.lower(::$(typeof(codec))).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
 end
 
 function encode(codec::Codec, ain::AbstractArray)
-    error("Codec $codec has not implemented encode(::Codec, ::AbstractArray).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
+    error("Codec $codec has not implemented encode(::$(typeof(codec)), ::AbstractArray).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
 end
 
 function decode(codec::Codec, ain::AbstractArray)
-    error("Codec $codec has not implemented decode(::Codec, ::AbstractArray).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
+    error("Codec $codec has not implemented decode(::$(typeof(codec)), ::AbstractArray).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
 end
 
 """
@@ -125,5 +124,22 @@ but codecs can implement this more efficiently, should they desire.
 function decode!(codec::Codec, aout::AbstractArray, ain::AbstractArray)
     aout .= decode(codec, ain)
 end
+
+function encodingtype(codec::Codec)
+    error("Codec $codec has not implemented encodingtype(::$(typeof(codec))).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
+end
+
+function decodingtype(codec::Codec)
+    error("Codec $codec has not implemented decodingtype(::$(typeof(codec))).  Please implement this method, or file an issue at https://github.com/JuliaIO/Zarr.jl/issues.")
+end
+
+encodingtype(::BytesToBytesCodec) = UInt8
+decodingtype(::BytesToBytesCodec) = UInt8
+
+encodingtype(::ArrayToBytesCodec) = UInt8
+decodingtype(codec::ArrayToBytesCodec{DecodingType}) where DecodingType = DecodingType
+
+encodingtype(::ArrayToArrayCodec{EncodingType, DecodingType}) where {EncodingType, DecodingType} = EncodingType
+decodingtype(::ArrayToArrayCodec{EncodingType, DecodingType}) where {EncodingType, DecodingType} = DecodingType
 
 end # module
