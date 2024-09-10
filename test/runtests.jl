@@ -266,9 +266,7 @@ end
   end
 
 include("storage.jl")
-
-
-
 include("python.jl")
+include("ext.jl")
 
 end  # @testset "Zarr"
