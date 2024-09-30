@@ -97,7 +97,7 @@ function getattrs(s::AbstractStore, p)
 end
 function writeattrs(s::AbstractStore, p, att::Dict)
   b = IOBuffer()
-  JSON.print(b,att)
+  JSON.print(b,att,4)
   s[p,".zattrs"] = take!(b)
   att
 end
@@ -112,7 +112,7 @@ isinitialized(s::AbstractStore, i) = s[i] !== nothing
 getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p,".zarray"])),fill_as_missing)
 function writemetadata(s::AbstractStore, p, m::Metadata)
   met = IOBuffer()
-  JSON.print(met,m)
+  JSON.print(met,m,4)
   s[p,".zarray"] = take!(met)
   m
 end
