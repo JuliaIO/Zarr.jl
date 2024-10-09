@@ -222,5 +222,6 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
+fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = reinterpret(T, signed(T)(v))
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
