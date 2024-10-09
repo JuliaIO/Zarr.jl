@@ -46,7 +46,7 @@ function zdecode(data::AbstractArray, filter::QuantizeFilter{DecodingType, Encod
 end
 
 function JSON.lower(filter::QuantizeFilter{T, Tenc}) where {T, Tenc}
-    return Dict("type" => "quantize", "digits" => filter.digits, "dtype" => typestring(T), "atype" => typestring(Tenc))
+    return Dict("type" => "quantize", "digits" => filter.digits, "dtype" => typestr(T), "atype" => typestr(Tenc))
 end
 
 function getfilter(::Type{<: QuantizeFilter}, d)

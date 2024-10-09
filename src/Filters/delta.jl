@@ -35,7 +35,7 @@ function zdecode(data::AbstractArray, filter::DeltaFilter{DecodingType, Encoding
 end
 
 function JSON.lower(filter::DeltaFilter{T, Tenc}) where {T, Tenc}
-    return Dict("type" => "delta", "dtype" => typestring(T), "atype" => typestring(Tenc))
+    return Dict("id" => "delta", "dtype" => typestr(T), "atype" => typestr(Tenc))
 end
 
 function getfilter(::Type{<: DeltaFilter}, d)
