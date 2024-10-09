@@ -72,7 +72,12 @@ function getfilters(d::Dict)
             return nothing
         end
         f = map(d["filters"]) do f
+            try
             getfilter(filterdict[f["id"]], f)
+            catch e
+                @show f
+                rethrow(e)
+            end
         end
         return (f...,)
     end
