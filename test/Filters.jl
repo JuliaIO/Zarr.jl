@@ -141,12 +141,12 @@ end
         Int32.(collect(0:999)),  # np.arange(1000, dtype='<i4')
         Float32.(reshape(LinRange(1000, 1001, 1000), (100, 10))),  # np.linspace(1000, 1001, 1000, dtype='<f4').reshape(100, 10)
         Float64.(reshape(randn(1000) .* 1 .+ 1000, (10, 10, 10))),  # np.random.normal(loc=1000, scale=1, size=(10, 10, 10)).astype('<f8')
-        UInt16.(permutedims(reshape(rand(UInt16, 1000) .% 200, (100, 10))))  # np.random.randint(0, 200, size=1000, dtype='u2').astype('<u2').reshape(100, 10, order='F')
+        permutedims(reshape(rand(UInt16, 1000) .% 200, (100, 10)))  # np.random.randint(0, 200, size=1000, dtype='u2').astype('<u2').reshape(100, 10, order='F')
     ]
 
     for array in arrays
         encoded = Zarr.zencode(array, DeltaFilter{eltype(array)}())
-        decoded = Zarr.zdecode(encoded, DeltaFilter{eltype(array)}())
+        decoded = reshape(reinterpret(eltype(array), Zarr.zdecode(encoded, DeltaFilter{eltype(array)}())), size(array))
         @test decoded == array
     end
 
