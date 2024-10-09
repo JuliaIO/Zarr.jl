@@ -3,6 +3,11 @@
     FixedScaleOffsetFilter{T,TENC}(scale, offset)
 
 A compressor that scales and offsets the data.
+
+!!! note
+    The geographic CF standards define scale/offset decoding as `x * scale + offset`,
+    but this filter defines it as `x / scale + offset`.  Constructing a `FixedScaleOffsetFilter`
+    from CF data means `FixedScaleOffsetFilter(1/cf_scale_factor, cf_add_offset)`.
 """
 struct FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc} <: Filter{T, Tenc}
     scale::ScaleOffsetType
@@ -35,7 +40,7 @@ function getfilter(::Type{<: FixedScaleOffsetFilter}, d::Dict)
     string_Tenc = get(d, "atype", string_T)
     T = typestr(string_T)
     Tenc = typestr(string_Tenc)
-    return FixedScaleOffsetFilter{T, Tenc}(scale, offset)
+    return FixedScaleOffsetFilter{Tenc, T, Tenc}(scale, offset)
 end
 
 function JSON.lower(c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {ScaleOffsetType, T, Tenc}
