@@ -218,3 +218,9 @@ fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
+# Sometimes when translating between CF (climate and forecast) convention data
+# and Zarr groups, fill values are left as "negative integers" to encode unsigned
+# integers.  So, we have to convert to the signed type with the same number of bytes
+# as the unsigned integer, then reinterpret as unsigned.  That's how a fill value 
+# of -1 can have a realistic meaning with an unsigned dtype.
+fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = reinterpret(T, signed(T)(v))
