@@ -119,10 +119,10 @@ getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p
 function writemetadata(s::AbstractStore, p, m::Metadata; indent_json::Bool= false)
   met = IOBuffer()
 
-  if !indent_json
-    JSON.print(met,m)
-  else
+  if indent_json
     JSON.print(met,m,4)
+  else
+    JSON.print(met,m)
   end
   
   s[p,".zarray"] = take!(met)
