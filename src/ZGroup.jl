@@ -128,13 +128,19 @@ end
 
 Create a new zgroup in the store `s`
 """
-function zgroup(s::AbstractStore, path::String=""; attrs=Dict())
+function zgroup(s::AbstractStore, path::String=""; attrs=Dict(); indent_json::Bool= false)
     d = Dict("zarr_format"=>2)
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
-    JSON.print(b,d,4)
+    
+    if !indent_json
+      JSON.print(b,d)
+    else
+      JSON.print(b,d,4)
+    end
+
     s[path,".zgroup"]=take!(b)
-    writeattrs(s,path,attrs)
+    writeattrs(s,path,attrs, indent_json=indent_json)
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
