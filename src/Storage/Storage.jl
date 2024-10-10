@@ -98,10 +98,10 @@ end
 function writeattrs(s::AbstractStore, p, att::Dict; indent_json::Bool= false)
   b = IOBuffer()
 
-  if !indent_json
-    JSON.print(b,att)
-  else
+  if indent_json
     JSON.print(b,att,4)
+  else
+    JSON.print(b,att)
   end
 
   s[p,".zattrs"] = take!(b)
