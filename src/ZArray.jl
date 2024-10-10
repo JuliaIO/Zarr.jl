@@ -310,7 +310,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `compressor=BloscCompressor()` compressor type and properties
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
-* `indent_json` determines if indents are added to format the json files
+* `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
