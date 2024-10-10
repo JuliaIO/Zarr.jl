@@ -133,10 +133,10 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict(); indent_json::Bo
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     
-    if !indent_json
-      JSON.print(b,d)
-    else
+    if indent_json
       JSON.print(b,d,4)
+    else
+      JSON.print(b,d)
     end
 
     s[path,".zgroup"]=take!(b)
