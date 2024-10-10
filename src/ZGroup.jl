@@ -128,7 +128,7 @@ end
 
 Create a new zgroup in the store `s`
 """
-function zgroup(s::AbstractStore, path::String=""; attrs=Dict(); indent_json::Bool= false)
+function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bool= false)
     d = Dict("zarr_format"=>2)
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
