@@ -6,8 +6,45 @@ _reinterpret(::Type{T}, x::AbstractArray{S, 0}) where {T, S} = reinterpret(T, re
 _reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
 abstract type Compressor end
-getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
+function getCompressor(compdict::Dict)
+    if haskey(compressortypes, compdict["id"])
+        getCompressor(compressortypes[compdict["id"]],compdict)
+    else
+        throw(UnknownCompressorException(compdict["id"]))
+    end
+end
 getCompressor(::Nothing) = NoCompressor()
+
+"""
+    UnknownCompressorException(compid::String)
+
+Exception that occurs when an unknown compressor id string is encountered. If
+a package that will enable the compressor is known, then we will recommend that
+the user load that package.
+"""
+struct UnknownCompressorException <: Exception
+    compid::String
+end
+function Base.show(io::IO, e::UnknownCompressorException)
+    println(io, "Zarr compressor $(e.compid) is not loaded.")
+    if haskey(compressorpkgs, e.compid)
+        pkg = compressorpkgs[e.compid]
+        println(io, """
+        Loading the Julia package $(pkg).jl will trigger the compressor
+        extension package to load:
+        ```
+        using Pkg
+        Pkg.add("$pkg")
+        using $pkg
+        ```
+        """)
+    else
+        println(io, """
+        A compressor for $(e.compid) has not been implemented. Please file an
+        issue at https://github.com/JuliaIO/Zarr.jl/issues .
+        """)
+    end
+end
 
 #Compression when no filter is given
 zcompress!(compressed,data,c,::Nothing) = zcompress!(compressed,data,c)
@@ -116,9 +153,20 @@ end
 
 JSON.lower(::NoCompressor) = nothing
 
-compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
+const compressortypes = Dict("blosc"=>BloscCompressor, nothing=>NoCompressor)
 
+"""
+    Zarr.compressorpkgs::Dict{String,Symbol}
 
+Dictionary mapping compressor names to package names containing the compressor
+implementations. Loading the packages in the values will trigger package
+extensions to load.
+"""
+const compressorpkgs = Dict(
+    "blosc" => :Blosc,
+    "zlib"  => :CodecZlib,
+    "zstd"  => :CodecZstd
+)
 
 """
     ZlibCompressor(clevel=-1)
