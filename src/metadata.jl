@@ -222,9 +222,6 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
-# Sometimes, unsigned values are represented as signed integers in strings.
-# If the value is negative, then we know it needs reinterpretation, 
-# but if the value is positive, there is no difference between a signed and unsigned integer.
-fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = sign(v) < 0 ? reinterpret(T, signed(T)(v)) : T(v)
+fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = reinterpret(T, signed(T)(v))
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
