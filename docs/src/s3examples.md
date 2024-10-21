@@ -158,6 +158,7 @@ Now we test if the data can be accessed
 ````@example minio
 a2 = zopen("s3://zarrdata/group_1/array_1")
 a2[2,2,1:4]
+````
 `````
 
 
