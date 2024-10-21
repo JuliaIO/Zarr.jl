@@ -1,38 +1,24 @@
-import JSON
+#=
+# Variable-length filters
 
+This file implements variable-length filters for Zarr, i.e., filters that write arrays of variable-length arrays ("ragged arrays").
 
-abstract type Filter{T,TENC} end
-function getfilters(d::Dict) 
-    if !haskey(d,"filters")
-        return nothing
-    else
-        if d["filters"] === nothing || isempty(d["filters"])
-            return nothing
-        end
-        f = map(d["filters"]) do f
-            getfilter(filterdict[f["id"]], f)
-        end
-        return (f...,)
-    end
-end
-sourcetype(::Filter{T}) where T = T
-desttype(::Filter{<:Any,T}) where T = T
+Specifically, it implements the `VLenArrayFilter` and `VLenUTF8Filter` types, which are used to encode and decode variable-length arrays and UTF-8 strings, respectively.
+=#
 
-zencode(ain,::Nothing) = ain
+# ## VLenArrayFilter
 
 """
     VLenArrayFilter(T)
 
-Encodes and decodes variable-length arrays of arbitrary data type 
+Encodes and decodes variable-length arrays of arbitrary data type `T`.
 """
 struct VLenArrayFilter{T} <: Filter{T,UInt8} end
+# We don't need to define `sourcetype` and `desttype` for this filter, since the generic implementations are sufficient.
 
-"""
-    VLenUTF8Filter
-
-Encodes and decodes variable-length unicode strings
-"""
-struct VLenUTF8Filter <: Filter{String, UInt8} end
+JSON.lower(::VLenArrayFilter{T}) where T = Dict("id"=>"vlen-array","dtype"=> typestr(T) )
+getfilter(::Type{<:VLenArrayFilter}, f) = VLenArrayFilter{typestr(f["dtype"])}()
+filterdict["vlen-array"] = VLenArrayFilter
 
 function zdecode(ain, ::VLenArrayFilter{T}) where T
     f = IOBuffer(ain)
@@ -46,7 +32,7 @@ function zdecode(ain, ::VLenArrayFilter{T}) where T
     out
 end
 
-#Encodes Array of Vectors a into bytes
+#Encodes Array of Vectors `ain` into bytes
 function zencode(ain,::VLenArrayFilter)
     b = IOBuffer()
     nitems = length(ain)
@@ -57,6 +43,19 @@ function zencode(ain,::VLenArrayFilter)
     end
     take!(b)
 end
+
+# ## VLenUTF8Filter
+
+"""
+    VLenUTF8Filter
+
+Encodes and decodes variable-length unicode strings
+"""
+struct VLenUTF8Filter <: Filter{String, UInt8} end
+
+JSON.lower(::VLenUTF8Filter) = Dict("id"=>"vlen-utf8")
+getfilter(::Type{<:VLenUTF8Filter}, f) = VLenUTF8Filter()
+filterdict["vlen-utf8"] = VLenUTF8Filter
 
 function zdecode(ain, ::VLenUTF8Filter)
     f = IOBuffer(ain)
@@ -81,11 +80,3 @@ function zencode(ain, ::VLenUTF8Filter)
     end
     take!(b)
 end
-
-JSON.lower(::VLenArrayFilter{T}) where T = Dict("id"=>"vlen-array","dtype"=> typestr(T) )
-JSON.lower(::VLenUTF8Filter) = Dict("id"=>"vlen-utf8")
-
-getfilter(::Type{<:VLenArrayFilter}, f) = VLenArrayFilter{typestr(f["dtype"])}()
-getfilter(::Type{<:VLenUTF8Filter}, f) = VLenUTF8Filter()
-
-filterdict = Dict("vlen-array"=>VLenArrayFilter, "vlen-utf8"=>VLenUTF8Filter)
