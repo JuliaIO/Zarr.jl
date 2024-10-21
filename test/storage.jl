@@ -176,7 +176,7 @@ end
   @test storagesize(S3,p) == 0
   @test Zarr.is_zgroup(S3,p) == true
   S3group = zopen(S3,path=p)
-  S3Array = S3group.groups["bar"].arrays["baz"]
+  S3Array = S3group["bar"]["baz"]
   @test eltype(S3Array) == Zarr.ASCIIChar
   @test storagesize(S3Array) == 69
   @test String(S3Array[:]) == "Hello from the cloud!"
