@@ -28,7 +28,8 @@ function zencode(a::AbstractArray, c::FixedScaleOffsetFilter{ScaleOffsetType, T,
 end
 
 function zdecode(a::AbstractArray, c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {T, Tenc, ScaleOffsetType}
-    return _reinterpret(Base.nonmissingtype(T), @. a / c.scale + c.offset)
+    data = _reinterpret(Base.nonmissingtype(T), a)
+    return @. (data / c.scale) + c.offset
 end
 
 
