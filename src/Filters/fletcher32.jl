@@ -23,8 +23,8 @@ getfilter(::Type{<: Fletcher32Filter}, d::Dict) = Fletcher32Filter()
 JSON.lower(::Fletcher32Filter) = Dict("id" => "fletcher32")
 filterdict["fletcher32"] = Fletcher32Filter
 
-function _checksum_fletcher32(data::AbstractVector{UInt8})
-    len = length(data) / 2 # length in 16-bit words
+function _checksum_fletcher32(data::AbstractArray{UInt8})
+    len = length(data) ÷ 2 # length in 16-bit words
     sum1::UInt32 = 0
     sum2::UInt32 = 0
     data_idx = 1
@@ -62,7 +62,7 @@ function _checksum_fletcher32(data::AbstractVector{UInt8})
 end
 
 function zencode(data, ::Fletcher32Filter)
-    bytes = reinterpret(UInt8, data)
+    bytes = reinterpret(UInt8, vec(data))
     checksum = _checksum_fletcher32(bytes)
     result = copy(bytes)
     append!(result, reinterpret(UInt8, [checksum])) # TODO: decompose this without the extra allocation of wrapping in Array
