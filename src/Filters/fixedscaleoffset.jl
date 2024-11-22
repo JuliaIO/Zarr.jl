@@ -22,14 +22,15 @@ function FixedScaleOffsetFilter(; scale::ScaleOffsetType, offset::ScaleOffsetTyp
 end
 
 function zencode(a::AbstractArray, c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {T, Tenc, ScaleOffsetType}
-    return @. convert(Tenc, # convert to the encoding type after applying the scale and offset
-        round((a - c.offset) * c.scale) # apply scale and offset, and round to nearest integer
-    )
+    if Tenc <: Integer
+        return [round(Tenc, (a - c.offset) * c.scale) for a in a] # apply scale and offset, and round to nearest integer
+    else
+        return [convert(Tenc, (a - c.offset) * c.scale) for a in a] # apply scale and offset
+    end
 end
 
 function zdecode(a::AbstractArray, c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {T, Tenc, ScaleOffsetType}
-    data = _reinterpret(Base.nonmissingtype(T), a)
-    return @. (data / c.scale) + c.offset
+    return [convert(Base.nonmissingtype(T), (a / c.scale) + c.offset) for a in a]
 end
 
 
