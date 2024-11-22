@@ -22,13 +22,16 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, MaxLengthString
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, MaxLengthString, 
+       Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
 using Random: randstring
-dtypes = (UInt8, UInt16, UInt32, UInt64,
+numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
     Float16, Float32, Float64,
     Complex{Float32}, Complex{Float64},
-    Bool,MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
+    Bool,)
+dtypes = (numeric_dtypes...,
+    MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
     String)
 compressors = (
     "no"=>NoCompressor(),
@@ -37,9 +40,17 @@ compressors = (
     "blosc_noshuffle"=>BloscCompressor(cname="zstd",shuffle=0),
     "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
     "zlib"=>ZlibCompressor())
+filters = (
+    "fletcher32"=>Fletcher32Filter(),
+    "scale_offset"=>FixedScaleOffsetFilter(offset=1000, scale=10^6, T=Float64, Tenc=Int32),
+    "shuffle"=>ShuffleFilter(elementsize=4),
+    "quantize"=>QuantizeFilter{Float64,Float32}(digits=5),
+    "delta"=>DeltaFilter{Int32}()
+)
 testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10,1:6,1:2))] : rand(t,10,6,2) for t in dtypes)
 testzerodimarrays = Dict(t=>(t<:AbstractString) ? randstring(10) : rand(t) for t in dtypes)
 
+# Test arrays with compressors
 for t in dtypes, co in compressors
     compstr, comp = co
     att = Dict("This is a nested attribute"=>Dict("a"=>5))
@@ -49,6 +60,21 @@ for t in dtypes, co in compressors
     a = zcreate(t, g,string("azerodim",t,compstr), compressor=comp)
     a[] = testzerodimarrays[t]
 end
+
+# Test arrays with filters
+for (filterstr, filter) in filters
+    t = eltype(filter) == Any ? Float64 : eltype(filter)
+    att = Dict("Filter test attribute"=>Dict("b"=>6))
+    a = zcreate(t, g,string("filter_",filterstr),10,6,2,attrs=att, chunks = (5,2,2),filters=[filter])
+    testdata = rand(t,10,6,2)
+    a[:,:,:] = testdata
+    
+    # Test zero-dimensional array
+    a = zcreate(t, g,string("filter_zerodim_",filterstr), filters=[filter])
+    testzerodim = rand(t)
+    a[] = testzerodim
+end
+
 #Also save as zip file.
 open(pjulia*".zip";write=true) do io
     Zarr.writezip(io, g)
@@ -58,6 +84,7 @@ end
 for julia_path in (pjulia, pjulia*".zip")
 py"""
 import zarr
+import numcodecs
 g = zarr.open_group($julia_path)
 gatts = g.attrs
 """
@@ -66,7 +93,6 @@ gatts = g.attrs
 @test py"gatts['String attribute']" == "One"
 @test py"gatts['Int attribute']" == 5
 @test py"gatts['Float attribute']" == 10.5
-
 
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",
@@ -93,6 +119,30 @@ for i=1:length(dtypes), co in compressors
     else
       @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
     end
+end
+
+# Test reading filtered arrays from python
+for (filterstr, filter) in filters
+    t = eltype(filter) == Any ? Float64 : eltype(filter)
+    arname = string("filter_",filterstr)
+    try
+        py"""
+        ar=g[$arname]
+        """
+    catch e
+        @error "Error loading group with filter $filterstr" exception=(e,catch_backtrace())
+        @test false # test failed.
+    end
+    
+    @test py"ar.attrs['Filter test attribute']" == Dict("b"=>6)
+    @test py"ar.shape" == (2,6,10)
+    
+    # Test zero-dimensional filtered array
+    arname = string("filter_zerodim_",filterstr) 
+    py"""
+    ar_zero=g[$arname]
+    """
+    @test py"ar_zero.shape" == ()
 end
 
 for i=1:length(dtypes), co in compressors
@@ -243,7 +293,5 @@ for unit in ["Week", "Day", "Hour", "Minute", "Second",
     @test_py np.datetime64(g_julia[unit][10] |> DateTime |> string) ==  get(getproperty(g_python,unit),9)
     @test_py np.datetime64(g_julia[unit][100] |> DateTime |> string) == get(getproperty(g_python,unit),99)
 end
-
-
 
 end
