@@ -31,13 +31,9 @@ function zencode(data::AbstractArray, filter::QuantizeFilter{DecodingType, Encod
     bits = ceil(log(2, 10.0^(-exponent)))
     scale = 2.0^bits
 
-    enc = @. round(scale * arr) / scale
+    enc = @. convert(EncodingType, round(scale * arr) / scale)
 
-    if EncodingType == DecodingType
-        return enc
-    else
-        return reinterpret(EncodingType, enc)
-    end
+    return enc
 end
 
 # Decoding is a no-op; quantization is a lossy filter but data is encoded directly.
@@ -46,11 +42,11 @@ function zdecode(data::AbstractArray, filter::QuantizeFilter{DecodingType, Encod
 end
 
 function JSON.lower(filter::QuantizeFilter{T, Tenc}) where {T, Tenc}
-    return Dict("type" => "quantize", "digits" => filter.digits, "dtype" => typestr(T), "atype" => typestr(Tenc))
+    return Dict("id" => "quantize", "digits" => filter.digits, "dtype" => typestr(T), "astype" => typestr(Tenc))
 end
 
 function getfilter(::Type{<: QuantizeFilter}, d)
-    return QuantizeFilter{typestr(d["dtype"], typestr(d["atype"]))}(; digits = d["digits"])
+    return QuantizeFilter{typestr(d["dtype"], typestr(d["astype"]))}(; digits = d["digits"])
 end
 
 filterdict["quantize"] = QuantizeFilter

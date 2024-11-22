@@ -39,14 +39,14 @@ function getfilter(::Type{<: FixedScaleOffsetFilter}, d::Dict)
     offset = d["offset"]
     # Types must be converted from strings to the actual Julia types they represent.
     string_T = d["dtype"]
-    string_Tenc = get(d, "atype", string_T)
+    string_Tenc = get(d, "astype", string_T)
     T = typestr(string_T)
     Tenc = typestr(string_Tenc)
     return FixedScaleOffsetFilter{Tenc, T, Tenc}(scale, offset)
 end
 
 function JSON.lower(c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {ScaleOffsetType, T, Tenc}
-    return Dict("id" => "fixedscaleoffset", "scale" => c.scale, "offset" => c.offset, "dtype" => typestr(T), "atype" => typestr(Tenc))
+    return Dict("id" => "fixedscaleoffset", "scale" => c.scale, "offset" => c.offset, "dtype" => typestr(T), "astype" => typestr(Tenc))
 end
 
 filterdict["fixedscaleoffset"] = FixedScaleOffsetFilter
