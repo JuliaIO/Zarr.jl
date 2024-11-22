@@ -171,15 +171,15 @@ end
 end
 
 @testset "AWS S3 Storage" begin
-  Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="eu-west-2"))
-  S3,p = Zarr.storefromstring("s3://zarr-demo/store/foo")
-  @test storagesize(S3,p) == 0
-  @test Zarr.is_zgroup(S3,p) == true
+  Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+  S3, p = Zarr.storefromstring("s3://mur-sst/zarr-v1")
+  @test Zarr.is_zgroup(S3, p)
+  @test storagesize(S3, p) == 10551
   S3group = zopen(S3,path=p)
-  S3Array = S3group.groups["bar"].arrays["baz"]
-  @test eltype(S3Array) == Zarr.ASCIIChar
-  @test storagesize(S3Array) == 69
-  @test String(S3Array[:]) == "Hello from the cloud!"
+  S3Array = S3group["time"]
+  @test eltype(S3Array) == Int64
+  @test storagesize(S3Array) == 72184
+  @test S3Array[1:5] == [0, 1, 2, 3, 4]
 end
 
 @testset "GCS Storage" begin
