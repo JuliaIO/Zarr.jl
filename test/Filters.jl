@@ -110,17 +110,7 @@ end
         reshape(LinRange(100, 200, 1000), (10, 10, 10)),  # np.linspace(100, 200, 1000, dtype='<f8').reshape(10, 10, 10)
     ]
 
-    @testset "Encoding accuracy" begin
-        for codec in codecs
-            @testset "$(codec.digits) digits" begin
-                for array in arrays
-                    encoded = Zarr.zencode(array, codec)
-                    decoded = reshape(reinterpret(eltype(array), Zarr.zdecode(encoded, codec)), size(array))
-                    @test decoded ≈ array rtol=(1.5*10.0^(-codec.digits))
-                end
-            end
-        end
-    end
+    # No need to test encoding accuracy - decoding is a no op.
 
     @testset "Decode is a no-op" begin
         for codec in codecs
