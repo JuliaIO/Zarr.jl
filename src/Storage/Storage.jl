@@ -95,9 +95,15 @@ function getattrs(s::AbstractStore, p)
     JSON.parse(replace(String(maybecopy(atts)),": NaN,"=>": \"NaN\","))
   end
 end
-function writeattrs(s::AbstractStore, p, att::Dict)
+function writeattrs(s::AbstractStore, p, att::Dict; indent_json::Bool= false)
   b = IOBuffer()
-  JSON.print(b,att)
+
+  if indent_json
+    JSON.print(b,att,4)
+  else
+    JSON.print(b,att)
+  end
+
   s[p,".zattrs"] = take!(b)
   att
 end
@@ -110,9 +116,15 @@ isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
 getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p,".zarray"])),fill_as_missing)
-function writemetadata(s::AbstractStore, p, m::Metadata)
+function writemetadata(s::AbstractStore, p, m::Metadata; indent_json::Bool= false)
   met = IOBuffer()
-  JSON.print(met,m)
+
+  if indent_json
+    JSON.print(met,m,4)
+  else
+    JSON.print(met,m)
+  end
+  
   s[p,".zarray"] = take!(met)
   m
 end

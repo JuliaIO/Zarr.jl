@@ -310,6 +310,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `compressor=BloscCompressor()` compressor type and properties
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
+* `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
@@ -334,6 +335,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,
+  indent_json=false
   ) where T
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
@@ -353,9 +355,9 @@ function zcreate(::Type{T},storage::AbstractStore,
   
   isemptysub(storage,path) || error("$storage $path is not empty")
   
-  writemetadata(storage, path, metadata)
+  writemetadata(storage, path, metadata, indent_json=indent_json)
   
-  writeattrs(storage, path, attrs)
+  writeattrs(storage, path, attrs, indent_json=indent_json)
   
   ZArray{T2, N, typeof(compressor), typeof(storage)}(
   metadata, storage, path, attrs, writeable)
