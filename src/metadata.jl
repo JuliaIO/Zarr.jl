@@ -156,6 +156,12 @@ function Metadata(d::AbstractDict, fill_as_missing)
     # create a Metadata struct from it
 
     compdict = d["compressor"]
+    if isnothing(compdict)
+        # try the last filter, for Kerchunk compat
+        if !isnothing(d["filters"]) && haskey(compressortypes, d["filters"][end]["id"])
+            compdict = pop!(d["filters"]) # TODO: this will not work with JSON3!
+        end
+    end
     compressor = getCompressor(compdict)
 
     filters = getfilters(d)
@@ -216,5 +222,6 @@ Base.eltype(::Metadata{T}) where T = T
 fill_value_decoding(v::AbstractString, T::Type{<:Number}) = parse(T, v)
 fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
+fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = reinterpret(T, signed(T)(v))
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
