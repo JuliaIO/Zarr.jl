@@ -225,3 +225,4 @@ fill_value_decoding(v, T) = T(v)
 fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = reinterpret(T, signed(T)(v))
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
+fill_value_decoding(v::Vector, T::Type{<:Complex}) = T(v[1], v[2])
