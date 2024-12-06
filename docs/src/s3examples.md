@@ -12,25 +12,31 @@ account, you can access the dataset without credentials as follows:
 
 ````@example aws
 using Zarr, AWS
-AWS.global_aws_config(AWSConfig(creds=nothing, region = "eu-west-2"))
+Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
 ````
 
 Then we can directly open a zarr group stored on s3
 
 ````@example aws
-z = zopen("s3://zarr-demo/store/foo/bar")
+z = zopen("s3://mur-sst/zarr-v1")
 ````
 
-So we see that the store points to a zarr group with a single variable `baz`.
+So we see that the store points to a zarr group with a few arrays
 
 ````@example aws
-v = z["baz"]
+v = z["analysed_sst"]
 ````
 
-The variable seems to contain an ASCIIString.
+And we can read the attributes from the array
 
 ````@example aws
-String(v[:])
+v.attrs
+````
+
+Or some data
+
+````@example aws
+v[1:1000,1:1000,1]
 ````
 
 ## Accessing CMIP6 data on GCS
@@ -156,8 +162,9 @@ a[:,:,:] = reshape(1.0:24.0, (2,3,4))
 Now we test if the data can be accessed
 
 ````@example minio
-a2 = zopen("s3://zarrdata/group_1/array_1")
+a2 = zopen("s3://zarrdata/group_1/bar")
 a2[2,2,1:4]
+````
 `````
 
 

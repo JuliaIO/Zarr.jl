@@ -42,7 +42,7 @@ _pdict(d::ConsolidatedStore,p) = filter(((k,v),)->startswith(k,p),d.cons)
 function subdirs(d::ConsolidatedStore,p) 
   p2 = _unconcpath(d,p)
   d2 = _pdict(d,p2)
-  _searchsubdict(d2,p,(sp,lp)->length(sp) > lp+1)
+  _searchsubdict(d2, p2, (sp, lp) -> length(sp) > lp + 1)
 end
 
 function subkeys(d::ConsolidatedStore,p) 
