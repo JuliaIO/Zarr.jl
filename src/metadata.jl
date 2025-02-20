@@ -1,5 +1,6 @@
+import Base: UInt8
 import Dates: Date, DateTime
-using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
+using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring
 
 """NumPy array protocol type string (typestr) format
 
