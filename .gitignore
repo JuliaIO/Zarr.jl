@@ -1,3 +1,4 @@
 Manifest.toml
 docs/build
 *.zarr
+.CondaPkg
