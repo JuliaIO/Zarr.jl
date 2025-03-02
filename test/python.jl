@@ -92,7 +92,7 @@ for julia_path in (pjulia, pjulia*".zip")
     dtypesp = ("uint8","uint16","uint32","uint64",
         "int8","int16","int32","int64",
         "float16","float32","float64",
-        "complex64", "complex128","bool","|S10","<U10", "object")
+        "complex64", "complex128","bool","S10","U10", "O")
 
     #Test accessing arrays from python and reading data
     for i=1:length(dtypes), co in compressors
@@ -103,17 +103,18 @@ for julia_path in (pjulia, pjulia*".zip")
         ar=g[arname]
 
         @test pyconvert(Any, ar.attrs["This is a nested attribute"]) == Dict("a"=>5)
-        @test pyconvert(String, pystr(ar.dtype)) == tp
+        @test pyeq(Bool, ar.dtype, tp)
         @test pyconvert(Tuple, ar.shape) == (2,6,10)
         if t<:MaxLengthString || t<:String
-            for i in 0:9, j in 0:5, k in 0:1
-                local x = if tp == "|S10"
+            jar = [
+                if tp == "S10"
                     pyconvert(String, ar[k, j, i].decode())
                 else
                     pyconvert(String, ar[k, j, i])
                 end
-                @test x == testarrays[t][i+1, j+1, k+1]
-            end
+                for i in 0:9, j in 0:5, k in 0:1
+            ]
+            @test jar == testarrays[t]
         else
             @test PyArray(ar[pybuiltins.Ellipsis]) == permutedims(testarrays[t],(3,2,1))
         end
@@ -157,10 +158,10 @@ for julia_path in (pjulia, pjulia*".zip")
         arname = string("azerodim",t,compstr)
         ar=g[arname]
 
-        @test pyconvert(String, pystr(ar.dtype)) == tp
+        @test pyeq(Bool, ar.dtype, tp)
         @test pyconvert(Tuple, ar.shape) == ()
         if t<:MaxLengthString || t<:String
-            local x = if tp == "|S10"
+            local x = if tp == "S10"
                 pyconvert(String, ar[()].decode())
             else
                 pyconvert(String, ar[()])

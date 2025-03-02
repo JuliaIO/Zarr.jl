@@ -1,5 +1,4 @@
 [deps]
-Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 CondaPkg = "992eb4ea-22a4-4c89-a5bb-47a3300528ab"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
