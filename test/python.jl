@@ -118,12 +118,12 @@ for julia_path in (pjulia, pjulia*".zip")
             @test PyArray(ar[pybuiltins.Ellipsis]) == permutedims(testarrays[t],(3,2,1))
         end
     end
-    break
 
     # Test reading filtered arrays from python
     for (filterstr, filter) in filters
         t = eltype(filter) == Any ? Float64 : eltype(filter)
         arname = string("filter_",filterstr)
+        local ar
         try
             ar=g[arname]
         catch e
@@ -131,13 +131,13 @@ for julia_path in (pjulia, pjulia*".zip")
             @test false # test failed.
         end
         
-        @test ar.attrs["Filter test attribute"] == Dict("b"=>6)
-        @test ar.shape == (2,6,10)
+        @test pyconvert(Any, ar.attrs["Filter test attribute"]) == Dict("b"=>6)
+        @test pyconvert(Tuple, ar.shape) == (2,6,10)
         
         # Test zero-dimensional filtered array
         arname = string("filter_zerodim_",filterstr) 
         ar_zero=g[arname]
-        @test ar_zero.shape == ()
+        @test pyconvert(Tuple, ar_zero.shape) == ()
     end
 
     for i=1:length(dtypes), co in compressors
@@ -157,15 +157,20 @@ for julia_path in (pjulia, pjulia*".zip")
         arname = string("azerodim",t,compstr)
         ar=g[arname]
 
-        @test ar.dtype == tp
-        @test ar.shape == ()
-        @test convert(t, ar[()]) == testzerodimarrays[t]
+        @test pyconvert(String, pystr(ar.dtype)) == tp
+        @test pyconvert(Tuple, ar.shape) == ()
+        if t<:MaxLengthString || t<:String
+            local x = if tp == "|S10"
+                pyconvert(String, ar[()].decode())
+            else
+                pyconvert(String, ar[()])
+            end
+            @test x == testzerodimarrays[t]
+        else
+            @test pyconvert(Any, ar[()])[] == testzerodimarrays[t]
+        end
     end
-g.store.close()
-g.store.close()
-"""
     g.store.close()
-"""
 end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
