@@ -2,14 +2,11 @@ using Test
 using Zarr
 using JSON
 using Pkg
-using PyCall
+using PythonCall
+using CondaPkg
 using Dates
 
-macro test_py(ex)
-    quote
-        @test convert(Bool, $(esc(ex)))
-    end
-end
+CondaPkg.add("zarr"; version="2.*")
 
 @testset "Zarr" begin
 
