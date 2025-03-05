@@ -6,10 +6,9 @@
 @testset "Python zarr implementation" begin
 
 import Mmap
-using PyCall
-import PyCall: @py_str
+using PythonCall
 #If we are on conda, import zarr
-pyimport_conda("zarr","zarr")
+zarr = pyimport("zarr")
 
 #Create some directories
 proot = tempname()
@@ -82,113 +81,114 @@ end
 
 # Test reading in python
 for julia_path in (pjulia, pjulia*".zip")
-py"""
-import zarr
-import numcodecs
-g = zarr.open_group($julia_path)
-gatts = g.attrs
-"""
+    g = zarr.open_group(julia_path)
+    gatts = pyconvert(Any, g.attrs)
 
-#Test group attributes
-@test py"gatts['String attribute']" == "One"
-@test py"gatts['Int attribute']" == 5
-@test py"gatts['Float attribute']" == 10.5
+    #Test group attributes
+    @test gatts["String attribute"] == "One"
+    @test gatts["Int attribute"] == 5
+    @test gatts["Float attribute"] == 10.5
 
-dtypesp = ("uint8","uint16","uint32","uint64",
-    "int8","int16","int32","int64",
-    "float16","float32","float64",
-    "complex64", "complex128","bool","S10","U10", "O")
+    dtypesp = ("uint8","uint16","uint32","uint64",
+        "int8","int16","int32","int64",
+        "float16","float32","float64",
+        "complex64", "complex128","bool","S10","U10", "O")
 
-#Test accessing arrays from python and reading data
-for i=1:length(dtypes), co in compressors
-    compstr,comp = co
-    t = dtypes[i]
-    tp = dtypesp[i]
-    arname = string("a",t,compstr)
-    py"""
-    ar=g[$arname]
-    """
+    #Test accessing arrays from python and reading data
+    for i=1:length(dtypes), co in compressors
+        compstr,comp = co
+        t = dtypes[i]
+        tp = dtypesp[i]
+        arname = string("a",t,compstr)
+        ar=g[arname]
 
-    @test py"ar.attrs['This is a nested attribute']" == Dict("a"=>5)
-    @test py"ar.dtype==$tp"
-    @test py"ar.shape" == (2,6,10)
-    if t<:MaxLengthString
-      pyar = py"ar[:,:,:]"
-      jar = [get(get(get(pyar,k-1),j-1),i-1) for i in 1:10, j in 1:6, k in 1:2]
-      @test jar == testarrays[t]
-    else
-      @test py"ar[:,:,:]" == permutedims(testarrays[t],(3,2,1))
-    end
-end
-
-# Test reading filtered arrays from python
-for (filterstr, filter) in filters
-    t = eltype(filter) == Any ? Float64 : eltype(filter)
-    arname = string("filter_",filterstr)
-    try
-        py"""
-        ar=g[$arname]
-        """
-    catch e
-        @error "Error loading group with filter $filterstr" exception=(e,catch_backtrace())
-        @test false # test failed.
-    end
-    
-    @test py"ar.attrs['Filter test attribute']" == Dict("b"=>6)
-    @test py"ar.shape" == (2,6,10)
-    
-    # Test zero-dimensional filtered array
-    arname = string("filter_zerodim_",filterstr) 
-    py"""
-    ar_zero=g[$arname]
-    """
-    @test py"ar_zero.shape" == ()
-end
-
-for i=1:length(dtypes), co in compressors
-    compstr,comp = co
-    t = dtypes[i]
-    tp = dtypesp[i]
-    if t == UInt64
-        continue
-        # need to exclude UInt64:
-        # need explicit conversion because of https://github.com/JuliaPy/PyCall.jl/issues/744
-        # but explicit conversion uses PyLong_AsLongLongAndOverflow, which converts everything
-        # to a signed 64-bit integer, which can error out if the UInt64 is too large.
-        # Adding an overload to PyCall for unsigned ints doesn't work with NumPy scalars because
-        # they are not subtypes of integer: https://stackoverflow.com/a/58816671
+        @test pyconvert(Any, ar.attrs["This is a nested attribute"]) == Dict("a"=>5)
+        @test pyeq(Bool, ar.dtype, tp)
+        @test pyconvert(Tuple, ar.shape) == (2,6,10)
+        if t<:MaxLengthString || t<:String
+            jar = [
+                if tp == "S10"
+                    pyconvert(String, ar[k, j, i].decode())
+                else
+                    pyconvert(String, ar[k, j, i])
+                end
+                for i in 0:9, j in 0:5, k in 0:1
+            ]
+            @test jar == testarrays[t]
+        else
+            @test PyArray(ar[pybuiltins.Ellipsis]) == permutedims(testarrays[t],(3,2,1))
+        end
     end
 
-    arname = string("azerodim",t,compstr)
-    py"""
-    ar=g[$arname]
-    """
+    # Test reading filtered arrays from python
+    for (filterstr, filter) in filters
+        t = eltype(filter) == Any ? Float64 : eltype(filter)
+        arname = string("filter_",filterstr)
+        local ar
+        try
+            ar=g[arname]
+        catch e
+            @error "Error loading group with filter $filterstr" exception=(e,catch_backtrace())
+            @test false # test failed.
+        end
+        
+        @test pyconvert(Any, ar.attrs["Filter test attribute"]) == Dict("b"=>6)
+        @test pyconvert(Tuple, ar.shape) == (2,6,10)
+        
+        # Test zero-dimensional filtered array
+        arname = string("filter_zerodim_",filterstr) 
+        ar_zero=g[arname]
+        @test pyconvert(Tuple, ar_zero.shape) == ()
+    end
 
-    @test py"ar.dtype==$tp"
-    @test py"ar.shape" == ()
-    @test convert(t, py"ar[()]") == testzerodimarrays[t]
-end
-py"""
-g.store.close()
-"""
+    for i=1:length(dtypes), co in compressors
+        compstr,comp = co
+        t = dtypes[i]
+        tp = dtypesp[i]
+        if t == UInt64
+            continue
+            # need to exclude UInt64:
+            # need explicit conversion because of https://github.com/JuliaPy/PyCall.jl/issues/744
+            # but explicit conversion uses PyLong_AsLongLongAndOverflow, which converts everything
+            # to a signed 64-bit integer, which can error out if the UInt64 is too large.
+            # Adding an overload to PyCall for unsigned ints doesn't work with NumPy scalars because
+            # they are not subtypes of integer: https://stackoverflow.com/a/58816671
+        end
+
+        arname = string("azerodim",t,compstr)
+        ar=g[arname]
+
+        @test pyeq(Bool, ar.dtype, tp)
+        @test pyconvert(Tuple, ar.shape) == ()
+        if t<:MaxLengthString || t<:String
+            local x = if tp == "S10"
+                pyconvert(String, ar[()].decode())
+            else
+                pyconvert(String, ar[()])
+            end
+            @test x == testzerodimarrays[t]
+        else
+            @test pyconvert(Any, ar[()])[] == testzerodimarrays[t]
+        end
+    end
+    g.store.close()
 end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
 data = rand(Int32,2,6,10)
-py"""
-import numcodecs
-import numpy as np
-g = zarr.group($ppython)
+
+numpy = pyimport("numpy")
+numcodecs = pyimport("numcodecs")
+g = zarr.group(ppython)
 g.attrs["groupatt"] = "Hi"
-z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
-z1[:,:,:]=$data
-z1.attrs["test"]={"b": 6}
-z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
-z2[:]=[k for k in 'hallo']
-z3 = g.create_dataset('a3', shape=(2,), dtype=str)
-z3[:]=np.asarray(['test1', 'test234'], dtype='O')
-zarr.consolidate_metadata($ppython)
-"""
+z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
+z1[pybuiltins.Ellipsis] = numpy.array(data)
+z1.attrs["test"] = pydict(Dict("b"=>6))
+z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
+z2[pybuiltins.Ellipsis] = pylist([k for k in "hallo"])
+z3 = g.create_dataset("a3", shape=(2,), dtype=pybuiltins.str)
+z3[pybuiltins.Ellipsis]=numpy.asarray(["test1", "test234"], dtype="O")
+zarr.consolidate_metadata(ppython)
 
 #Open in Julia
 g = zopen(ppython)
@@ -225,21 +225,17 @@ a1[:,1,1] = 1:10
 
 # Test zip file can be read
 ppythonzip = ppython*".zip"
-py"""
-import numcodecs
-import numpy as np
-store = zarr.ZipStore($ppythonzip, mode="w")
+store = zarr.ZipStore(ppythonzip, mode="w")
 g = zarr.group(store=store)
 g.attrs["groupatt"] = "Hi"
-z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype='i4')
-z1[:,:,:]=$data
-z1.attrs["test"]={"b": 6}
-z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype='S1', compressor=numcodecs.Zlib())
-z2[:]=[k for k in 'hallo']
-z3 = g.create_dataset('a3', shape=(2,), dtype=str)
-z3[:]=np.asarray(['test1', 'test234'], dtype='O')
+z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
+z1[pybuiltins.Ellipsis] = numpy.array(data)
+z1.attrs["test"] = pydict(Dict("b"=>6))
+z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
+z2[pybuiltins.Ellipsis] = pylist([k for k in "hallo"])
+z3 = g.create_dataset("a3", shape=(2,), dtype=pybuiltins.str)
+z3[pybuiltins.Ellipsis] = numpy.asarray(["test1", "test234"], dtype="O")
 store.close()
-"""
 
 g = zopen(Zarr.ZipStore(Mmap.mmap(ppythonzip)))
 @test g isa Zarr.ZGroup
@@ -282,16 +278,15 @@ for pt in [Week, Day, Hour, Minute, Second,
 end
 
 zarr = pyimport("zarr")
-np = pyimport("numpy")
-
+numpy = pyimport("numpy")
 g_julia = zopen(p)
 g_python = zarr.open(p)
 
 for unit in ["Week", "Day", "Hour", "Minute", "Second", 
         "Millisecond"]
-    @test_py np.datetime64(g_julia[unit][1] |> DateTime |> string) == get(getproperty(g_python,unit),0)
-    @test_py np.datetime64(g_julia[unit][10] |> DateTime |> string) ==  get(getproperty(g_python,unit),9)
-    @test_py np.datetime64(g_julia[unit][100] |> DateTime |> string) == get(getproperty(g_python,unit),99)
+    for i in [0, 9, 99]
+        @test pyeq(Bool, numpy.datetime64(g_julia[unit][i+1] |> DateTime |> string), g_python[unit][i])
+    end
 end
 
 end
