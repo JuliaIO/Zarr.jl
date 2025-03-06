@@ -147,6 +147,7 @@ end
         @test Zarr.fill_value_decoding("-", String) === "-"
         @test Zarr.fill_value_decoding("", Zarr.ASCIIChar) === nothing
         @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
+        @test Zarr.fill_value_decoding(nothing, Zarr.ASCIICHar) === nothing
     end
 end
 
