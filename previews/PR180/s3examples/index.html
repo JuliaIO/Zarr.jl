@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Accessing cloud data Examples · Zarr.jl</title><meta name="title" content="Accessing cloud data Examples · Zarr.jl"/><meta property="og:title" content="Accessing cloud data Examples · Zarr.jl"/><meta property="twitter:title" content="Accessing cloud data Examples · Zarr.jl"/><meta name="description" content="Documentation for Zarr.jl."/><meta property="og:description" content="Documentation for Zarr.jl."/><meta property="twitter:description" content="Documentation for Zarr.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">Zarr.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../tutorial/">Tutorial</a></li><li><a class="tocitem" href="../reference/">API Reference</a></li><li><a class="tocitem" href="../storage/">Storage Backends</a></li><li class="is-active"><a class="tocitem" href>Accessing cloud data Examples</a><ul class="internal"><li><a class="tocitem" href="#Accessing-data-on-Amazon-S3"><span>Accessing data on Amazon S3</span></a></li><li><a class="tocitem" href="#Accessing-CMIP6-data-on-GCS"><span>Accessing CMIP6 data on GCS</span></a></li><li><a class="tocitem" href="#Saving-data-to-S3-using-Minio.jl"><span>Saving data to S3 using Minio.jl</span></a></li></ul></li><li><a class="tocitem" href="../operations/">Operations on Zarr Arrays</a></li><li><a class="tocitem" href="../missings/">Dealing with missing values</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Accessing cloud data Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Accessing cloud data Examples</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaIO/Zarr.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaIO/Zarr.jl/blob/master/docs/src/s3examples.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Some-examples-on-how-to-access-public-S3-datasets"><a class="docs-heading-anchor" href="#Some-examples-on-how-to-access-public-S3-datasets">Some examples on how to access public S3 datasets</a><a id="Some-examples-on-how-to-access-public-S3-datasets-1"></a><a class="docs-heading-anchor-permalink" href="#Some-examples-on-how-to-access-public-S3-datasets" title="Permalink"></a></h1><p>With this package it is possible to access public datasets that are hosted remotely on a s3-compatible cloud store. Here we provide examples on how to read data from commonly used datasets.</p><h2 id="Accessing-data-on-Amazon-S3"><a class="docs-heading-anchor" href="#Accessing-data-on-Amazon-S3">Accessing data on Amazon S3</a><a id="Accessing-data-on-Amazon-S3-1"></a><a class="docs-heading-anchor-permalink" href="#Accessing-data-on-Amazon-S3" title="Permalink"></a></h2><p>First we show how to access the zarr-demo bucket on AWS S3. We have to setup a AWS configuration first, for options look at the documentation of <a href="https://github.com/JuliaCloud/AWS.jl">AWS.jl</a>. If you don&#39;t have an account, you can access the dataset without credentials as follows:</p><pre><code class="language-julia hljs">using Zarr, AWS
+Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region=&quot;us-west-2&quot;))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">AWS.AWSConfig(nothing, &quot;us-west-2&quot;, &quot;json&quot;, 3)</code></pre><p>Then we can directly open a zarr group stored on s3</p><pre><code class="language-julia hljs">z = zopen(&quot;s3://mur-sst/zarr-v1&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ZarrGroup at S3 Object Storage and path zarr-v1
+Variables: lat analysed_sst analysis_error mask time lon sea_ice_fraction </code></pre><p>So we see that the store points to a zarr group with a few arrays</p><pre><code class="language-julia hljs">v = z[&quot;analysed_sst&quot;]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ZArray{Int16} of size 36000 x 17999 x 6443</code></pre><p>And we can read the attributes from the array</p><pre><code class="language-julia hljs">v.attrs</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 9 entries:
+  &quot;units&quot;             =&gt; &quot;kelvin&quot;
+  &quot;add_offset&quot;        =&gt; 298.15
+  &quot;_ARRAY_DIMENSIONS&quot; =&gt; Any[&quot;time&quot;, &quot;lat&quot;, &quot;lon&quot;]
+  &quot;long_name&quot;         =&gt; &quot;analysed sea surface temperature&quot;
+  &quot;scale_factor&quot;      =&gt; 0.001
+  &quot;standard_name&quot;     =&gt; &quot;sea_surface_foundation_temperature&quot;
+  &quot;valid_min&quot;         =&gt; -32767
+  &quot;comment&quot;           =&gt; &quot;\&quot;Final\&quot; version using Multi-Resolution Variational …
+  &quot;valid_max&quot;         =&gt; 32767</code></pre><p>Or some data</p><pre><code class="language-julia hljs">v[1:1000,1:1000,1]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1000×1000 Matrix{Int16}:
+ -32768  -32768  -32768  -32768  -32768  …  -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768  …  -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+      ⋮                                  ⋱                          
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768  …  -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768
+ -32768  -32768  -32768  -32768  -32768     -32768  -32768  -32768  -32768</code></pre><h2 id="Accessing-CMIP6-data-on-GCS"><a class="docs-heading-anchor" href="#Accessing-CMIP6-data-on-GCS">Accessing CMIP6 data on GCS</a><a id="Accessing-CMIP6-data-on-GCS-1"></a><a class="docs-heading-anchor-permalink" href="#Accessing-CMIP6-data-on-GCS" title="Permalink"></a></h2><p>GCS is hosting a subset of the <a href="https://pcmdi.llnl.gov/CMIP6/">CMIP6</a> climate model ensemble runs. The data is stored in zarr format and accessible using this package. There is a catalog that contains a table of all model runs available:</p><pre><code class="language-julia hljs">using DataFrames, CSV
+overview = CSV.read(download(&quot;https://storage.googleapis.com/cmip6/cmip6-zarr-consolidated-stores.csv&quot;),DataFrame)</code></pre><pre><code class="nohighlight hljs">138786×10 DataFrame. Omitted printing of 6 columns
+│ Row    │ activity_id │ institution_id │ source_id  │ experiment_id │
+│        │ String      │ String         │ String     │ String        │
+├────────┼─────────────┼────────────────┼────────────┼───────────────┤
+│ 1      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 2      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 3      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 4      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 5      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 6      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+│ 7      │ AerChemMIP  │ BCC            │ BCC-ESM1   │ piClim-CH4    │
+⋮
+│ 138779 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138780 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138781 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138782 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138783 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138784 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138785 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │
+│ 138786 │ ScenarioMIP │ UA             │ MCM-UA-1-0 │ ssp585        │</code></pre><p>These columns contain the path to the store as well, so after some subsetting we can access the member run we are interested in:</p><pre><code class="language-julia hljs">store = filter(overview) do row
+  row.activity_id == &quot;ScenarioMIP&quot; &amp;&amp; row.institution_id==&quot;DKRZ&quot; &amp;&amp; row.variable_id==&quot;tas&quot; &amp;&amp; row.experiment_id==&quot;ssp585&quot;
+end
+store.zstore[1]</code></pre><pre><code class="nohighlight hljs">&quot;gs://cmip6/CMIP6/ScenarioMIP/DKRZ/MPI-ESM1-2-HR/ssp585/r1i1p1f1/3hr/tas/gn/v20190710/&quot;</code></pre><p>So we can access the dataset and read some data from it. Note that we use <code>consolidated=true</code> reduce the overhead of repeatedly requesting many metadata files:</p><pre><code class="language-julia hljs">g = zopen(store.zstore[1], consolidated=true)</code></pre><p>You can access the meta-information through <code>g.attrs</code> or for example read the first time slice through</p><pre><code class="language-julia hljs">g[&quot;tas&quot;][:,:,1]</code></pre><pre><code class="nohighlight hljs">384×192 reshape(::Array{Union{Missing, Float32},3}, 384, 192) with eltype Union{Missing, Float32}:
+ 244.27   245.276  245.186  245.419  …  252.782  252.852  252.672  252.667
+ 244.284  245.223  245.122  245.497     252.833  252.88   252.686  252.682
+ 244.309  245.139  245.003  245.422     252.85   252.895  252.704  252.663
+ 244.297  245.104  244.954  245.272     252.84   252.872  252.727  252.69
+ 244.352  245.055  244.835  245.182     252.858  252.895  252.739  252.69
+ 244.358  245.001  244.825  245.079  …  252.79   252.926  252.77   252.7  
+ 244.34   244.924  244.79   245.104     252.778  252.907  252.768  252.672
+ 244.348  244.87   244.737  245.112     252.756  252.928  252.755  252.712
+ 244.339  244.803  244.684  245.223     252.741  252.911  252.78   252.706
+ 244.383  244.723  244.649  245.005     252.729  252.842  252.78   252.719
+   ⋮                                 ⋱                      ⋮             
+ 244.184  245.68   245.997  246.456  …  252.421  252.528  252.452  252.637
+ 244.186  245.649  245.907  246.313     252.518  252.546  252.469  252.643
+ 244.163  245.542  245.731  246.085     252.561  252.553  252.495  252.637
+ 244.227  245.491  245.68   246.178     252.643  252.596  252.534  252.678
+ 244.227  245.483  245.626  245.987     252.692  252.633  252.573  252.672
+ 244.253  245.442  245.497  245.975  …  252.756  252.682  252.577  252.631
+ 244.227  245.409  245.352  245.897     252.719  252.758  252.6    252.655
+ 244.296  245.356  245.231  245.774     252.735  252.809  252.612  252.659
+ 244.301  245.303  245.192  245.524     252.733  252.862  252.655  252.678</code></pre><h2 id="Saving-data-to-S3-using-Minio.jl"><a class="docs-heading-anchor" href="#Saving-data-to-S3-using-Minio.jl">Saving data to S3 using Minio.jl</a><a id="Saving-data-to-S3-using-Minio.jl-1"></a><a class="docs-heading-anchor-permalink" href="#Saving-data-to-S3-using-Minio.jl" title="Permalink"></a></h2><p>In the examples above we only accessed data from several sources. Here we show  how to store data on an own Minio server that we launch for testing purposes. First we launch the Minio server:</p><pre><code class="language-julia hljs">using Minio
+s = Minio.Server(tempname(), address=&quot;localhost:9005&quot;)
+run(s, wait=false)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Minio.Server(&quot;http://localhost:9005&quot;, <span class="sgr32"><span class="sgr1">running</span></span>)</code></pre><p>In the next step we configure AWS.jl to connect to our Minio instance by default.  Afterwards we create an new bucket where we can store our data:</p><pre><code class="language-julia hljs">using AWS
+cfg = MinioConfig(&quot;http://localhost:9005&quot;)
+AWS.global_aws_config(cfg)
+@service S3
+S3.create_bucket(&quot;zarrdata&quot;)</code></pre><p>Next we create a new zarr group in the just created bucket:</p><pre><code class="language-julia hljs">using Zarr
+g = zgroup(S3Store(&quot;zarrdata&quot;),&quot;group_1&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ZarrGroup at S3 Object Storage and path group_1</code></pre><p>and a new array inside the group and fill it with some data:</p><pre><code class="language-julia hljs">a = zcreate(Float32, g, &quot;bar&quot;, 2,3,4, chunks=(1,2,2), attrs = Dict(&quot;att1&quot;=&gt;&quot;one&quot;, &quot;att2&quot;=&gt;2.5))
+a[:,:,:] = reshape(1.0:24.0, (2,3,4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2×3×4 reshape(::StepRangeLen{Float64, Base.TwicePrecision{Float64}, Base.TwicePrecision{Float64}, Int64}, 2, 3, 4) with eltype Float64:
+[:, :, 1] =
+ 1.0  3.0  5.0
+ 2.0  4.0  6.0
+
+[:, :, 2] =
+ 7.0   9.0  11.0
+ 8.0  10.0  12.0
+
+[:, :, 3] =
+ 13.0  15.0  17.0
+ 14.0  16.0  18.0
+
+[:, :, 4] =
+ 19.0  21.0  23.0
+ 20.0  22.0  24.0</code></pre><p>Now we test if the data can be accessed</p><pre><code class="language-julia hljs">a2 = zopen(&quot;s3://zarrdata/group_1/bar&quot;)
+a2[2,2,1:4]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Float32}:
+  4.0
+ 10.0
+ 16.0
+ 22.0</code></pre><p>`````</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../storage/">« Storage Backends</a><a class="docs-footer-nextpage" href="../operations/">Operations on Zarr Arrays »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Friday 7 March 2025 16:37">Friday 7 March 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
