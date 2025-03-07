@@ -27,7 +27,7 @@ function getCompressor(::Type{ZstdCompressor}, d::Dict)
     )
 end
 
-function zuncompress(a, ::ZstdCompressor, T)
+function zuncompress(a, z::ZstdCompressor, T)
     result = decode(z.config.codec, a)
     _reinterpret(Base.nonmissingtype(T),result)
 end
