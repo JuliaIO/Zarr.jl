@@ -18,5 +18,5 @@ Pages = ["ZGroup.jl"]
 
 ```@autodocs
 Modules = [Zarr]
-Pages = ["Compressors/Compressors.jl", "Compressors/blosc.jl", "Compressors/zlib.jl"]
+Pages = ["Compressors/Compressors.jl", "Compressors/blosc.jl", "Compressors/zlib.jl", "Compressors/zstd.jl"]
 ```

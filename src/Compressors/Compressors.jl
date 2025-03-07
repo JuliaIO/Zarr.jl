@@ -48,6 +48,7 @@ const compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
 # Include the compressor implementations
 include("blosc.jl")
 include("zlib.jl")
+include("zstd.jl")
 
 # ## Fallback definitions for the compressor interface
 # Define fallbacks and generic methods for the compressor interface
