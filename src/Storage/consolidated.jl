@@ -3,18 +3,19 @@ A store that wraps any other AbstractStore but has access to the consolidated me
 stored in the .zmetadata key. Whenever data attributes or metadata are accessed, the
 data will be read from the dictionary instead.
 """
-struct ConsolidatedStore{P} <: AbstractStore
+struct ConsolidatedStore{S,P} <: AbstractStore{S}
   parent::P
   path::String
   cons::Dict{String,Any}
 end
-function ConsolidatedStore(s::AbstractStore, p)
+function ConsolidatedStore{S}(s::AbstractStore, p) where S
   d = s[p, ".zmetadata"]
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
+  ConsolidatedStore{S, typeof(s)}(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
 end
+ConsolidatedStore(s::AbstractStore, p) = ConsolidateStore{'.'}(s, p)
 
 function Base.show(io::IO,d::ConsolidatedStore)
     b = IOBuffer()

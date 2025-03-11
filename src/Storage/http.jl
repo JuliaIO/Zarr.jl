@@ -10,11 +10,12 @@ datasets being served through the [xpublish](https://xpublish.readthedocs.io/en/
 python package. In case you experience performance issues, one can try to use 
 `HTTP.set_default_connection_limit!` to increase the number of concurrent connections. 
 """
-struct HTTPStore <: AbstractStore
+struct HTTPStore{S} <: AbstractStore{S}
     url::String
     allowed_codes::Set{Int}
+    HTTPStore{S}(url, allowed_codes = Set((404,))) where S = new{S}(url, allowed_codes)
 end
-HTTPStore(url) = HTTPStore(url,Set((404,)))
+HTTPStore(url) = HTTPStore{'.'}(url)
 
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
