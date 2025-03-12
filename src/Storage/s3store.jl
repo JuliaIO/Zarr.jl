@@ -15,7 +15,7 @@ function S3Store{S}(bucket::String;
   S3Store(bucket, aws)
 end
 S3Store(bucket, aws) = S3Store{'.'}(bucket, aws)
-S3Store(bucket; aws = nothing) = S3Store{'.'}(bucket, aws)
+S3Store(bucket; aws = nothing) = S3Store{'.'}(bucket; aws)
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
 
