@@ -15,7 +15,7 @@ function ConsolidatedStore{S}(s::AbstractStore, p) where S
   end
   ConsolidatedStore{S, typeof(s)}(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
 end
-ConsolidatedStore(s::AbstractStore, p) = ConsolidateStore{'.'}(s, p)
+ConsolidatedStore(s::AbstractStore, p) = ConsolidatedStore{'.'}(s, p)
 
 function Base.show(io::IO,d::ConsolidatedStore)
     b = IOBuffer()
