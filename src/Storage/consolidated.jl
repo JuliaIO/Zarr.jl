@@ -3,19 +3,24 @@ A store that wraps any other AbstractStore but has access to the consolidated me
 stored in the .zmetadata key. Whenever data attributes or metadata are accessed, the
 data will be read from the dictionary instead.
 """
-struct ConsolidatedStore{S,P} <: AbstractStore{S}
+struct ConsolidatedStore{V,S,P} <: AbstractStore{V,S}
   parent::P
   path::String
   cons::Dict{String,Any}
 end
-function ConsolidatedStore{S}(s::AbstractStore, p) where S
+function ConsolidatedStore{V,S}(s::AbstractStore, p) where {V,S}
   d = s[p, ".zmetadata"]
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore{S, typeof(s)}(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
+  ConsolidatedStore{V, S, typeof(s)}(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
 end
-ConsolidatedStore(s::AbstractStore, p) = ConsolidatedStore{'.'}(s, p)
+ConsolidatedStore{V}(s::AbstractStore, p) where V = ConsolidatedStore{V, default_sep(V)}(s, p)
+ConsolidatedStore(s::AbstractStore, p) = ConsolidatedStore{DV,DS}(s, p)
+
+ConsolidatedStore(s::AbstractStore, p, d) = ConsolidatedStore{DV, DS}(s,p,d)
+ConsolidatedStore{V}(s::AbstractStore, p, d) where V = ConsolidatedStore{V, default_sep(V)}(s,p,d)
+ConsolidatedStore{V,S}(s::AbstractStore, p, d) where {V,S} = ConsolidatedStore{V, default_sep(V), typeof(s)}(s,p,d)
 
 function Base.show(io::IO,d::ConsolidatedStore)
     b = IOBuffer()

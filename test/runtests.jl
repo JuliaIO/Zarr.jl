@@ -15,7 +15,7 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore}
+            Zarr.DictStore{2, '.'}}
 
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -40,7 +40,7 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore}
+            Zarr.DictStore{2, '.'}}
 
         @test eltype(z) === Int64
         @test ndims(z) === 2
@@ -69,12 +69,14 @@ CondaPkg.add("zarr"; version="2.*")
             @test JSON.parsefile("$dir/$name/.zarray") == Dict{String, Any}(
                 "dtype" => "<i8",
                 "filters" => nothing,
-                "shape" => [3, 2],
+                "shape" => Any[3, 2],
                 "order" => "C",
                 "zarr_format" => 2,
-                "chunks" => [3, 2],
+                "chunks" => Any[3, 2],
                 "fill_value" => nothing,
-                "compressor" => nothing)
+                "compressor" => nothing,
+                "dimension_separator" => "."
+            )
             # call gc to avoid unlink: operation not permitted (EPERM) on Windows
             # might be because files are left open
             # from https://github.com/JuliaLang/julia/blob/f6344d32d3ebb307e2b54a77e042559f42d2ebf6/stdlib/SharedArrays/test/runtests.jl#L146

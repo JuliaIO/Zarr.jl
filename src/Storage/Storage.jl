@@ -2,12 +2,27 @@
 # Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
 
+# Default Zarr version
+const DV = 2
+
+# Default Zarr separator
+
+# Default Zarr v2 separator
+const DS2 = '.'
+# Default Zarr v3 separator
+const DS3 = '/'
+
+default_sep(version) = version == 2 ? DS2 : DS3
+const DS = default_sep(DV)
+
 """
-    abstract type AbstractStore{S}
+    abstract type AbstractStore{V,S}
 
 This the abstract supertype for all Zarr store implementations.  Currently only regular files ([`DirectoryStore`](@ref))
 and Dictionaries are supported.
 
+# Type Parameters
+V is the version, either 2 or 3
 S is the dimension separator
 
 ## Interface
@@ -26,7 +41,7 @@ They may optionally implement the following methods:
 
 - [`store_read_strategy(s::AbstractStore)`](@ref store_read_strategy): return the read strategy for the given store.  See [`SequentialRead`](@ref) and [`ConcurrentRead`](@ref).
 """
-abstract type AbstractStore{S} end
+abstract type AbstractStore{V,S} end
 
 #Define the interface
 """
@@ -72,9 +87,9 @@ function subkeys end
 Deletes the given key from the store.
 """
 
-citostring(i::CartesianIndex, sep::Char='.') = join(reverse((i - oneunit(i)).I), sep)
-citostring(::CartesianIndex{0}, _::Char) = "0"
-citostring(i::CartesianIndex, s::AbstractStore{S}) where S = citostring(i, S)
+@inline citostring(i::CartesianIndex, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$sep" : "" ) * join(reverse((i - oneunit(i)).I), sep)
+@inline citostring(::CartesianIndex{0}, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$(sep)0" : "0" )
+citostring(i::CartesianIndex, s::AbstractStore{V, S}) where {V,S} = citostring(i, V, S)
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
 Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i, s)]
@@ -114,7 +129,7 @@ end
 is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
 is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
-isinitialized(s::AbstractStore{S}, p, i::CartesianIndex) where S = isinitialized(s,p,citostring(i, S))
+isinitialized(s::AbstractStore, p, i::CartesianIndex) = isinitialized(s,p,citostring(i, s))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 

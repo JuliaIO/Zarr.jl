@@ -56,10 +56,10 @@ function _gcs_request_headers()
   return headers
 end
 
-struct GCStore{S} <: AbstractStore{S}
+struct GCStore{V,S} <: AbstractStore{V,S}
   bucket::String
 
-  function GCStore{S}(url::String) where S
+  function GCStore{V,S}(url::String) where {V,S}
     uri = URI(url)
 
     if uri.scheme == "gs"
@@ -71,7 +71,8 @@ struct GCStore{S} <: AbstractStore{S}
     @debug "GCS bucket: $bucket"
     new(bucket)
   end
-  GCStore(url::String) = GCStore{'.'}(url)
+  GCStore(url::String) = GCStore{DV,DS}(url)
+  GCStore{V}(url::String) where V = GCStore{V, default_sep(V)}(url)
 end
 
 

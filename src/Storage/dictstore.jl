@@ -1,9 +1,10 @@
 # Stores data in a simple dict in memory
-struct DictStore{S} <: AbstractStore{S}
+struct DictStore{V,S} <: AbstractStore{V,S}
   a::Dict{String,Vector{UInt8}}
+  DictStore{V,S}(a=Dict{String,Vector{UInt8}}()) where {V,S} = new{V,S}(a)
 end
-DictStore() = DictStore{'.'}(Dict{String,Vector{UInt8}}())
-DictStore{S}() where S = DictStore{S}(Dict{String,Vector{UInt8}}())
+DictStore(a=Dict{String,Vector{UInt8}}()) = DictStore{DV,DS}(a)
+DictStore{V}(a=Dict{String,Vector{UInt8}}()) where V = DictStore{V, default_sep(V)}(a)
 
 Base.show(io::IO,d::DictStore) = print(io,"Dictionary Storage")
 function _pdict(d::DictStore,p) 

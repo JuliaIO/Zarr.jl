@@ -1,21 +1,23 @@
 using AWSS3: AWSS3, s3_put, s3_get, s3_delete, s3_list_objects, s3_exists
 
-struct S3Store{S} <: AbstractStore{S}
+struct S3Store{V,S} <: AbstractStore{V,S}
     bucket::String
     aws::AWSS3.AWS.AbstractAWSConfig
 end
 
 
-function S3Store{S}(bucket::String;
+function S3Store{V,S}(bucket::String;
     aws = nothing,
-  ) where S
+    ) where {V,S}
   if aws === nothing
     aws = AWSS3.AWS.global_aws_config()
   end
-  S3Store(bucket, aws)
+  S3Store{V,S}(bucket, aws)
 end
-S3Store(bucket, aws) = S3Store{'.'}(bucket, aws)
-S3Store(bucket; aws = nothing) = S3Store{'.'}(bucket; aws)
+S3Store(bucket, aws) = S3Store{DV,DS}(bucket, aws)
+S3Store{V}(bucket, aws) where V = S3Store{V, default_sep(V)}(bucket, aws)
+S3Store(bucket; aws = nothing) = S3Store{DV, DS}(bucket; aws)
+S3Store{V}(bucket; aws = nothing) where V = S3Store{V, default_sep(V)}(bucket; aws)
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
 
