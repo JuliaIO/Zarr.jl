@@ -2,11 +2,28 @@
 # Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
 
+# Default Zarr version
+const DV = 2
+
+# Default Zarr separator
+
+# Default Zarr v2 separator
+const DS2 = '.'
+# Default Zarr v3 separator
+const DS3 = '/'
+
+default_sep(version) = version == 2 ? DS2 : DS3
+const DS = default_sep(DV)
+
 """
-    abstract type AbstractStore 
+    abstract type AbstractStore{V,S}
 
 This the abstract supertype for all Zarr store implementations.  Currently only regular files ([`DirectoryStore`](@ref))
 and Dictionaries are supported.
+
+# Type Parameters
+V is the version, either 2 or 3
+S is the dimension separator
 
 ## Interface
 
@@ -24,7 +41,7 @@ They may optionally implement the following methods:
 
 - [`store_read_strategy(s::AbstractStore)`](@ref store_read_strategy): return the read strategy for the given store.  See [`SequentialRead`](@ref) and [`ConcurrentRead`](@ref).
 """
-abstract type AbstractStore end
+abstract type AbstractStore{V,S} end
 
 #Define the interface
 """
@@ -70,17 +87,18 @@ function subkeys end
 Deletes the given key from the store.
 """
 
-citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
-citostring(::CartesianIndex{0}) = "0"
+@inline citostring(i::CartesianIndex, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$sep" : "" ) * join(reverse((i - oneunit(i)).I), sep)
+@inline citostring(::CartesianIndex{0}, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$(sep)0" : "0" )
+citostring(i::CartesianIndex, s::AbstractStore{V, S}) where {V,S} = citostring(i, V, S)
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
-Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]
+Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i, s)]
 Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p,i)]
-Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i))
+Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i, s))
 Base.delete!(s::AbstractStore, p, i) = delete!(s, _concatpath(p,i))
 Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
 Base.setindex!(s::AbstractStore,v,p,i) = setindex!(s,v,_concatpath(p,i))
-Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i)]=v
+Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i, s)]=v
 
 
 maybecopy(x) = copy(x)
@@ -111,7 +129,7 @@ end
 is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
 is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
-isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
+isinitialized(s::AbstractStore, p, i::CartesianIndex) = isinitialized(s,p,citostring(i, s))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
