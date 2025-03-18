@@ -5,12 +5,13 @@ import ZipArchives
 
 A read only store that wraps an `AbstractVector{UInt8}` that contains a zip file.
 """
-struct ZipStore{T <: AbstractVector{UInt8}} <: AbstractStore
+struct ZipStore{V, S, T <: AbstractVector{UInt8}} <: AbstractStore{V, S}
     r::ZipArchives.ZipBufferReader{T}
+    ZipStore{V,S}(data::T) where {V,S,T} = new{V, S, T}(ZipArchives.ZipBufferReader(data))
+    ZipStore{V}(data::AbstractVector{UInt8}) where V = ZipStore{V, default_sep(V)}(data)
+    ZipStore(data::AbstractVector{UInt8}) = ZipStore{DV,DS}(data)
 end
 
-
-ZipStore(data::AbstractVector{UInt8}) = ZipStore(ZipArchives.ZipBufferReader(data))
 
 Base.show(io::IO,::ZipStore) = print(io,"Read Only Zip Storage")
 

@@ -311,21 +311,29 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
+* `dimension_separator='.'` sets how chunks are encoded. The Zarr v2 default is '.' such that the first 3D chunk would be `0.0.0`. The Zarr v3 default is `/`.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
   path=nothing,
+  dimension_separator='.',
   kwargs...
   ) where T
+
+  if dimension_separator isa AbstractString
+      # Convert AbstractString to Char
+      dimension_separator = only(dimension_separator)
+  end
+
   if path===nothing
-    store = DictStore()
+    store = DictStore{DV, dimension_separator}()
   else
-    store = DirectoryStore(joinpath(path,name))
+    store = DirectoryStore{DV, dimension_separator}(joinpath(path,name))
   end
   zcreate(T, store, dims...; kwargs...)
 end
 
-function zcreate(::Type{T},storage::AbstractStore,
+function zcreate(::Type{T},storage::AbstractStore{<: Any,S},
   dims...;
   path = "",
   chunks=dims,
@@ -335,14 +343,22 @@ function zcreate(::Type{T},storage::AbstractStore,
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,
-  indent_json=false
-  ) where T
+  indent_json=false,
+  dimension_separator=nothing
+  ) where {T,S}
+
+  if isnothing(dimension_separator)
+      dimension_separator = S
+  elseif dimension_separator != S
+      error("The dimension separator keyword value, $dimension_separator,
+        must agree with the dimension separator type parameter, $S")
+  end
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-  metadata = Metadata{T2, N, C, typeof(filters)}(
+  metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
   2,
   dims,
   chunks,
