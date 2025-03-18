@@ -78,6 +78,7 @@ allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 push!(storageregexlist,r"^s3://"=>S3Store)
 
 function storefromstring(::Type{<:S3Store}, s, _)
+  # TODO: Check metadata for version and dimension separator
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")

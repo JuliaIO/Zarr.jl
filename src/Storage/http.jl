@@ -41,7 +41,18 @@ end
 
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
-storefromstring(::Type{<:HTTPStore}, s,_) = ConsolidatedStore(HTTPStore(s),""),""
+function storefromstring(::Type{<:HTTPStore}, s,_)
+    http_store = HTTPStore(s)
+    if is_zarray(http_store, "")
+        meta = getmetadata(http_store, "", false)
+        http_store = HTTPStore{meta.zarr_format, meta.dimension_separator}(s)
+    end
+    if http_store["", ".zmetadata"] !== nothing
+        return ConsolidatedStore(http_store,""),""
+    else
+        return http_store,""
+    end
+end
 
 """
     missing_chunk_return_code!(s::HTTPStore, code::Union{Int,AbstractVector{Int}})

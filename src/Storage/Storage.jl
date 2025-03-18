@@ -215,6 +215,19 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 #during auto-check of storage format when doing zopen
 storageregexlist = Pair[]
 
+function Base.getproperty(store::AbstractStore{V,S}, sym::Symbol) where {V,S}
+    if sym == :dimension_separator
+        return S
+    elseif sym == :zarr_format
+        return V
+    else
+        return getfield(store, sym)
+    end
+end
+function Base.propertynames(store::AbstractStore)
+    return (:dimension_separator, :version, getfields(store)...)
+end
+
 include("directorystore.jl")
 include("dictstore.jl")
 include("s3store.jl")
@@ -222,3 +235,51 @@ include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
 include("zipstore.jl")
+
+# Itemize subtypes of AbstractStore for code generation below
+const KnownAbstractStores = (DirectoryStore, GCStore, S3Store, ConsolidatedStore, DictStore, HTTPStore, ZipStore)
+
+"""
+    Zarr.set_dimension_separator(::AbstractStore{V}, sep::Char)::AbstractStore{V,sep}
+
+Returns an AbstractStore of the same type with the same `zarr_format` parameter, `V`,
+but with a dimension separator of `sep`.
+
+# Examples
+
+```
+julia> Zarr.set_dimension_separator(Zarr.DictStore{2, '.'}(), '/') |> typeof
+Zarr.DictStore{2, '/'}
+```
+ 
+"""
+set_dimension_separator
+
+"""
+    set_zarr_format(::AbstractStore{<: Any, S}, zarr_format::Int)::AbstractStore{zarr_format,S}
+
+Returns an AbstractStore of the same type with the same `dimension_separator` parameter, `S`,
+but with the specified `zarr_format` parameter.
+
+# Examples
+
+```
+julia> Zarr.set_zarr_format(Zarr.DictStore{2, '.'}(), 3) |> typeof
+Zarr.DictStore{3, '.'}
+```
+
+"""
+set_zarr_format
+
+for T in KnownAbstractStores
+    e = quote
+        # copy constructor to change zarr_format and dimension_separator parameters
+        (::Type{$T{V,S}})(store::$T) where {V,S} =
+            $T{V,S}(ntuple(i->getfield(store, i), nfields(store))...)
+        set_dimension_separator(store::$T{V}, sep::Char) where V =
+            $T{V,sep}(ntuple(i->getfield(store, i), nfields(store))...)
+        set_zarr_format(store::$T{<: Any, S}, zarr_format::Int) where S =
+            $T{zarr_format,S}(ntuple(i->getfield(store, i), nfields(store))...)
+    end
+    eval(e)
+end

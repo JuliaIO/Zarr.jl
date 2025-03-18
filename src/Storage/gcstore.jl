@@ -137,6 +137,7 @@ pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
 push!(storageregexlist,r"^gs://"=>GCStore)
 
 function storefromstring(::Type{<:GCStore}, url,_)
+  # TODO: Check metadata for version and dimension separator
   uri = URI(url)
   if uri.scheme == "gs"
     p = lstrip(uri.path,'/')
