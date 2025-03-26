@@ -9,14 +9,12 @@ function normalize_path(p::AbstractString)
 end
 
 # Stores files in a regular file system
-struct DirectoryStore{V,S} <: AbstractStore{V,S}
+struct DirectoryStore <: AbstractStore
     folder::String
-    function DirectoryStore{V,S}(p) where {V,S}
+    function DirectoryStore(p)
       mkpath(normalize_path(p))
-      new{V,S}(normalize_path(p))
+      new(normalize_path(p))
     end
-    DirectoryStore(p) = DirectoryStore{DV,DS}(p)
-    DirectoryStore{V}(p) where V = DirectoryStore{V, default_sep(V)}(p)
 end
 
 function Base.getindex(d::DirectoryStore, i::String)

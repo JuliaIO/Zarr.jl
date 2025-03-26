@@ -10,13 +10,11 @@ datasets being served through the [xpublish](https://xpublish.readthedocs.io/en/
 python package. In case you experience performance issues, one can try to use 
 `HTTP.set_default_connection_limit!` to increase the number of concurrent connections. 
 """
-struct HTTPStore{V,S} <: AbstractStore{V,S}
+struct HTTPStore <: AbstractStore
     url::String
     allowed_codes::Set{Int}
-    HTTPStore{V,S}(url, allowed_codes = Set((404,))) where {V,S} = new{V,S}(url, allowed_codes)
+    HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
 end
-HTTPStore(url) = HTTPStore{DV, DS}(url)
-HTTPStore{V}(url) where V = HTTPStore{V, default_sep(V)}(url)
 
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
@@ -43,15 +41,18 @@ push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 function storefromstring(::Type{<:HTTPStore}, s,_)
     http_store = HTTPStore(s)
-    if is_zarray(http_store, "")
-        meta = getmetadata(http_store, "", false)
-        http_store = HTTPStore{meta.zarr_format, meta.dimension_separator}(s)
+    try
+        if is_zarray(http_store, "")
+            meta = getmetadata(http_store, "", false)
+            http_store = VersionedStore{meta.zarr_format, meta.dimension_separator}(http_store)
+        end
+        if http_store["", ".zmetadata"] !== nothing
+            return ConsolidatedStore(http_store,""),""
+        end
+    catch err
+        @warn exception=err "Additional metadata was not available for HTTPStore."
     end
-    if http_store["", ".zmetadata"] !== nothing
-        return ConsolidatedStore(http_store,""),""
-    else
-        return http_store,""
-    end
+    return http_store,""
 end
 
 """

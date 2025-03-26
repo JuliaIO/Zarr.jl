@@ -15,11 +15,11 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore{2, '.'}}
+            Zarr.VersionedStore{2, '.', Zarr.DictStore}}
 
-        @test length(z.storage.a) === 3
-        @test length(z.storage.a["0.0"]) === 64
-        @test eltype(z.storage.a["0.0"]) === UInt8
+        @test length(z.storage.parent.a) === 3
+        @test length(z.storage.parent.a["0.0"]) === 64
+        @test eltype(z.storage.parent.a["0.0"]) === UInt8
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
@@ -40,7 +40,7 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore{2, '.'}}
+            Zarr.VersionedStore{2, '.', Zarr.DictStore}}
 
         @test eltype(z) === Int64
         @test ndims(z) === 2
@@ -60,7 +60,7 @@ CondaPkg.add("zarr"; version="2.*")
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()
-            @test z.storage === Zarr.DirectoryStore("$dir/$name")
+            @test z.storage === Zarr.VersionedStore{2 ,'.'}(Zarr.DirectoryStore("$dir/$name"))
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")

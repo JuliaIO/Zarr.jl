@@ -56,10 +56,10 @@ function _gcs_request_headers()
   return headers
 end
 
-struct GCStore{V,S} <: AbstractStore{V,S}
+struct GCStore <: AbstractStore
   bucket::String
 
-  function GCStore{V,S}(url::String) where {V,S}
+  function GCStore(url::String)
     uri = URI(url)
 
     if uri.scheme == "gs"
@@ -71,8 +71,6 @@ struct GCStore{V,S} <: AbstractStore{V,S}
     @debug "GCS bucket: $bucket"
     new(bucket)
   end
-  GCStore(url::String) = GCStore{DV,DS}(url)
-  GCStore{V}(url::String) where V = GCStore{V, default_sep(V)}(url)
 end
 
 
@@ -137,7 +135,6 @@ pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
 push!(storageregexlist,r"^gs://"=>GCStore)
 
 function storefromstring(::Type{<:GCStore}, url,_)
-  # TODO: Check metadata for version and dimension separator
   uri = URI(url)
   if uri.scheme == "gs"
     p = lstrip(uri.path,'/')

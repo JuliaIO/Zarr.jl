@@ -23,7 +23,7 @@ function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: Abstract
     subpath = _concatpath(path,dshort)
     if is_zarray(s, subpath)
       meta = getmetadata(s, subpath, false)
-      if s.dimension_separator != meta.dimension_separator
+      if dimension_separator(s) != meta.dimension_separator
           s = set_dimension_separator(s, meta.dimension_separator)
       end
       m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
@@ -123,15 +123,15 @@ function storefromstring(s, create=true)
     end
   end
   if create
-      return DirectoryStore(s), ""
+      return VersionedStore(DirectoryStore(s)), ""
   elseif isdir(s)
     # parse metadata to determine store kind
     temp_store = DirectoryStore(s)
     if is_zarray(temp_store, "")
         meta = getmetadata(temp_store, "", false)
-        store = DirectoryStore{meta.zarr_format, meta.dimension_separator}(s)
+        store = VersionedStore{meta.zarr_format, meta.dimension_separator}(temp_store)
     else
-        store = temp_store
+        store = VersionedStore(temp_store)
     end
     return store, ""
   else

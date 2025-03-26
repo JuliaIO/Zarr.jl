@@ -2,28 +2,11 @@
 # Defines different storages for zarr arrays. Currently only regular files (DirectoryStore)
 # and Dictionaries are supported
 
-# Default Zarr version
-const DV = 2
-
-# Default Zarr separator
-
-# Default Zarr v2 separator
-const DS2 = '.'
-# Default Zarr v3 separator
-const DS3 = '/'
-
-default_sep(version) = version == 2 ? DS2 : DS3
-const DS = default_sep(DV)
-
 """
-    abstract type AbstractStore{V,S}
+    abstract type AbstractStore 
 
 This the abstract supertype for all Zarr store implementations.  Currently only regular files ([`DirectoryStore`](@ref))
 and Dictionaries are supported.
-
-# Type Parameters
-V is the version, either 2 or 3
-S is the dimension separator
 
 ## Interface
 
@@ -41,7 +24,7 @@ They may optionally implement the following methods:
 
 - [`store_read_strategy(s::AbstractStore)`](@ref store_read_strategy): return the read strategy for the given store.  See [`SequentialRead`](@ref) and [`ConcurrentRead`](@ref).
 """
-abstract type AbstractStore{V,S} end
+abstract type AbstractStore end
 
 #Define the interface
 """
@@ -87,18 +70,17 @@ function subkeys end
 Deletes the given key from the store.
 """
 
-@inline citostring(i::CartesianIndex, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$sep" : "" ) * join(reverse((i - oneunit(i)).I), sep)
-@inline citostring(::CartesianIndex{0}, version::Int=DV, sep::Char=default_sep(version)) = (version == 3 ? "c$(sep)0" : "0" )
-citostring(i::CartesianIndex, s::AbstractStore{V, S}) where {V,S} = citostring(i, V, S)
+citostring(i::CartesianIndex) = join(reverse((i - oneunit(i)).I), '.')
+citostring(::CartesianIndex{0}) = "0"
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
 
-Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i, s)]
+Base.getindex(s::AbstractStore, p, i::CartesianIndex) = s[p, citostring(i)]
 Base.getindex(s::AbstractStore, p, i) = s[_concatpath(p,i)]
-Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i, s))
+Base.delete!(s::AbstractStore, p, i::CartesianIndex) = delete!(s, p, citostring(i))
 Base.delete!(s::AbstractStore, p, i) = delete!(s, _concatpath(p,i))
 Base.haskey(s::AbstractStore, k) = isinitialized(s,k)
 Base.setindex!(s::AbstractStore,v,p,i) = setindex!(s,v,_concatpath(p,i))
-Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i, s)]=v
+Base.setindex!(s::AbstractStore,v,p,i::CartesianIndex) = s[p, citostring(i)]=v
 
 
 maybecopy(x) = copy(x)
@@ -129,7 +111,7 @@ end
 is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
 is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
-isinitialized(s::AbstractStore, p, i::CartesianIndex) = isinitialized(s,p,citostring(i, s))
+isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
@@ -215,19 +197,7 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 #during auto-check of storage format when doing zopen
 storageregexlist = Pair[]
 
-function Base.getproperty(store::AbstractStore{V,S}, sym::Symbol) where {V,S}
-    if sym == :dimension_separator
-        return S
-    elseif sym == :zarr_format
-        return V
-    else
-        return getfield(store, sym)
-    end
-end
-function Base.propertynames(store::AbstractStore)
-    return (:dimension_separator, :version, getfields(store)...)
-end
-
+include("versionedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
 include("s3store.jl")
@@ -235,51 +205,3 @@ include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
 include("zipstore.jl")
-
-# Itemize subtypes of AbstractStore for code generation below
-const KnownAbstractStores = (DirectoryStore, GCStore, S3Store, ConsolidatedStore, DictStore, HTTPStore, ZipStore)
-
-"""
-    Zarr.set_dimension_separator(::AbstractStore{V}, sep::Char)::AbstractStore{V,sep}
-
-Returns an AbstractStore of the same type with the same `zarr_format` parameter, `V`,
-but with a dimension separator of `sep`.
-
-# Examples
-
-```
-julia> Zarr.set_dimension_separator(Zarr.DictStore{2, '.'}(), '/') |> typeof
-Zarr.DictStore{2, '/'}
-```
- 
-"""
-set_dimension_separator
-
-"""
-    set_zarr_format(::AbstractStore{<: Any, S}, zarr_format::Int)::AbstractStore{zarr_format,S}
-
-Returns an AbstractStore of the same type with the same `dimension_separator` parameter, `S`,
-but with the specified `zarr_format` parameter.
-
-# Examples
-
-```
-julia> Zarr.set_zarr_format(Zarr.DictStore{2, '.'}(), 3) |> typeof
-Zarr.DictStore{3, '.'}
-```
-
-"""
-set_zarr_format
-
-for T in KnownAbstractStores
-    e = quote
-        # copy constructor to change zarr_format and dimension_separator parameters
-        (::Type{$T{V,S}})(store::$T) where {V,S} =
-            $T{V,S}(ntuple(i->getfield(store, i), nfields(store))...)
-        set_dimension_separator(store::$T{V}, sep::Char) where V =
-            $T{V,sep}(ntuple(i->getfield(store, i), nfields(store))...)
-        set_zarr_format(store::$T{<: Any, S}, zarr_format::Int) where S =
-            $T{zarr_format,S}(ntuple(i->getfield(store, i), nfields(store))...)
-    end
-    eval(e)
-end

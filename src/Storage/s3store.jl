@@ -1,23 +1,19 @@
 using AWSS3: AWSS3, s3_put, s3_get, s3_delete, s3_list_objects, s3_exists
 
-struct S3Store{V,S} <: AbstractStore{V,S}
+struct S3Store <: AbstractStore
     bucket::String
     aws::AWSS3.AWS.AbstractAWSConfig
 end
 
 
-function S3Store{V,S}(bucket::String;
+function S3Store(bucket::String;
     aws = nothing,
-    ) where {V,S}
+  )
   if aws === nothing
     aws = AWSS3.AWS.global_aws_config()
   end
-  S3Store{V,S}(bucket, aws)
+  S3Store(bucket, aws)
 end
-S3Store(bucket, aws) = S3Store{DV,DS}(bucket, aws)
-S3Store{V}(bucket, aws) where V = S3Store{V, default_sep(V)}(bucket, aws)
-S3Store(bucket; aws = nothing) = S3Store{DV, DS}(bucket; aws)
-S3Store{V}(bucket; aws = nothing) where V = S3Store{V, default_sep(V)}(bucket; aws)
 
 Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
 
@@ -78,7 +74,6 @@ allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 push!(storageregexlist,r"^s3://"=>S3Store)
 
 function storefromstring(::Type{<:S3Store}, s, _)
-  # TODO: Check metadata for version and dimension separator
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
