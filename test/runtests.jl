@@ -17,6 +17,7 @@ CondaPkg.add("zarr"; version="2.*")
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.VersionedStore{2, '.', Zarr.DictStore}}
 
+        @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
         @test eltype(z.storage.a["0.0"]) === UInt8
@@ -31,6 +32,8 @@ CondaPkg.add("zarr"; version="2.*")
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
+        @test z.metadata.dimension_separator === Zarr.DS
+        @test :dimension_separator ∈ propertynames(z.metadata)
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), zarr_format = 3)

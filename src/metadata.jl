@@ -152,6 +152,7 @@ function Base.getproperty(m::DimensionSeparatedMetadata{S}, name::Symbol) where 
     end
     return getfield(m, name)
 end
+Base.propertynames(m::Metadata) = (fieldnames(Metadata)..., :dimension_separator)
 
 #To make unit tests pass with ref shape
 import Base.==
