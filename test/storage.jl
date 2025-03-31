@@ -187,15 +187,6 @@ end
     run(s, wait=false)
     cfg = MinioConfig("http://localhost:9001")
     Zarr.AWSS3.global_aws_config(cfg)
-    # Try to communicate with the server for 10 seconds
-    for i in 1:10
-        try
-            s3_list_objects(cfg)
-            break
-        catch err
-            sleep(1)
-        end
-    end
     Zarr.AWSS3.S3.create_bucket("zarrdata")
     ds = S3Store("zarrdata")
     test_store_common(ds)
@@ -267,10 +258,10 @@ end
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5),fill_value = -1)
   @async HTTP.serve(Zarr.zarr_req_handler(s,g.path,403),ip,port,server=server)
-  @test_throws "Received error code 403" zopen("http://$ip:$port")
-  # @test_throws "Received error code 403" g3["a"][:,:]
-  # Zarr.missing_chunk_return_code!(g3.storage,403)
-  # @test all(==(-1),g3["a"][:,:])
+  g3 = zopen("http://$ip:$port")
+  @test_throws "Received error code 403" g3["a"][:,:]
+  Zarr.missing_chunk_return_code!(g3.storage,403)
+  @test all(==(-1),g3["a"][:,:])
   close(server)
 end
 
