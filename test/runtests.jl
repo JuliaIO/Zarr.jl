@@ -17,9 +17,9 @@ CondaPkg.add("zarr"; version="2.*")
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
             Zarr.VersionedStore{2, '.', Zarr.DictStore}}
 
-        @test length(z.storage.parent.a) === 3
-        @test length(z.storage.parent.a["0.0"]) === 64
-        @test eltype(z.storage.parent.a["0.0"]) === UInt8
+        @test length(z.storage.a) === 3
+        @test length(z.storage.a["0.0"]) === 64
+        @test eltype(z.storage.a["0.0"]) === UInt8
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
