@@ -3,6 +3,9 @@
 ### We save some data in Julia and python and test if it is still the same
 ### when read from the other language 
 ###
+using Test
+using ChunkCodecLibZstd
+
 @testset "Python zarr implementation" begin
 
 import Mmap
