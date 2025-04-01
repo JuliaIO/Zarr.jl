@@ -197,7 +197,7 @@ Order               : C
 Read-Only           : false
 Compressor          : Zarr.BloscCompressor(0, 3, "zstd", 1)
 Filters             : nothing
-Store type          : Dictionary Storage
+Store type          : Zarr.VersionedStore{2, '.', Zarr.DictStore}(Dictionary Storage)
 No. bytes           : 400000000
 No. bytes stored    : 2412289
 Storage ratio       : 165.81761140559857
