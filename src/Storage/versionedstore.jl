@@ -133,3 +133,12 @@ dimension_separator(::AbstractStore) = DS
 dimension_separator(::VersionedStore{<: Any,S}) where S = S
 zarr_format(::AbstractStore) = DV
 zarr_format(::VersionedStore{V}) where V = V
+
+is_zgroup(s::VersionedStore{3}, p, metadata=getmetadata(s, p, false)) =
+    isinitialized(s,_concatpath(p,"zarr.json")) &&
+    metadata.node_type == "group"
+is_zarray(s::VersionedStore{3}, p, metadata=getmetadata(s, p, false)) =
+    isinitialized(s,_concatpath(p,"zarr.json")) &&
+    metadata.node_type == "array"
+
+getmetadata(s::VersionedStore{3}, p,fill_as_missing) = Metadata(String(maybecopy(s[p,"zarr.json"])),fill_as_missing)

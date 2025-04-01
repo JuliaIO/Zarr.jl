@@ -21,6 +21,11 @@ function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: Abstract
   for d in subdirs(s,path)
     dshort = split(d,'/')[end]
     subpath = _concatpath(path,dshort)
+    if is_zarr2(s, subpath)
+        # check for zarr2 first
+    elseif is_zarr3(s, subpath)
+        s = set_zarr_format(s, 3)
+    end
     if is_zarray(s, subpath)
       meta = getmetadata(s, subpath, false)
       if dimension_separator(s) != meta.dimension_separator
@@ -43,7 +48,7 @@ end
 
 Works like `zopen` with the single difference that no error is thrown when 
 the path or store does not point to a valid zarr array or group, but nothing 
-is returned instead. 
+is returned instead.
 """
 function zopen_noerr(s::AbstractStore, mode="r";
   consolidated = false, 
@@ -127,6 +132,9 @@ function storefromstring(s, create=true)
   elseif isdir(s)
     # parse metadata to determine store kind
     temp_store = DirectoryStore(s)
+    if is_zarr3(temp_store, "")
+        temp_store = set_zarr_format(temp_store, 3)
+    end
     if is_zarray(temp_store, "")
         meta = getmetadata(temp_store, "", false)
         store = VersionedStore{meta.zarr_format, meta.dimension_separator}(temp_store)

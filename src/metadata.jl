@@ -104,6 +104,7 @@ https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
 struct Metadata{T, N, C, F, S}
     zarr_format::Int
+    node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
     dtype::String  # structured data types not yet supported
@@ -111,17 +112,21 @@ struct Metadata{T, N, C, F, S}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    function Metadata{T2, N, C, F, S}(zarr_format, shape, chunks, dtype, compressor, fill_value, order, filters) where {T2,N,C,F,S}
+    function Metadata{T2, N, C, F, S}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters) where {T2,N,C,F,S}
         #We currently only support version 
-        zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
+        # zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
+        zarr_format == 3 ? @warn("Zarr v3 support is experimental") :
+        zarr_format == 2 ? nothing :
+            throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2, N, C, F, S}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
+        new{T2, N, C, F, S}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
     end
     function Metadata{T2, N, C, F}(
         zarr_format,
+        node_type,
         shape,
         chunks,
         dtype,
@@ -133,6 +138,7 @@ struct Metadata{T, N, C, F, S}
     ) where {T2,N,C,F}
         return Metadata{T2, N, C, F, dimension_separator}(
             zarr_format,
+            node_type,
             shape,
             chunks,
             dtype,
@@ -158,6 +164,7 @@ Base.propertynames(m::Metadata) = (fieldnames(Metadata)..., :dimension_separator
 import Base.==
 function ==(m1::Metadata, m2::Metadata)
   m1.zarr_format == m2.zarr_format &&
+  m1.node_type == m2.node_type &&
   m1.shape[] == m2.shape[] &&
   m1.chunks == m2.chunks &&
   m1.dtype == m2.dtype &&
@@ -172,6 +179,7 @@ end
 "Construct Metadata based on your data"
 function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         zarr_format::Integer=2,
+        node_type::String="array",
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
@@ -182,6 +190,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     Metadata{T2, N, C, typeof(filters), dimension_separator}(
         zarr_format,
+        node_type,
         size(A),
         chunks,
         typestr(eltype(A)),
@@ -197,6 +206,13 @@ Metadata(s::Union{AbstractString, IO},fill_as_missing) = Metadata(JSON.parse(s),
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
     # create a Metadata struct from it
+
+    if d["zarr_format"] == 3
+        return Metadata3(d, fill_as_missing)
+    end
+
+    # Zarr v2 metadata is only for arrays
+    node_type = "array"
 
     compdict = d["compressor"]
     if isnothing(compdict)
@@ -222,6 +238,7 @@ function Metadata(d::AbstractDict, fill_as_missing)
 
     Metadata{TU, N, C, F, S}(
         d["zarr_format"],
+        node_type,
         NTuple{N, Int}(d["shape"]) |> reverse,
         NTuple{N, Int}(d["chunks"]) |> reverse,
         d["dtype"],
@@ -236,6 +253,7 @@ end
 function JSON.lower(md::Metadata)
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
+        "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
         "chunks" => md.chunks |> reverse,
         "dtype" => md.dtype,

@@ -108,8 +108,12 @@ function writeattrs(s::AbstractStore, p, att::Dict; indent_json::Bool= false)
   att
 end
 
-is_zgroup(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
-is_zarray(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
+is_zarr3(s::AbstractStore, p) = isinitialized(s,_concatpath(p,"zarr.json"))
+is_zarr2(s::AbstractStore, p) = is_z2array(s, p) || is_z2group(s,p)
+is_zgroup(s::AbstractStore, p) = is_z2group(s,p)
+is_zarray(s::AbstractStore, p) = is_z2array(s,p)
+is_z2group(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zgroup"))
+is_z2array(s::AbstractStore, p) = isinitialized(s,_concatpath(p,".zarray"))
 
 isinitialized(s::AbstractStore, p, i::CartesianIndex)=isinitialized(s,p,citostring(i))
 isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))

@@ -360,6 +360,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
   metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
   2,
+  "array",
   dims,
   chunks,
   typestr(T),
