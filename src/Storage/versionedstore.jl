@@ -15,8 +15,11 @@ struct VersionedStore{V,SEP,STORE <: AbstractStore} <: AbstractStore
     parent::STORE
 end
 VersionedStore(args...) = VersionedStore{DV,DS}(args...)
+VersionedStore(s::VersionedStore) = s
 VersionedStore{V}(args...) where V = VersionedStore{V, default_sep(V)}(args...)
+VersionedStore{V}(s::VersionedStore{<:Any,S}) where {V,S} = VersionedStore{V, S}(s)
 VersionedStore{<: Any, S}(args...) where S = VersionedStore{DV, S}(args...)
+VersionedStore{<: Any, S}(s::VersionedStore{V}) where {V,S} = VersionedStore{V, S}(s)
 function VersionedStore{V,S}(store::AbstractStore) where {V,S}
     return VersionedStore{V,S,typeof(store)}(store)
 end
