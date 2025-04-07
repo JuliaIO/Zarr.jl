@@ -4,9 +4,8 @@
 This file implements a Zstd compressor via ChunkCodecLibZstd.jl.
 
 =#
-
-using ChunkCodecLibZstd: ZstdEncodeOptions, encode, decode, ChunkCodecCore
-
+using ChunkCodecLibZstd: ZstdEncodeOptions
+using ChunkCodecCore: encode, decode, decode!
 
 """
     ZstdCompressor(;level=0, checksum=false)
@@ -33,10 +32,7 @@ function zuncompress(a, z::ZstdCompressor, T)
 end
 
 function zuncompress!(data::DenseArray, compressed, z::ZstdCompressor)
-    dst = reinterpret(UInt8, vec(data))
-    n = length(dst)
-    n_decoded = something(ChunkCodecCore.try_decode!(z.config.codec, dst, compressed))::Int64
-    n_decoded == n || error("expected to decode $n bytes, only got $n_decoded bytes")
+    decode!(z.config.codec, reinterpret(UInt8, vec(data)), compressed)
     data
 end
 
