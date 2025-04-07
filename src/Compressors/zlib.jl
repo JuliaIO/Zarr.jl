@@ -5,7 +5,8 @@ This file implements a Zlib compressor via ChunkCodecLibZlib.jl.
 
 =#
 
-using ChunkCodecLibZlib: ZlibEncodeOptions, encode, decode, ChunkCodecCore
+using ChunkCodecLibZlib: ZlibEncodeOptions
+using ChunkCodecCore: encode, decode, decode!
 
 """
     ZlibCompressor(clevel=-1)
@@ -31,10 +32,7 @@ function zuncompress(a, z::ZlibCompressor, T)
 end
 
 function zuncompress!(data::DenseArray, compressed, z::ZlibCompressor)
-    dst = reinterpret(UInt8, vec(data))
-    n = length(dst)
-    n_decoded = something(ChunkCodecCore.try_decode!(z.config.codec, dst, compressed))::Int64
-    n_decoded == n || error("expected to decode $n bytes, only got $n_decoded bytes")
+    decode!(z.config.codec, reinterpret(UInt8, vec(data)), compressed)
     data
 end
 
