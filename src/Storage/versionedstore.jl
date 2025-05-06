@@ -8,9 +8,16 @@ const DS2 = '.'
 # Default Zarr v3 separator
 const DS3 = '/'
 
-default_sep(version) = version == 2 ? DS2 : DS3
+default_sep(version) = version == 2 ? DS2 :
+                       version == 3 ? DS3 :
+                       error("Unknown version: $version")
 const DS = default_sep(DV)
 
+# Chunk Key Encodings for Zarr v3
+# A Char is the separator for the default chunk key encoding
+struct V2ChunkKeyEncoding{SEP} end
+
+# Version store differentiates between Zarr format versions
 struct VersionedStore{V,SEP,STORE <: AbstractStore} <: AbstractStore
     parent::STORE
 end
@@ -32,6 +39,7 @@ Base.parent(store::VersionedStore) = store.parent
 
 @inline citostring(i::CartesianIndex, version::Int, sep::Char=default_sep(version)) = (version == 3 ? "c$sep" : "" ) * join(reverse((i - oneunit(i)).I), sep)
 @inline citostring(::CartesianIndex{0}, version::Int, sep::Char=default_sep(version)) = (version == 3 ? "c$(sep)0" : "0" )
+@inline citostring(i::CartesianIndex, ::Int, ::Type{V2ChunkKeyEncoding{S}}) where S = citostring(i, 2, S)
 citostring(i::CartesianIndex, s::VersionedStore{V, S}) where {V,S} = citostring(i, V, S)
 
 Base.getindex(s::VersionedStore, p, i::CartesianIndex) = s[p, citostring(i,s)]

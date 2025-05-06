@@ -9,21 +9,29 @@
 end
 
 @testset "Version and Dimension Separator" begin
+    v2cke_period = Zarr.V2ChunkKeyEncoding{'.'}
+    v2cke_slash = Zarr.V2ChunkKeyEncoding{'/'}
     let ci = CartesianIndex()
         @test Zarr.citostring(ci, 2, '.') == "0"
         @test Zarr.citostring(ci, 2, '/') == "0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0"
         @test Zarr.citostring(ci, 3, '.') == "c.0"
         @test Zarr.citostring(ci, 3, '/') == "c/0"
     end
     let ci = CartesianIndex(1,1,1)
         @test Zarr.citostring(ci, 2, '.') == "0.0.0"
         @test Zarr.citostring(ci, 2, '/') == "0/0/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0.0.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0/0/0"
         @test Zarr.citostring(ci, 3, '.') == "c.0.0.0"
         @test Zarr.citostring(ci, 3, '/') == "c/0/0/0"
     end
     let ci = CartesianIndex(1,3,5)
         @test Zarr.citostring(ci, 2, '.') == "4.2.0"
         @test Zarr.citostring(ci, 2, '/') == "4/2/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "4.2.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "4/2/0"
         @test Zarr.citostring(ci, 3, '.') == "c.4.2.0"
         @test Zarr.citostring(ci, 3, '/') == "c/4/2/0"
     end
