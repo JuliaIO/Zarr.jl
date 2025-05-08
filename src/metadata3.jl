@@ -132,8 +132,10 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         if codec_name == "bytes"
             # array -> bytes
             check_codec_data_type(:array, :bytes)
-            codec["configuration"]["endian"] == "little" ||
-                throw(ArgumentError("Zarr.jl currently only supports little endian for the bytes codec"))
+            if haskey(codec, "configuration")
+                codec["configuration"]["endian"] == "little" ||
+                    throw(ArgumentError("Zarr.jl currently only supports little endian for the bytes codec"))
+            end
         elseif codec_name == "zstd"
             # bytes -> bytes
             check_codec_data_type(:bytes, :bytes)
