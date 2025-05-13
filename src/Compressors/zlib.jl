@@ -1,11 +1,12 @@
 #=
 # Zlib compression
 
-This file implements a Zlib compressor via CodecZlib.jl.
+This file implements a Zlib compressor via ChunkCodecLibZlib.jl.
 
 =#
 
-import CodecZlib
+using ChunkCodecLibZlib: ZlibEncodeOptions
+using ChunkCodecCore: encode, decode, decode!
 
 """
     ZlibCompressor(clevel=-1)
@@ -14,8 +15,10 @@ Returns a `ZlibCompressor` struct that can serve as a Zarr array compressor. Key
 *  default is -1 compromise between speed and compression (currently equivalent to level 6).
 """
 struct ZlibCompressor <: Compressor
-    clevel::Int
+    config::ZlibEncodeOptions
 end
+
+ZlibCompressor(clevel::Integer) = ZlibCompressor(ZlibEncodeOptions(;level=clevel))
 
 ZlibCompressor(;clevel=-1) = ZlibCompressor(clevel)
 
@@ -23,16 +26,20 @@ function getCompressor(::Type{ZlibCompressor}, d::Dict)
     ZlibCompressor(d["level"])
 end
 
-function zuncompress(a, ::ZlibCompressor, T)
-    result = transcode(CodecZlib.ZlibDecompressor,a)
+function zuncompress(a, z::ZlibCompressor, T)
+    result = decode(z.config.codec, a)
     _reinterpret(Base.nonmissingtype(T),result)
 end
 
-function zcompress(a, ::ZlibCompressor)
-    a_uint8 = _reinterpret(UInt8,a)[:]
-    transcode(CodecZlib.ZlibCompressor, a_uint8)
+function zuncompress!(data::DenseArray, compressed, z::ZlibCompressor)
+    decode!(z.config.codec, reinterpret(UInt8, vec(data)), compressed)
+    data
 end
 
-JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "level" => z.clevel)
+function zcompress(a, z::ZlibCompressor)
+    encode(z.config, reinterpret(UInt8, vec(a)))
+end
+
+JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "level" => z.config.level)
 
 Zarr.compressortypes["zlib"] = ZlibCompressor
