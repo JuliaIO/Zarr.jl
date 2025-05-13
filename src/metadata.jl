@@ -44,7 +44,6 @@ const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('U', 1) => Char,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
-sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
 typecharf(::Type{<:Signed}) = 'i'
 typecharf(::Type{<:Unsigned}) = 'u'
 typecharf(::Type{<:AbstractFloat}) = 'f'
