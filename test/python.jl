@@ -21,7 +21,7 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, MaxLengthString, 
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor, MaxLengthString, 
        Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
 using Random: randstring
 numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
@@ -38,7 +38,9 @@ compressors = (
     "blosc_autoshuffle"=>BloscCompressor(cname="zstd",shuffle=-1),
     "blosc_noshuffle"=>BloscCompressor(cname="zstd",shuffle=0),
     "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
-    "zlib"=>ZlibCompressor())
+    "zlib"=>ZlibCompressor(),
+    "zstd"=>ZstdCompressor(),
+)
 filters = (
     "fletcher32"=>Fletcher32Filter(),
     "scale_offset"=>FixedScaleOffsetFilter(offset=1000, scale=10^6, T=Float64, Tenc=Int32),
