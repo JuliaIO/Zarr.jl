@@ -6,7 +6,8 @@ using PythonCall
 using CondaPkg
 using Dates
 
-CondaPkg.add("zarr"; version="2.*")
+CondaPkg.add("zarr"; version="3.*")
+CondaPkg.add("numcodecs"; version="0.15.*")
 
 @testset "Zarr" begin
 
