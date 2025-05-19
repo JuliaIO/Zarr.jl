@@ -123,15 +123,15 @@ function storefromstring(s, create=true)
     end
   end
   if create
-      return VersionedStore(DirectoryStore(s)), ""
+      return FormattedStore(DirectoryStore(s)), ""
   elseif isdir(s)
     # parse metadata to determine store kind
     temp_store = DirectoryStore(s)
     if is_zarray(temp_store, "")
         meta = getmetadata(temp_store, "", false)
-        store = VersionedStore{meta.zarr_format, meta.dimension_separator}(temp_store)
+        store = FormattedStore{meta.zarr_format, meta.dimension_separator}(temp_store)
     else
-        store = VersionedStore(temp_store)
+        store = FormattedStore(temp_store)
     end
     return store, ""
   else

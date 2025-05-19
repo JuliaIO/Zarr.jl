@@ -15,7 +15,7 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.VersionedStore{2, '.', Zarr.DictStore}}
+            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
 
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
@@ -43,7 +43,7 @@ CondaPkg.add("zarr"; version="2.*")
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.VersionedStore{2, '.', Zarr.DictStore}}
+            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
 
         @test eltype(z) === Int64
         @test ndims(z) === 2
@@ -63,7 +63,7 @@ CondaPkg.add("zarr"; version="2.*")
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()
-            @test z.storage === Zarr.VersionedStore{2 ,'.'}(Zarr.DirectoryStore("$dir/$name"))
+            @test z.storage === Zarr.FormattedStore{2 ,'.'}(Zarr.DirectoryStore("$dir/$name"))
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
