@@ -326,9 +326,9 @@ function zcreate(::Type{T}, dims::Integer...;
   end
 
   if path===nothing
-    store = VersionedStore{DV, dimension_separator}(DictStore())
+    store = FormattedStore{DV, dimension_separator}(DictStore())
   else
-    store = VersionedStore{DV, dimension_separator}(DirectoryStore(joinpath(path,name)))
+    store = FormattedStore{DV, dimension_separator}(DirectoryStore(joinpath(path,name)))
   end
   zcreate(T, store, dims...; kwargs...)
 end

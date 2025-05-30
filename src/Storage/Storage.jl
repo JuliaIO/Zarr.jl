@@ -201,7 +201,7 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 #during auto-check of storage format when doing zopen
 storageregexlist = Pair[]
 
-include("versionedstore.jl")
+include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
 include("s3store.jl")
