@@ -183,6 +183,18 @@ is_zarray(s::FormattedStore{3}, p, metadata=getmetadata(s, p, false)) =
     metadata.node_type == "array"
 
 getmetadata(s::FormattedStore{3}, p,fill_as_missing) = Metadata(String(maybecopy(s[p,"zarr.json"])),fill_as_missing)
+function writemetadata(s::FormattedStore{3}, p, m::Metadata; indent_json::Bool= false)
+  met = IOBuffer()
+
+  if indent_json
+    JSON.print(met,m,4)
+  else
+    JSON.print(met,m)
+  end
+  
+  s[p,"zarr.json"] = take!(met)
+  m
+end
 
 function getattrs(s::FormattedStore{3})
   md = s[p,"zarr.json"]
@@ -208,9 +220,9 @@ function writeattrs(s::FormattedStore{3}, p, att::Dict; indent_json::Bool= false
   b = IOBuffer()
 
   if indent_json
-    JSON.print(b,att,4)
+    JSON.print(b,md,4)
   else
-    JSON.print(b,att)
+    JSON.print(b,md)
   end
 
   s[p,"zarr.json"] = take!(b)
