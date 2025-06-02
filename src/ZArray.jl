@@ -360,6 +360,9 @@ function zcreate(::Type{T},storage::AbstractStore,
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
+  if fill_value === nothing && zarr_format == 3
+      fill_value = zero(T)
+  end
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
   metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
   zarr_format,

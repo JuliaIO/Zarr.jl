@@ -9,6 +9,14 @@ end
 typemap3["complex64"] = ComplexF32
 typemap3["complex128"] = ComplexF64
 
+function typestr3(t::Type)
+    return lowercase(string(t))
+end
+# TODO: Check raw types
+function typestr3(::Type{NTuple{N,UInt8}}) where {N}
+    return "r$(N*8)"
+end
+
 function typestr3(s::AbstractString, codecs=nothing)
     if !haskey(typemap3, s)
         if startswith(s, "r")
@@ -192,7 +200,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     C = typeof(compressor)
     F = typeof(filters)
 
-    fv = fill_value_decoding(d["fill_value"]::Int, T)
+    fv = fill_value_decoding(d["fill_value"], T)::T
 
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
@@ -220,7 +228,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     )
 end
 
-function lower3(md::Metadata)
+function lower3(md::Metadata{T}) where T
     md.zarr_format == 3 || throw(ArgumentError("lower3 only applies when zarr_format is 3"))
 
     mandatory_keys = [
@@ -288,10 +296,10 @@ function lower3(md::Metadata)
         "zarr_format" => md.zarr_format,
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
-        "data_type" => typestr3(md.dtype),
+        "data_type" => typestr3(T),
         "chunk_grid" => chunk_grid,
         "chunk_key_encoding" => chunk_key_encoding,
-        "fill_value" => fill_value_encoding(md.fill_value),
+        "fill_value" => fill_value_encoding(md.fill_value)::T,
         "codecs" => codecs
     )
 end
