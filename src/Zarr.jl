@@ -6,6 +6,7 @@ import Blosc
 include("metadata.jl")
 include("metadata3.jl")
 include("Compressors/Compressors.jl")
+include("Codecs/Codecs.jl")
 include("Storage/Storage.jl")
 include("Filters/Filters.jl")
 include("ZArray.jl")
