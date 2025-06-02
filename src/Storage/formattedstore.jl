@@ -17,6 +17,8 @@ const DS = default_sep(DV)
 # A Char is the separator for the default chunk key encoding
 abstract type ChunkKeyEncoding end
 struct V2ChunkKeyEncoding{SEP} <: ChunkKeyEncoding end
+separator(c::Char) = c
+separator(v2cke::V2ChunkKeyEncoding{SEP}) where SEP = SEP
 
 """
     FormattedStore{V,CKE,STORE <: AbstractStore} <: AbstractStore
