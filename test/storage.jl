@@ -186,6 +186,7 @@ end
 
 
 @testset "Minio S3 storage" begin
+  @info "Testing Minio S3 storage"
   A = fill(1.0, 30, 20)
   chunks = (5,10)
   metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
@@ -206,6 +207,7 @@ end
 end
 
 @testset "AWS S3 Storage" begin
+  @info "Testing AWS S3 storage"
   Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
   S3, p = Zarr.storefromstring("s3://mur-sst/zarr-v1")
   @test Zarr.is_zgroup(S3, p)
@@ -218,6 +220,7 @@ end
 end
 
 @testset "GCS Storage" begin
+  @info "Testing GCS storage"
   for s in (
     "gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
     "https://storage.googleapis.com/cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
@@ -239,6 +242,7 @@ end
 end
 
 @testset "HTTP Storage" begin
+  @info "Testing HTTP Storage"
   s = Zarr.DictStore()
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
@@ -274,6 +278,7 @@ end
 end
 
 @testset "Zip Storage" begin
+  @info "Testing Zip Storage"
   s = Zarr.DictStore()
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
@@ -294,4 +299,5 @@ end
     Zarr.writezip(io, ds)
     Zarr.ZipStore(take!(io))
   end
+  @info "Finished testing ZipStore"
 end

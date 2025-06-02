@@ -251,6 +251,9 @@ end
 
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::Metadata)
+    if md.zarr_format == 3
+        return lower3(md)
+    end
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,
         "node_type" => md.node_type,

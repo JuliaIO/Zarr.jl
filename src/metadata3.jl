@@ -104,8 +104,6 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     chunk_key_encoding = d["chunk_key_encoding"]
     if chunk_key_encoding["name"] == "default"
     elseif chunk_key_encoding["name"] == "v2"
-        # TODO: Implement v2 chunk_key_encoding by creating a chunk_key_encoding wrapper
-        throw(ArgumentError("Unknown v2 chunk_key_encoding is unimplemented"))
     else
         throw(ArgumentError("Unknown chunk_key_encoding of name, $(chunk_key_encoding["name"])"))
     end
@@ -198,7 +196,16 @@ function Metadata3(d::AbstractDict, fill_as_missing)
 
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
-    S = only(get(d, "dimension_separator", '/'))
+    cke_configuration = get(chunk_key_encoding, "configuration") do
+        Dict{String,Any}
+    end
+    # V2 uses '.' while default CKE uses '/' by default
+    if chunk_key_encoding["name"] == "v2"
+        separator = only(get(cke_configuration, "separator", '.'))
+        S = V2ChunkKeyEncoding{separator}()
+    elseif chunk_key_encoding["name"] == "default"
+        S = only(get(cke_configuration, "separator", '/'))
+    end
 
     Metadata{TU, N, C, F, S}(
         zarr_format,
@@ -210,5 +217,81 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         fv,
         order,
         filters,
+    )
+end
+
+function lower3(md::Metadata)
+    md.zarr_format == 3 || throw(ArgumentError("lower3 only applies when zarr_format is 3"))
+
+    mandatory_keys = [
+        "zarr_format",
+        "node_type",
+        "shape",
+        "data_type",
+        "chunk_grid",
+        "chunk_key_encoding",
+        "fill_value",
+        "codecs",
+    ]
+    optional_keys = [
+        "attributes",
+        "storage_transformers",
+        "dimension_names",
+    ]
+
+    chunk_grid = Dict{String,Any}(
+        "name" => "regular",
+        "configuration" => Dict{String,Any}(
+            "chunk_shape" => md.chunks |> reverse
+        )
+    )
+
+    chunk_key_encoding = Dict{String,Any}(
+        "name" => isa(md.dimension_separator, Char) ? "default" :
+                  isa(md.dimension_separator, V2ChunkKeyEncoding) ? "v2" :
+                  error("Unknown encoding for $(md.dimension_separator)"),
+        "configuration" => Dict{String,Any}(
+            "separator" => separator(md.dimension_separator)
+        )
+    )
+
+    # TODO: Incorporate filters
+    codecs = Dict{String,Any}[]
+
+    default_dim_perm = Tuple(0:length(md.shape[])-1)
+
+    # Encode the order as a single transpose codec (array to array)
+    push!(codecs,
+        Dict{String,Any}(
+            "name" => "transpose",
+            "configuration" => Dict(
+                "order" => md.order == 'C' ? default_dim_perm :
+                           md.order == 'F' ? reverse(default_dim_perm) :
+                           error("Unable to encode order $(md.order)")
+            )
+        )
+    )
+
+    # Convert from array to bytes
+    push!(codecs,
+        Dict{String,Any}(
+            "name" => "bytes",
+            "configuration" => Dict{String, Any}(
+                "endian" => "little"
+            )
+        )
+    )
+    # Compress bytes to bytes
+    push!(codecs, JSON.lower(Compressor_v3(md.compressor)))
+
+    Dict{String, Any}(
+        "zarr_format" => md.zarr_format,
+        "node_type" => md.node_type,
+        "shape" => md.shape[] |> reverse,
+        "data_type" => typestr3(md.dtype),
+        "chunk_grid" => chunk_grid,
+        "chunk_key_encoding" => chunk_key_encoding,
+        "fill_value" => fill_value_encoding(md.fill_value),
+        "codecs" => codecs
     )
 end

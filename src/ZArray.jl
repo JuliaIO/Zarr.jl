@@ -302,6 +302,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 
 * `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
 * `name=""` name of the zarr array, defaults to the directory name
+* `zarr_format`=$(DV) Zarr format version (2 or 3)
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
 * `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
 * `fill_value=nothing` value to represent missing values
@@ -316,7 +317,8 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 function zcreate(::Type{T}, dims::Integer...;
   name="",
   path=nothing,
-  dimension_separator='.',
+  zarr_format=DV,
+  dimension_separator=default_sep(zarr_format),
   kwargs...
   ) where T
 
@@ -326,16 +328,17 @@ function zcreate(::Type{T}, dims::Integer...;
   end
 
   if path===nothing
-    store = FormattedStore{DV, dimension_separator}(DictStore())
+    store = FormattedStore{zarr_format, dimension_separator}(DictStore())
   else
-    store = FormattedStore{DV, dimension_separator}(DirectoryStore(joinpath(path,name)))
+    store = FormattedStore{zarr_format, dimension_separator}(DirectoryStore(joinpath(path,name)))
   end
-  zcreate(T, store, dims...; kwargs...)
+  zcreate(T, store, dims...; zarr_format, kwargs...)
 end
 
 function zcreate(::Type{T},storage::AbstractStore,
   dims...;
   path = "",
+  zarr_format = DV,
   chunks=dims,
   fill_value=nothing,
   fill_as_missing=false,
@@ -359,7 +362,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   C = typeof(compressor)
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
   metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
-  2,
+  zarr_format,
   "array",
   dims,
   chunks,
