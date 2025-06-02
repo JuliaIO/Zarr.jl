@@ -181,3 +181,36 @@ is_zarray(s::FormattedStore{3}, p, metadata=getmetadata(s, p, false)) =
     metadata.node_type == "array"
 
 getmetadata(s::FormattedStore{3}, p,fill_as_missing) = Metadata(String(maybecopy(s[p,"zarr.json"])),fill_as_missing)
+
+function getattrs(s::FormattedStore{3})
+  md = s[p,"zarr.json"]
+  if md === nothing
+    error("zarr.json not found")
+  else
+    md = JSON.parse(replace(String(maybecopy(md)),": NaN,"=>": \"NaN\","))
+    return get(md, "attributes", Dict{String, Any}())
+  end
+end
+
+function writeattrs(s::FormattedStore{3}, p, att::Dict; indent_json::Bool= false)
+  # This is messy, we need to open zarr.json and replace the attributes section
+  md = s[p,"zarr.json"]
+  if md === nothing
+    error("zarr.json not found")
+  else
+    md = JSON.parse(replace(String(maybecopy(md)),": NaN,"=>": \"NaN\","))
+  end
+  md = Dict(md)
+  md["attributes"] = att
+
+  b = IOBuffer()
+
+  if indent_json
+    JSON.print(b,att,4)
+  else
+    JSON.print(b,att)
+  end
+
+  s[p,"zarr.json"] = take!(b)
+  att
+end
