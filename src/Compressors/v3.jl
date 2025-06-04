@@ -29,7 +29,7 @@ function JSON.lower(c::Compressor_v3{BloscCompressor})
             "cname" => p.cname,
             "clevel" => p.clevel,
             "shuffle" => p.shuffle,
-# TODO: Evalute if we can encode typesize
+# TODO: Evaluate if we can encode typesize
 #            "typesize" => p.typesize,
             "blocksize" => p.blocksize
         )
