@@ -35,9 +35,8 @@ function Base.setindex!(d::DirectoryStore,v,i::String)
 end
 
 
-storagesize(d::DirectoryStore,p) = sum(filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder * "/" * p))) do f
-  fname = d.folder * "/" * p * "/" * f
-  filesize(fname)
+function storagesize(d::DirectoryStore,p) 
+    reduce((acc,f) -> acc + filesize(d.folder * "/" * p * "/" * f), filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder * "/" * p)); init=0)
 end
 
 function subdirs(s::DirectoryStore,p) 
