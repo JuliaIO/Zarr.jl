@@ -143,6 +143,7 @@ _zero(T) = zero(T)
 _zero(T::Type{<:MaxLengthString}) = T("")
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
 _zero(::Type{<:Vector{T}}) where T = T[]
+_zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
 maybeinner(a::Array) = a
