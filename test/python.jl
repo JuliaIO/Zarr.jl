@@ -87,9 +87,8 @@ end
     g = zopen(pjulia)
     #Test group attributes
     @test g.attrs == groupattrs
-    for i=1:length(dtypes), co in compressors
+    for (t, co) in Iterators.product(dtypes, compressors)
         compstr,comp = co
-        t = dtypes[i]
         arname = string("a",t,compstr)
         ar = g[arname]
         @test ar.attrs == Dict("This is a nested attribute"=>Dict("a"=>5))
