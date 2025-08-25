@@ -148,13 +148,13 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 
 "Create a subgroup of the group g"
 function zgroup(g::ZGroup, name; attrs=Dict()) 
-  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  g.writeable || throw(ArgumentError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   g.groups[name] = zgroup(g.storage,_concatpath(g.path,name),attrs=attrs)
 end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs...) where T
-  g.writeable || throw(IOError("Zarr group is not writeable. Please re-open in write mode to create an array"))
+  g.writeable || throw(ArgumentError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   name = string(name)
   z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
   g.arrays[name] = z
@@ -164,6 +164,6 @@ end
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
 writezip(io::IO, s::Union{ZArray,ZGroup}; kwargs...) = writezip(io, s.storage, s.path; kwargs...)
 function consolidate_metadata(z::Union{ZArray,ZGroup}) 
-  z.writeable || throw(Base.IOError("Zarr group is not writeable. Please re-open in write mode to create an array",0))
+  z.writeable || throw(ArgumentError("Zarr group is not writeable. Please re-open in write mode to create an array"))
   consolidate_metadata(z.storage,z.path)
 end
