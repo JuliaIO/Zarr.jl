@@ -205,7 +205,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
     cke_configuration = get(chunk_key_encoding, "configuration") do
-        Dict{String,Any}
+        Dict{String,Any}()
     end
     # V2 uses '.' while default CKE uses '/' by default
     if chunk_key_encoding["name"] == "v2"
