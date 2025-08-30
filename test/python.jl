@@ -32,6 +32,10 @@ numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
 dtypes = (numeric_dtypes...,
     MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
     String)
+dtypesp = ("uint8","uint16","uint32","uint64",
+    "int8","int16","int32","int64",
+    "float16","float32","float64",
+    "complex64", "complex128","bool","S10","U10", "O")
 compressors = (
     "no"=>NoCompressor(),
     "blosc"=>BloscCompressor(cname="zstd"),
@@ -81,6 +85,19 @@ open(pjulia*".zip";write=true) do io
     Zarr.writezip(io, g)
 end
 
+@testset "reading in julia" begin
+    g = zopen(pjulia)
+    #Test group attributes
+    @test g.attrs == groupattrs
+    for (t, co) in Iterators.product(dtypes, compressors)
+        compstr,comp = co
+        arname = string("a",t,compstr)
+        ar = g[arname]
+        @test ar.attrs == Dict("This is a nested attribute"=>Dict("a"=>5))
+        @test ar == testarrays[t]
+    end
+end
+
 # Test reading in python
 for julia_path in (pjulia, pjulia*".zip")
     g = zarr.open_group(julia_path)
@@ -90,11 +107,6 @@ for julia_path in (pjulia, pjulia*".zip")
     @test gatts["String attribute"] == "One"
     @test gatts["Int attribute"] == 5
     @test gatts["Float attribute"] == 10.5
-
-    dtypesp = ("uint8","uint16","uint32","uint64",
-        "int8","int16","int32","int64",
-        "float16","float32","float64",
-        "complex64", "complex128","bool","S10","U10", "O")
 
     #Test accessing arrays from python and reading data
     for i=1:length(dtypes), co in compressors

@@ -17,7 +17,7 @@ using .MaxLengthStrings: MaxLengthString
 primitive type ASCIIChar <: AbstractChar 8 end
 ASCIIChar(x::UInt8) = reinterpret(ASCIIChar, x)
 ASCIIChar(x::Integer) = ASCIIChar(UInt8(x))
-UInt8(x::ASCIIChar) = reinterpret(UInt8, x)
+Base.UInt8(x::ASCIIChar) = reinterpret(UInt8, x)
 Base.codepoint(x::ASCIIChar) = UInt8(x)
 Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
 Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
@@ -44,7 +44,6 @@ const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('U', 1) => Char,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
-sizemapf(x::Type{<:Complex{T}}) where T = sizeof(T)
 typecharf(::Type{<:Signed}) = 'i'
 typecharf(::Type{<:Unsigned}) = 'u'
 typecharf(::Type{<:AbstractFloat}) = 'f'
