@@ -10,7 +10,7 @@ function _pdict(d::DictStore,p)
   filter(((k,v),)->startswith(k,p),d.a)
 end
 function storagesize(d::DictStore,p) 
-  sum(i->last(split(i[1],'/')) ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2])), _pdict(d,p))
+  sum(i -> (last(split(i[1],'/')) ∉ (".zattrs",".zarray") ? sizeof(i[2]) : zero(sizeof(i[2]))), _pdict(d,p); init=0)
 end
 
 function Base.getindex(d::DictStore,i::AbstractString) 
