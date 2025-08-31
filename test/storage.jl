@@ -136,6 +136,14 @@ end
   #Test that error is thrown when path does not exist and no folder is created
   @test_throws ArgumentError zopen("thisfolderdoesnotexist")
   @test !isdir("thisfolderdoesnotexist")
+  
+  # Test for empty array storagesize issue (https://github.com/JuliaIO/Zarr.jl/issues/197)
+  # This should error on master but work after PR #198
+  p_empty = tempname()
+  mkpath(p_empty)
+  z_empty = Zarr.zcreate(Int64, 5, chunks=(1,), path=p_empty)
+  @test_throws ArgumentError Zarr.zinfo(z_empty)  # Should fail on master due to sum over empty collection
+  @test_throws ArgumentError Zarr.storagesize(z_empty.storage, z_empty.path)  # Direct test of storagesize
 end
 
 @testset "DictStore" begin
@@ -147,6 +155,15 @@ end
   @test haskey(ds.a,".zgroup")
   @test ds.a["bar/.zattrs"]==UInt8[0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0x62, 0x22, 0x7d]
   @test sort(collect(keys(ds.a)))==[".zgroup","bar/.zarray", "bar/.zattrs", "bar/0.0.0"]
+  
+  # Test for empty array storagesize issue (https://github.com/JuliaIO/Zarr.jl/issues/197)
+  # DictStore doesn't have this issue on master, but is being fixed in PR #198 for consistency
+  ds_empty = Zarr.DictStore()
+  g_empty = Zarr.zgroup(ds_empty)
+  z_empty = Zarr.zcreate(Int64, g_empty, "empty_array", 5, chunks=(1,))
+  # These should work without error (DictStore already handles empty collections)
+  @test Zarr.storagesize(z_empty.storage, z_empty.path) == 0
+  @test Zarr.zinfo(z_empty) === nothing  # zinfo prints to stdout and returns nothing
 end
 
 
