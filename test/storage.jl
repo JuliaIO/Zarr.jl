@@ -139,11 +139,11 @@ end
   
   # Test for empty array storagesize issue (https://github.com/JuliaIO/Zarr.jl/issues/197)
   # This should error on master but work after PR #198
-  p_empty = tempname()
-  mkpath(p_empty)
-  z_empty = Zarr.zcreate(Int64, 5, chunks=(1,), path=p_empty)
-  @test_throws ArgumentError Zarr.zinfo(z_empty)  # Should fail on master due to sum over empty collection
-  @test_throws ArgumentError Zarr.storagesize(z_empty.storage, z_empty.path)  # Direct test of storagesize
+  mktempdir() do p_empty
+	  z_empty = Zarr.zcreate(Int64, 5, chunks=(1,), path=p_empty)
+	  @test_nowarn Zarr.zinfo(z_empty)
+	  @test_nowarn Zarr.storagesize(z_empty.storage, z_empty.path)
+  end
 end
 
 @testset "DictStore" begin
