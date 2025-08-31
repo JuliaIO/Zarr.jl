@@ -36,7 +36,7 @@ end
 
 
 function storagesize(d::DirectoryStore,p) 
-    reduce((acc,f) -> acc + filesize(d.folder * "/" * p * "/" * f), filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder * "/" * p)); init=0)
+    sum(f -> filesize(d.folder * "/" * p * "/" * f), filter(i->i ∉ (".zattrs",".zarray"),readdir(d.folder * "/" * p)); init=0)
 end
 
 function subdirs(s::DirectoryStore,p) 
