@@ -43,6 +43,7 @@ compressors = (
     "blosc_noshuffle"=>BloscCompressor(cname="zstd",shuffle=0),
     "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
     "zlib"=>ZlibCompressor(),
+    "zlib_2"=>ZlibCompressor(;clevel=2),
     "zstd"=>ZstdCompressor(),
 )
 filters = (
