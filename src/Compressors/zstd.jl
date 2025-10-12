@@ -41,6 +41,15 @@ function zcompress(a, z::ZstdCompressor)
     encode(z.config, reinterpret(UInt8, vec(a)))
 end
 
-JSON.lower(z::ZstdCompressor) = Dict("id"=>"zstd", "level" => z.config.compressionLevel, "checksum" => z.config.checksum)
+function JSON.lower(z::ZstdCompressor)
+    # Matching behavior in zarr-python to work with TensorStore
+    # Ref https://github.com/JuliaIO/Zarr.jl/issues/193
+    # Hotfix for https://github.com/zarr-developers/zarr-python/issues/2647
+    if z.config.checksum
+        Dict("id"=>"zstd", "level" => z.config.compressionLevel, "checksum" => z.config.checksum)
+    else
+        Dict("id"=>"zstd", "level" => z.config.compressionLevel)
+    end
+end
 
 Zarr.compressortypes["zstd"] = ZstdCompressor

@@ -221,14 +221,18 @@ end
   @test_throws ArgumentError resize!(a,(-1,2))
 end
 
-@testset "string array getindex/setindex" begin
+@testset "string/Char array getindex/setindex" begin
   aa = ["this", "is", "all ", "ascii"]
   bb = ["And" "Unicode"; "ματριξ" missing]
+  cc = 'A':'D'
   a = ZArray(aa)
   b = ZArray(bb, fill_value = "")
+  c = ZArray(cc)
   @test eltype(a) == String
   @test eltype(b) == Union{String,Missing}
+  @test eltype(c) == Char
   @test a[:] == ["this", "is", "all ", "ascii"]
+  @test c[:] == 'A':'D'
   @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
 end
 
