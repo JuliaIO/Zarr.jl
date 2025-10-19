@@ -24,11 +24,15 @@ Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
 Base.zero(t::Union{String, Type{String}}) = ""
 
+# Helper function to determine byte order marker
+# Single-byte types use '|' (no byte order), multi-byte types use '<' (little-endian)
+byteorder_marker(t::Type) = sizeof(t) == 1 ? '|' : '<'
+
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
-typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
-typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
-typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
+typestr(t::Type{Bool}) = string(byteorder_marker(t), 'b', sizeof(t))
+typestr(t::Type{<:Signed}) = string(byteorder_marker(t), 'i', sizeof(t))
+typestr(t::Type{<:Unsigned}) = string(byteorder_marker(t), 'u', sizeof(t))
 typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t))
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
 typestr(::Type{MaxLengthString{N,UInt32}}) where N = string('<', 'U', N)

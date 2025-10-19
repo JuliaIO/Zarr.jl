@@ -96,8 +96,12 @@ end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
-        @test Zarr.typestr(Bool) === "<b1"
-        @test Zarr.typestr(Int8) === "<i1"
+        # Single-byte types - must use '|' prefix (no byte order)
+        @test Zarr.typestr(Bool) === "|b1"
+        @test Zarr.typestr(Int8) === "|i1"
+        @test Zarr.typestr(UInt8) === "|u1"
+
+        # Multi-byte types - use '<' prefix (little-endian)
         @test Zarr.typestr(Int64) === "<i8"
         @test Zarr.typestr(UInt32) === "<u4"
         @test Zarr.typestr(UInt128) === "<u16"
