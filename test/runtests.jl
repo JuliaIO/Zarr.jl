@@ -2,11 +2,7 @@ using Test
 using Zarr
 using JSON
 using Pkg
-using PythonCall
-using CondaPkg
 using Dates
-
-CondaPkg.add("zarr"; version="2.*")
 
 @testset "Zarr" begin
 
