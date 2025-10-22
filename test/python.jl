@@ -3,6 +3,11 @@
 ### We save some data in Julia and python and test if it is still the same
 ### when read from the other language 
 ###
+
+using CondaPkg
+CondaPkg.add("zarr"; version=">=2.13,<3")
+CondaPkg.add("numpy"; version=">=2.3.3,<3")
+
 @testset "Python zarr implementation" begin
 
 import Mmap
@@ -266,7 +271,7 @@ a1 = g["a1"]
 end
 
 @testset "Python datetime types" begin
-using Dates, Test, Zarr
+using Dates, Test, Zarr, PythonCall
 vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
 vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
 ad = ZArray(vd)
