@@ -26,8 +26,10 @@ Base.zero(t::Union{String, Type{String}}) = ""
 
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
-typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
+typestr(t::Type{Bool}) = string('|', 'b', sizeof(t))
+typestr(t::Type{<:Int8}) = string("|i1")
 typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
+typestr(t::Type{<:UInt8}) = string("|u1")
 typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
 typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t))
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
