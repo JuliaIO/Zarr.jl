@@ -70,7 +70,9 @@ using Dates
                 "zarr_format" => 2,
                 "chunks" => [3, 2],
                 "fill_value" => nothing,
-                "compressor" => nothing)
+                "compressor" => nothing,
+                "dimension_separator" => ".",
+            )
             # call gc to avoid unlink: operation not permitted (EPERM) on Windows
             # might be because files are left open
             # from https://github.com/JuliaLang/julia/blob/f6344d32d3ebb307e2b54a77e042559f42d2ebf6/stdlib/SharedArrays/test/runtests.jl#L146

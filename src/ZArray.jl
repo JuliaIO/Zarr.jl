@@ -333,11 +333,25 @@ function zcreate(::Type{T},storage::AbstractStore,
   fill_value=nothing,
   fill_as_missing=false,
   compressor=BloscCompressor(),
-  filters = filterfromtype(T), 
+  filters = filterfromtype(T),
+  dimension_separator='.',
   attrs=Dict(),
   writeable=true,
   indent_json=false
   ) where T
+
+  if compressor isa AbstractString
+    if haskey(compressortypes, String(compressor))
+      compressor = compressortypes[compressor]()
+    else
+      throw(UnknownCompressorException(compressor))
+    end
+  end
+
+  if dimension_separator isa AbstractString
+    # Convert AbstractString to Char
+    dimension_separator = only(dimension_separator)
+  end
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
@@ -352,6 +366,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   fill_value,
   'C',
   filters,
+  dimension_separator,
   )
   
   isemptysub(storage,path) || error("$storage $path is not empty")
