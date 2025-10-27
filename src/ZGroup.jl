@@ -20,10 +20,21 @@ function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: Abstract
 
   for d in subdirs(s,path)
     dshort = split(d,'/')[end]
-    m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
-    if isa(m, ZArray)
+    subpath = _concatpath(path,dshort)
+    if is_zarr2(s, subpath)
+        # check for zarr2 first
+    elseif is_zarr3(s, subpath)
+        s = set_zarr_format(s, 3)
+    end
+    if is_zarray(s, subpath)
+      meta = getmetadata(s, subpath, false)
+      if dimension_separator(s) != meta.dimension_separator
+          s = set_dimension_separator(s, meta.dimension_separator)
+      end
+      m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
       arrays[dshort] = m
-    elseif isa(m, ZGroup)
+    elseif is_zgroup(s, subpath)
+      m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
       groups[dshort] = m
     end
   end
@@ -37,9 +48,9 @@ end
 
 Works like `zopen` with the single difference that no error is thrown when 
 the path or store does not point to a valid zarr array or group, but nothing 
-is returned instead. 
+is returned instead.
 """
-function zopen_noerr(s::AbstractStore, mode="r"; 
+function zopen_noerr(s::AbstractStore, mode="r";
   consolidated = false, 
   path="", 
   lru = 0,
@@ -116,8 +127,21 @@ function storefromstring(s, create=true)
       return storefromstring(t,s,create)
     end
   end
-  if create || isdir(s)
-    return DirectoryStore(s), ""
+  if create
+      return FormattedStore(DirectoryStore(s)), ""
+  elseif isdir(s)
+    # parse metadata to determine store kind
+    temp_store = DirectoryStore(s)
+    if is_zarr3(temp_store, "")
+        temp_store = set_zarr_format(temp_store, 3)
+    end
+    if is_zarray(temp_store, "")
+        meta = getmetadata(temp_store, "", false)
+        store = FormattedStore{meta.zarr_format, meta.dimension_separator}(temp_store)
+    else
+        store = FormattedStore(temp_store)
+    end
+    return store, ""
   else
     throw(ArgumentError("Path $s is not a directory."))
   end
@@ -129,7 +153,7 @@ end
 Create a new zgroup in the store `s`
 """
 function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bool= false)
-    d = Dict("zarr_format"=>2)
+    d = Dict("zarr_format"=>DV)
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     
