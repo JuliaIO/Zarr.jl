@@ -92,9 +92,18 @@ Each array requires essential configuration metadata to be stored, enabling corr
 interpretation of the stored data. This metadata is encoded using JSON and stored as the
 value of the “.zarray” key within an array store.
 
+# Type Parameters
+* T - element type of the array
+* N - dimensionality of the array
+* C - compressor
+* F - filters
+* S - dimension separator
+
+# See Also
+
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-struct Metadata{T, N, C, F}
+struct Metadata{T, N, C, F, S}
     zarr_format::Int
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
@@ -103,16 +112,48 @@ struct Metadata{T, N, C, F}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    function Metadata{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters) where {T2,N,C,F}
+    function Metadata{T2, N, C, F, S}(zarr_format, shape, chunks, dtype, compressor, fill_value, order, filters) where {T2,N,C,F,S}
         #We currently only support version 
         zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
+        new{T2, N, C, F, S}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
     end
+    function Metadata{T2, N, C, F}(
+        zarr_format,
+        shape,
+        chunks,
+        dtype,
+        compressor,
+        fill_value,
+        order,
+        filters,
+        dimension_separator::Char = '.'
+    ) where {T2,N,C,F}
+        return Metadata{T2, N, C, F, dimension_separator}(
+            zarr_format,
+            shape,
+            chunks,
+            dtype,
+            compressor,
+            fill_value,
+            order 
+        )
+    end
+
 end
+
+const DimensionSeparatedMetadata{S} = Metadata{<: Any, <: Any, <: Any, <: Any, S}
+
+function Base.getproperty(m::DimensionSeparatedMetadata{S}, name::Symbol) where S
+    if name == :dimension_separator
+        return S
+    end
+    return getfield(m, name)
+end
+Base.propertynames(m::Metadata) = (fieldnames(Metadata)..., :dimension_separator)
 
 #To make unit tests pass with ref shape
 import Base.==
@@ -124,7 +165,8 @@ function ==(m1::Metadata, m2::Metadata)
   m1.compressor == m2.compressor &&
   m1.fill_value == m2.fill_value &&
   m1.order == m2.order &&
-  m1.filters == m2.filters
+  m1.filters == m2.filters &&
+  m1.dimension_separator == m2.dimension_separator
 end
 
 
@@ -136,9 +178,10 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order::Char='C',
         filters::Nothing=nothing,
         fill_as_missing = false,
+        dimension_separator::Char = '.'
     ) where {T, N, C}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-    Metadata{T2, N, C, typeof(filters)}(
+    Metadata{T2, N, C, typeof(filters), dimension_separator}(
         zarr_format,
         size(A),
         chunks,
@@ -176,7 +219,9 @@ function Metadata(d::AbstractDict, fill_as_missing)
 
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
-    Metadata{TU, N, C, F}(
+    S = only(get(d, "dimension_separator", '.'))
+
+    Metadata{TU, N, C, F, S}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
         NTuple{N, Int}(d["chunks"]) |> reverse,
@@ -198,7 +243,8 @@ function JSON.lower(md::Metadata)
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
         "order" => md.order,
-        "filters" => md.filters
+        "filters" => md.filters,
+        "dimension_separator" => md.dimension_separator
     )
 end
 
