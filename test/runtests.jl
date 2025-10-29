@@ -213,6 +213,12 @@ end
   @test_throws ArgumentError resize!(a,(-1,2))
 end
 
+@testset "concatenate" begin
+    a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+    ca = cat(a, a, dims=3)
+    @test size(ca) == (10,10,2)
+end
+
 @testset "string/Char array getindex/setindex" begin
   aa = ["this", "is", "all ", "ascii"]
   bb = ["And" "Unicode"; "ματριξ" missing]
