@@ -42,6 +42,8 @@ using Dates
         @test ndims(z) === 2
         @test size(z) === (2, 3)
         @test size(z, 2) === 3
+        @test size(z,300) === 1
+        @test_throws ErrorException size(z, -1)
         @inferred size(z)
         @inferred size(z, 2)
         @test length(z) === 2 * 3
