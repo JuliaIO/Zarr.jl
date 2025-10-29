@@ -45,7 +45,7 @@ Base.ndims(::ZArray{<:Any,N}) where {N} = N
 Base.size(z::ZArray) = z.metadata.shape[]
 function Base.size(z::ZArray,i)
   len = length(z.metadata.shape[])
-  if 1< i < len
+  if 0 < i <= len
     z.metadata.shape[][i]
   elseif i > len
     1
