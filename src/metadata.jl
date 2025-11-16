@@ -205,51 +205,82 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
-        filters::Nothing=nothing,
+        filters=nothing,
         fill_as_missing = false,
         dimension_separator::Char = '.'
     ) where {T, N, C}
+    return Metadata(A, chunks, Val(zarr_format);
+        node_type=node_type,
+        compressor=compressor,
+        fill_value=fill_value,
+        order=order,
+        filters=filters,
+        fill_as_missing=fill_as_missing,
+        dimension_separator=dimension_separator
+    )
+end
+
+# V2 constructor
+function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int}, ::Val{2};
+        node_type::String="array",
+        compressor::C=BloscCompressor(),
+        fill_value::Union{T, Nothing}=nothing,
+        order::Char='C',
+        filters::F=nothing,
+        fill_as_missing = false,
+        dimension_separator::Char = '.'
+    ) where {T, N, C, F}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-    if zarr_format == 2
-        MetadataV2{T2, N, C, typeof(filters), dimension_separator}(
-            zarr_format,
-            node_type,
-            size(A),
-            chunks,
-            typestr(eltype(A)),
-            compressor,
-            fill_value,
-            order,
-            filters
-        )
-    elseif zarr_format == 3
-        @warn("Zarr v3 support is experimental")
-        MetadataV3{T2, N, C, typeof(filters), dimension_separator}(
-            zarr_format,
-            node_type,
-            size(A),
-            chunks,
-            typestr(eltype(A)),
-            compressor,
-            fill_value,
-            order,
-            filters
-        )
-    else
-        throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
-    end
+    MetadataV2{T2, N, C, typeof(filters), dimension_separator}(
+        2,
+        node_type,
+        size(A),
+        chunks,
+        typestr(eltype(A)),
+        compressor,
+        fill_value,
+        order,
+        filters
+    )
+end
+
+# V3 constructor - delegate to metadata3.jl
+function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int}, ::Val{3};
+        node_type::String="array",
+        compressor::C=BloscCompressor(),
+        fill_value::Union{T, Nothing}=nothing,
+        order::Char='C',
+        filters::F=nothing,
+        fill_as_missing = false,
+        dimension_separator::Char = '.'
+    ) where {T, N, C, F}
+    return Metadata3(A, chunks;
+        node_type=node_type,
+        compressor=compressor,
+        fill_value=fill_value,
+        order=order,
+        filters=filters,
+        fill_as_missing=fill_as_missing,
+        dimension_separator=dimension_separator
+    )
 end
 
 Metadata(s::Union{AbstractString, IO},fill_as_missing) = Metadata(JSON.parse(s),fill_as_missing)
 
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
-    # create a Metadata struct from it
-
-    if d["zarr_format"] == 3
-        return Metadata3(d, fill_as_missing)
+    zarr_format = d["zarr_format"]::Int
+    if zarr_format == 2
+        return Metadata(d, fill_as_missing, Val(2))
+    elseif zarr_format == 3
+        return Metadata(d, fill_as_missing, Val(3))
+    else
+        throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
     end
+end
 
+# V2 constructor from Dict
+function Metadata(d::AbstractDict, fill_as_missing, ::Val{2})
     # Zarr v2 metadata is only for arrays
     node_type = "array"
 
@@ -286,6 +317,11 @@ function Metadata(d::AbstractDict, fill_as_missing)
         first(d["order"]),
         filters,
     )
+end
+
+# V3 constructor from Dict - delegate to metadata3.jl
+function Metadata(d::AbstractDict, fill_as_missing, ::Val{3})
+    return Metadata3(d, fill_as_missing)
 end
 
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"

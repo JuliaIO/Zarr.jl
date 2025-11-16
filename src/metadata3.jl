@@ -229,6 +229,34 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     )
 end
 
+"Construct MetadataV3 based on your data"
+function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
+        node_type::String="array",
+        compressor::C=BloscCompressor(),
+        fill_value::Union{T, Nothing}=nothing,
+        order::Char='C',
+        filters::F=nothing,
+        fill_as_missing = false,
+        dimension_separator::Char = '/'
+    ) where {T, N, C, F}
+    @warn("Zarr v3 support is experimental")
+    T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
+    if fill_value === nothing
+        fill_value = zero(T)
+    end
+    MetadataV3{T2, N, C, typeof(filters), dimension_separator}(
+        3,
+        node_type,
+        size(A),
+        chunks,
+        typestr3(eltype(A)),
+        compressor,
+        fill_value,
+        order,
+        filters
+    )
+end
+
 function lower3(md::MetadataV3{T}) where T
 
     mandatory_keys = [

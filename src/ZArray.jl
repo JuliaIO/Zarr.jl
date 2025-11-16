@@ -361,38 +361,21 @@ function zcreate(::Type{T},storage::AbstractStore,
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
-  if fill_value === nothing && zarr_format == 3
-      fill_value = zero(T)
-  end
-  T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-  metadata = if zarr_format == 2
-      MetadataV2{T2, N, C, typeof(filters), dimension_separator}(
-          zarr_format,
-          "array",
-          dims,
-          chunks,
-          typestr(T),
-          compressor,
-          fill_value,
-          'C',
-          filters,
-      )
-  elseif zarr_format == 3
-      @warn("Zarr v3 support is experimental")
-      MetadataV3{T2, N, C, typeof(filters), dimension_separator}(
-          zarr_format,
-          "array",
-          dims,
-          chunks,
-          typestr(T),
-          compressor,
-          fill_value,
-          'C',
-          filters,
-      )
-  else
-      throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
-  end
+  
+  # Create a dummy array to use with Metadata constructor
+  # This allows us to leverage the multiple dispatch in Metadata constructors
+  dummy_array = Array{T,N}(undef, dims...)
+  metadata = Metadata(dummy_array, chunks;
+      zarr_format=zarr_format,
+      compressor=compressor,
+      fill_value=fill_value,
+      filters=filters,
+      fill_as_missing=fill_as_missing,
+      dimension_separator=dimension_separator
+  )
+  
+  # Extract the element type from the metadata (handles T2 calculation)
+  T2 = eltype(metadata)
   
   isemptysub(storage,path) || error("$storage $path is not empty")
   
