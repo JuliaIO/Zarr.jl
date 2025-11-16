@@ -183,7 +183,7 @@ is_zarray(s::FormattedStore{3}, p, metadata=getmetadata(s, p, false)) =
     metadata.node_type == "array"
 
 getmetadata(s::FormattedStore{3}, p,fill_as_missing) = Metadata(String(maybecopy(s[p,"zarr.json"])),fill_as_missing)
-function writemetadata(s::FormattedStore{3}, p, m::Metadata; indent_json::Bool= false)
+function writemetadata(s::FormattedStore{3}, p, m::AbstractMetadata; indent_json::Bool= false)
   met = IOBuffer()
 
   if indent_json

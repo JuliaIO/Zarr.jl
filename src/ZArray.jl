@@ -33,7 +33,7 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 # Currently this is not an AbstractArray, because indexing single elements is
 # would be really slow, although most AbstractArray interface functions are implemented
 struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
-  metadata::Metadata{T, N, C}
+  metadata::AbstractMetadata{T, N, C}
   storage::S
   path::String
   attrs::Dict
@@ -42,11 +42,11 @@ end
 
 Base.eltype(::ZArray{T}) where {T} = T
 Base.ndims(::ZArray{<:Any,N}) where {N} = N
-Base.size(z::ZArray) = z.metadata.shape[]
-Base.size(z::ZArray,i) = z.metadata.shape[][i]
-Base.length(z::ZArray) = prod(z.metadata.shape[])
-Base.lastindex(z::ZArray,n) = size(z,n)
-Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
+Base.size(z::ZArray{<:Any,N}) where {N} = z.metadata.shape[]::NTuple{N, Int}
+Base.size(z::ZArray{<:Any,N}, i::Integer) where {N} = z.metadata.shape[][i]::Int
+Base.length(z::ZArray) = prod(z.metadata.shape[])::Int
+Base.lastindex(z::ZArray{<:Any,N}, n::Integer) where {N} = size(z, n)::Int
+Base.lastindex(z::ZArray{<:Any,1}) = size(z, 1)::Int
 
 function Base.show(io::IO,z::ZArray)
   print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
@@ -365,17 +365,34 @@ function zcreate(::Type{T},storage::AbstractStore,
       fill_value = zero(T)
   end
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-  metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
-  zarr_format,
-  "array",
-  dims,
-  chunks,
-  typestr(T),
-  compressor,
-  fill_value,
-  'C',
-  filters,
-  )
+  metadata = if zarr_format == 2
+      MetadataV2{T2, N, C, typeof(filters), dimension_separator}(
+          zarr_format,
+          "array",
+          dims,
+          chunks,
+          typestr(T),
+          compressor,
+          fill_value,
+          'C',
+          filters,
+      )
+  elseif zarr_format == 3
+      @warn("Zarr v3 support is experimental")
+      MetadataV3{T2, N, C, typeof(filters), dimension_separator}(
+          zarr_format,
+          "array",
+          dims,
+          chunks,
+          typestr(T),
+          compressor,
+          fill_value,
+          'C',
+          filters,
+      )
+  else
+      throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
+  end
   
   isemptysub(storage,path) || error("$storage $path is not empty")
   

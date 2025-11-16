@@ -64,7 +64,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             end
         end
 
-        return Metadata{Int,0,Nothing,Nothing,'/'}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing)
+        return MetadataV3{Int,0,Nothing,Nothing,'/'}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing)
     end
 
     # Array keys
@@ -102,7 +102,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     if chunk_grid["name"] == "regular"
         chunks = Int.(chunk_grid["configuration"]["chunk_shape"])
         if length(shape) != length(chunks)
-            throw(ArgumentError("Shape has rank $(length(shape)) which does not match the chunk_shape rank of $(length(chunk_shape))"))
+            throw(ArgumentError("Shape has rank $(length(shape)) which does not match the chunk_shape rank of $(length(chunks))"))
         end
     else
         throw(ArgumentError("Unknown chunk_grid of name, $(chunk_grid["name"])"))
@@ -124,12 +124,12 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     default_dim_perm = Tuple(1:length(shape))
     dim_perm = default_dim_perm
 
-    codec_data_type = :array
+    codec_data_type = Ref(:array)
 
-    function check_codec_data_type(from, to)
-        codec_data_type == from ||
-            throw(ArgumentError("$codec_name found by codec_data_type is $codec_data_type"))
-        codec_data_type = to
+    function check_codec_data_type(codec_name, from, to)
+        codec_data_type[] == from ||
+            throw(ArgumentError("$codec_name found by codec_data_type is $(codec_data_type[])"))
+        codec_data_type[] = to
         return nothing
     end
 
@@ -137,26 +137,26 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         codec_name = codec["name"]
         if codec_name == "bytes"
             # array -> bytes
-            check_codec_data_type(:array, :bytes)
+            check_codec_data_type(codec_name, :array, :bytes)
             if haskey(codec, "configuration")
                 codec["configuration"]["endian"] == "little" ||
                     throw(ArgumentError("Zarr.jl currently only supports little endian for the bytes codec"))
             end
         elseif codec_name == "zstd"
             # bytes -> bytes
-            check_codec_data_type(:bytes, :bytes)
+            check_codec_data_type(codec_name, :bytes, :bytes)
             compdict = codec
         elseif codec_name == "blosc"
             # bytes -> bytes
-            check_codec_data_type(:bytes, :bytes)
+            check_codec_data_type(codec_name, :bytes, :bytes)
             compdict = codec
         elseif codec_name == "gzip"
             # bytes -> bytes
-            check_codec_data_type(:bytes, :bytes)
+            check_codec_data_type(codec_name, :bytes, :bytes)
             compdict = codec
         elseif codec_name == "transpose"
             # array -> array
-            check_codec_data_type(:array, :array)
+            check_codec_data_type(codec_name, :array, :array)
             _dim_order = codec["configuration"]["order"]
             if _dim_order == "C"
                 @warn "Transpose codec dimension order of $_dim_order is deprecated"
@@ -170,11 +170,11 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             dim_perm = dim_perm[_dim_order]
         elseif codec_name == "sharding_indexed"
             # array -> bytes
-            check_codec_data_type(:array, :bytes)
+            check_codec_data_type(codec_name, :array, :bytes)
             throw(ArgumentError("Zarr.jl currently does not support the $(codec["name"]) codec"))
         elseif codec_name == "crc32c"
             # bytes -> bytes
-            check_codec_data_type(:bytes, :bytes)
+            check_codec_data_type(codec_name, :bytes, :bytes)
             throw(ArgumentError("Zarr.jl currently does not support the $(codec["name"]) codec"))
         else
             throw(ArgumentError("Zarr.jl currently does not support the $(codec["name"]) codec"))
@@ -192,7 +192,8 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     compressor = getCompressor(compdict)
 
     # Filters (NOT IMPLEMENTED)
-    filters = getfilters(d)
+    # For v3, filters are not yet implemented, so we return nothing
+    filters = nothing
 
     # Type Parameters
     T = typestr3(data_type)
@@ -215,7 +216,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         S = only(get(cke_configuration, "separator", '/'))
     end
 
-    Metadata{TU, N, C, F, S}(
+    MetadataV3{TU, N, C, F, S}(
         zarr_format,
         node_type,
         NTuple{N, Int}(shape) |> reverse,
@@ -228,8 +229,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     )
 end
 
-function lower3(md::Metadata{T}) where T
-    md.zarr_format == 3 || throw(ArgumentError("lower3 only applies when zarr_format is 3"))
+function lower3(md::MetadataV3{T}) where T
 
     mandatory_keys = [
         "zarr_format",

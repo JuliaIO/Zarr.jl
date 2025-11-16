@@ -120,7 +120,7 @@ isinitialized(s::AbstractStore, p, i) = isinitialized(s,_concatpath(p,i))
 isinitialized(s::AbstractStore, i) = s[i] !== nothing
 
 getmetadata(s::AbstractStore, p,fill_as_missing) = Metadata(String(maybecopy(s[p,".zarray"])),fill_as_missing)
-function writemetadata(s::AbstractStore, p, m::Metadata; indent_json::Bool= false)
+function writemetadata(s::AbstractStore, p, m::AbstractMetadata; indent_json::Bool= false)
   met = IOBuffer()
 
   if indent_json
