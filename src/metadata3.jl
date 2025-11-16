@@ -317,8 +317,10 @@ function lower3(md::MetadataV3{T}) where T
             )
         )
     )
-    # Compress bytes to bytes
-    push!(codecs, JSON.lower(Compressor_v3(md.compressor)))
+    # Compress bytes to bytes (only if not NoCompressor)
+    if !(md.compressor isa NoCompressor)
+        push!(codecs, JSON.lower(Compressor_v3(md.compressor)))
+    end
 
     Dict{String, Any}(
         "zarr_format" => md.zarr_format,

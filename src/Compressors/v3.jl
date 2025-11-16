@@ -41,7 +41,7 @@ function JSON.lower(c::Compressor_v3{ZlibCompressor})
     return Dict(
         "name" => "gzip",
         "configuration" => Dict(
-            "level" => p.clevel
+            "level" => p.config.level
         )
     )
 end
