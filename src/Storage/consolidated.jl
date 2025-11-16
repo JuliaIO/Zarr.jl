@@ -13,7 +13,8 @@ function ConsolidatedStore(s::AbstractStore, p)
   if d === nothing
     throw(ArgumentError("Could not find consolidated metadata for store $s"))
   end
-  ConsolidatedStore(s,p,JSON.parse(String(Zarr.maybecopy(d)))["metadata"])
+  meta = JSON.parse(String(copy(d)); dicttype = Dict{String,Any})
+  ConsolidatedStore(s, p, meta["metadata"])
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
@@ -67,7 +68,7 @@ function consolidate_metadata(s::AbstractStore,d,prefix)
   for k in (".zattrs",".zarray",".zgroup")
     v = s[prefix,k]
     if v !== nothing
-      d[_concatpath(prefix,k)] = JSON.parse(String(copy(v)))
+      d[_concatpath(prefix,k)] = JSON.parse(String(copy(v)); dicttype = Dict{String,Any})
     end
   end
   foreach(subdirs(s,prefix)) do subname

@@ -150,7 +150,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     )
 end
 
-Metadata(s::Union{AbstractString, IO},fill_as_missing) = Metadata(JSON.parse(s),fill_as_missing)
+Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict), fill_as_missing)
 
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
