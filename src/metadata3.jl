@@ -171,7 +171,9 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         elseif codec_name == "sharding_indexed"
             # array -> bytes
             check_codec_data_type(codec_name, :array, :bytes)
-            throw(ArgumentError("Zarr.jl currently does not support the $(codec["name"]) codec"))
+            # TODO: Implement sharding codec support
+            # See implementation suggestions in src/Codecs/V3/V3.jl for ShardingCodec
+            throw(ArgumentError("Zarr.jl currently does not support the $(codec["name"]) codec. See src/Codecs/V3/V3.jl for implementation suggestions."))
         elseif codec_name == "crc32c"
             # bytes -> bytes
             check_codec_data_type(codec_name, :bytes, :bytes)
