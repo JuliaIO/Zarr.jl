@@ -2,3 +2,5 @@ Manifest.toml
 docs/build
 *.zarr
 .CondaPkg
+.vscode
+test/CondaPkg.toml

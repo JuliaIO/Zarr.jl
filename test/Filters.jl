@@ -27,7 +27,8 @@ using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFil
 
     data = rand(100)
     enc = zencode(data, Fletcher32Filter())
-    enc[begin] += 1
+    # Corrupt the checksum by modifying a byte (handle overflow safely)
+    enc[begin] = UInt8((enc[begin] + 1) % 256)
     @test_throws "Checksum mismatch in Fletcher32 decoding" zdecode(enc, Fletcher32Filter())
 end
 
