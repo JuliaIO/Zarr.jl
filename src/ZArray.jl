@@ -312,6 +312,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 
 * `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
 * `name=""` name of the zarr array, defaults to the directory name
+* `zarr_format`=$(DV) Zarr format version (2 or 3)
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
 * `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
 * `fill_value=nothing` value to represent missing values
@@ -321,23 +322,33 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
+* `dimension_separator='.'` sets how chunks are encoded. The Zarr v2 default is '.' such that the first 3D chunk would be `0.0.0`. The Zarr v3 default is `/`.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
   path=nothing,
+  zarr_format=DV,
+  dimension_separator=default_sep(zarr_format),
   kwargs...
   ) where T
-  if path===nothing
-    store = DictStore()
-  else
-    store = DirectoryStore(joinpath(path,name))
+
+  if dimension_separator isa AbstractString
+      # Convert AbstractString to Char
+      dimension_separator = only(dimension_separator)
   end
-  zcreate(T, store, dims...; kwargs...)
+
+  if path===nothing
+    store = FormattedStore{zarr_format, dimension_separator}(DictStore())
+  else
+    store = FormattedStore{zarr_format, dimension_separator}(DirectoryStore(joinpath(path,name)))
+  end
+  zcreate(T, store, dims...; zarr_format, kwargs...)
 end
 
 function zcreate(::Type{T},storage::AbstractStore,
   dims...;
   path = "",
+  zarr_format = DV,
   chunks=dims,
   fill_value=nothing,
   fill_as_missing=false,
@@ -345,15 +356,27 @@ function zcreate(::Type{T},storage::AbstractStore,
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,
-  indent_json=false
-  ) where T
+  indent_json=false,
+  dimension_separator=nothing
+  ) where {T}
+
+  if isnothing(dimension_separator)
+      dimension_separator = Zarr.dimension_separator(storage)
+  elseif dimension_separator != Zarr.dimension_separator(storage)
+      error("The dimension separator keyword value, $dimension_separator,
+      must agree with the dimension separator type parameter, $(Zarr.dimension_separator(storage))")
+  end
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
+  if fill_value === nothing && zarr_format == 3
+      fill_value = zero(T)
+  end
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-  metadata = Metadata{T2, N, C, typeof(filters)}(
-  2,
+  metadata = Metadata{T2, N, C, typeof(filters), dimension_separator}(
+  zarr_format,
+  "array",
   dims,
   chunks,
   typestr(T),
