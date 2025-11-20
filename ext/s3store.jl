@@ -1,12 +1,4 @@
-using AWSS3: AWSS3, s3_put, s3_get, s3_delete, s3_list_objects, s3_exists
-
-struct S3Store <: AbstractStore
-    bucket::String
-    aws::AWSS3.AWS.AbstractAWSConfig
-end
-
-
-function S3Store(bucket::String;
+function Zarr.S3Store(bucket::String;
     aws = nothing,
   )
   if aws === nothing
@@ -71,7 +63,7 @@ end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
-push!(storageregexlist,r"^s3://"=>S3Store)
+# push!(storageregexlist,r"^s3://"=>S3Store)
 
 function Zarr.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
