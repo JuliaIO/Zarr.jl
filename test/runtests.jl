@@ -4,6 +4,7 @@ using JSON
 using JSON: json
 using Pkg
 using Dates
+using AWSS3
 
 @testset "Zarr" begin
 

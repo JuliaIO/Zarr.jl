@@ -199,7 +199,6 @@ storageregexlist = Pair[]
 
 include("directorystore.jl")
 include("dictstore.jl")
-include("s3store.jl")
 include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")

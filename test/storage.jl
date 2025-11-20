@@ -159,8 +159,8 @@ end
     s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
     run(s, wait=false)
     cfg = MinioConfig("http://localhost:9001")
-    Zarr.AWSS3.global_aws_config(cfg)
-    Zarr.AWSS3.S3.create_bucket("zarrdata")
+    AWSS3.global_aws_config(cfg)
+    AWSS3.S3.create_bucket("zarrdata")
     ds = S3Store("zarrdata")
     test_store_common(ds)
     @test sprint(show, ds) == "S3 Object Storage"
@@ -171,7 +171,7 @@ end
 end
 
 @testset "AWS S3 Storage" begin
-  Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+  AWSS3.AWS.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
   S3, p = Zarr.storefromstring("s3://mur-sst/zarr-v1")
   @test Zarr.is_zgroup(S3, p)
   @test storagesize(S3, p) == 10551

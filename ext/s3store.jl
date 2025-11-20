@@ -35,7 +35,7 @@ end
 
 Base.delete!(s::S3Store, d::String) = s3_delete(s.aws,s.bucket,d)
 
-function storagesize(s::S3Store,p)
+function Zarr.storagesize(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   r = s3_list_objects(s.aws,s.bucket,prefix)
   s = 0
@@ -48,21 +48,21 @@ function storagesize(s::S3Store,p)
   s
 end
 
-function isinitialized(s::S3Store, i::String)
+function Zarr.isinitialized(s::S3Store, i::String)
   s3_exists(s.aws,s.bucket,i)
 end
 
 
-function cloud_list_objects(s::S3Store,p)
+function Zarr.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   AWSS3.S3.list_objects_v2(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
 end
-function subdirs(s::S3Store, p)
+function Zarr.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"CommonPrefixes") && return String[]
   allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
-function subkeys(s::S3Store, p)
+function Zarr.subkeys(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
@@ -73,11 +73,11 @@ allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
 push!(storageregexlist,r"^s3://"=>S3Store)
 
-function storefromstring(::Type{<:S3Store}, s, _)
+function Zarr.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
   S3Store(String(bucket),aws=AWSS3.AWS.global_aws_config()),path
 end
 
-store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])
+Zarr.store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])
