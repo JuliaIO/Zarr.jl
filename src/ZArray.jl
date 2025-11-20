@@ -50,7 +50,7 @@ function Base.size(z::ZArray,i)
   elseif i > len
     1
   else
-    error("arraysize: dimension out of range: Got index $i, but the array has only $len dimensions")
+    error("arraysize: dimension out of range")
   end
 end
 Base.length(z::ZArray) = prod(z.metadata.shape[])
