@@ -1,6 +1,7 @@
 using Test
 using Zarr
 using JSON
+using JSON: json
 using Pkg
 using Dates
 

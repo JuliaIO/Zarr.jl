@@ -92,7 +92,7 @@ function getattrs(s::AbstractStore, p)
   if atts === nothing
     Dict()
   else
-    JSON.parse(replace(String(maybecopy(atts)),": NaN,"=>": \"NaN\","))
+    JSON.parse(replace(String(maybecopy(atts)),": NaN,"=>": \"NaN\","); dicttype = Dict{String,Any})
   end
 end
 function writeattrs(s::AbstractStore, p, att::Dict; indent_json::Bool= false)

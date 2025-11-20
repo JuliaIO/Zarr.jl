@@ -33,7 +33,7 @@ function gcs_credentials(;metadata_url = "http://metadata.google.internal/comput
   user_project = String(HTTP.get(url, headers=headers).body)
 
   url = joinpath(metadata_url,"instance","service-accounts","default","token")
-  auth = JSON.parse(String(HTTP.get(url,headers).body));
+  auth = JSON.parse(String(HTTP.get(url,headers).body); dicttype=Dict);
 
   gcs_credentials(user_project,auth["access_token"],auth["token_type"])
 end
@@ -100,7 +100,7 @@ function cloud_list_objects(s::GCStore,p)
   headers = _gcs_request_headers()
   params = Dict("prefix" => prefix, "delimiter" => "/")
   r = JSON.parse(String(HTTP.get(url,headers,
-                                 query = params).body))
+                                 query = params).body); dicttype=Dict)
 
   return r
 end
