@@ -43,7 +43,16 @@ end
 Base.eltype(::ZArray{T}) where {T} = T
 Base.ndims(::ZArray{<:Any,N}) where {N} = N
 Base.size(z::ZArray) = z.metadata.shape[]
-Base.size(z::ZArray,i) = z.metadata.shape[][i]
+function Base.size(z::ZArray,i)
+  len = length(z.metadata.shape[])
+  if 0 < i <= len
+    z.metadata.shape[][i]
+  elseif i > len
+    1
+  else
+    error("arraysize: dimension out of range")
+  end
+end
 Base.length(z::ZArray) = prod(z.metadata.shape[])
 Base.lastindex(z::ZArray,n) = size(z,n)
 Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)

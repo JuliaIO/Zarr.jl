@@ -43,6 +43,8 @@ using Dates
         @test ndims(z) === 2
         @test size(z) === (2, 3)
         @test size(z, 2) === 3
+        @test size(z,300) === 1
+        @test_throws ErrorException size(z, -1)
         @inferred size(z)
         @inferred size(z, 2)
         @test length(z) === 2 * 3
@@ -211,6 +213,12 @@ end
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
   @test_throws ArgumentError resize!(a,(-1,2))
+end
+
+@testset "concatenate" begin
+    a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+    ca = cat(a, a, dims=3)
+    @test size(ca) == (10,10,2)
 end
 
 @testset "string/Char array getindex/setindex" begin
