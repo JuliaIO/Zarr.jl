@@ -1,3 +1,9 @@
+@testset "Zarr error" begin
+  @test_throws ErrorException S3Store("test")
+end
+
+using AWSS3
+
 @testset "Path Normalization" begin
     mixed_path = ".\\\\path///to\\a\\place/..\\///"
     norm_path = "path/to/a"

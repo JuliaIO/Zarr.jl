@@ -4,11 +4,11 @@ using JSON
 using JSON: json
 using Pkg
 using Dates
-using AWSS3
+
 
 @testset "Zarr" begin
 
-
+    
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
