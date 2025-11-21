@@ -38,7 +38,7 @@ struct S3Store <: AbstractStore
     aws::Any
 end
 
-function S3Store()
+function S3Store(args...)
     error("AWSS3 must be loaded to use S3Store. Try `using AWSS3`.")
 end
 
