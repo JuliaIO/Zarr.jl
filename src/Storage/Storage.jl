@@ -213,6 +213,7 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 storageregexlist = Pair[]
 push!(storageregexlist, r"^s3://" => S3Store)
 
+include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
 include("gcstore.jl")
