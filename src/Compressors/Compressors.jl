@@ -49,10 +49,13 @@ const compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
 include("blosc.jl")
 include("zlib.jl")
 include("zstd.jl")
+include("v3.jl")
 
 # ## Fallback definitions for the compressor interface
 # Define fallbacks and generic methods for the compressor interface
-getCompressor(compdict::Dict) = getCompressor(compressortypes[compdict["id"]],compdict)
+getCompressor(compdict::Dict) = haskey(compdict, "id") ?
+    getCompressor(compressortypes[compdict["id"]], compdict) :
+    getCompressor(compressortypes[compdict["name"]], compdict["configuration"])
 getCompressor(::Nothing) = NoCompressor()
 
 # Compression when no filter is given

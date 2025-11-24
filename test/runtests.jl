@@ -13,11 +13,14 @@ using Dates
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore}
+            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
 
+        @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
         @test eltype(z.storage.a["0.0"]) === UInt8
+        @test z.metadata.zarr_format === 2
+        @test z.metadata.node_type === "array"
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
         @test z.metadata.chunks === (2, 3)
@@ -29,16 +32,17 @@ using Dates
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
+        @test z.metadata.dimension_separator === Zarr.DS
+        @test :dimension_separator ∈ propertynames(z.metadata)
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
-        @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), zarr_format = 3)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')
     end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
         @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.DictStore}
+            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
 
         @test eltype(z) === Int64
         @test ndims(z) === 2
@@ -60,7 +64,7 @@ using Dates
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()
-            @test z.storage === Zarr.DirectoryStore("$dir/$name")
+            @test z.storage === Zarr.FormattedStore{2 ,'.'}(Zarr.DirectoryStore("$dir/$name"))
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -69,12 +73,15 @@ using Dates
             @test JSON.parsefile("$dir/$name/.zarray") == Dict{String, Any}(
                 "dtype" => "<i8",
                 "filters" => nothing,
-                "shape" => [3, 2],
+                "shape" => Any[3, 2],
                 "order" => "C",
                 "zarr_format" => 2,
-                "chunks" => [3, 2],
+                "node_type" => "array",
+                "chunks" => Any[3, 2],
                 "fill_value" => nothing,
-                "compressor" => nothing)
+                "compressor" => nothing,
+                "dimension_separator" => "."
+            )
             # call gc to avoid unlink: operation not permitted (EPERM) on Windows
             # might be because files are left open
             # from https://github.com/JuliaLang/julia/blob/f6344d32d3ebb307e2b54a77e042559f42d2ebf6/stdlib/SharedArrays/test/runtests.jl#L146
