@@ -1,12 +1,9 @@
 using Test
 using Zarr
 using JSON
+using JSON: json
 using Pkg
-using PythonCall
-using CondaPkg
 using Dates
-
-CondaPkg.add("zarr"; version="2.*")
 
 @testset "Zarr" begin
 
@@ -50,6 +47,8 @@ CondaPkg.add("zarr"; version="2.*")
         @test ndims(z) === 2
         @test size(z) === (2, 3)
         @test size(z, 2) === 3
+        @test size(z,300) === 1
+        @test_throws ErrorException size(z, -1)
         @inferred size(z)
         @inferred size(z, 2)
         @test length(z) === 2 * 3
@@ -103,9 +102,10 @@ end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
-        @test Zarr.typestr(Bool) === "<b1"
-        @test Zarr.typestr(Int8) === "<i1"
+        @test Zarr.typestr(Bool) === "|b1"
+        @test Zarr.typestr(Int8) === "|i1"
         @test Zarr.typestr(Int64) === "<i8"
+        @test Zarr.typestr(UInt8) === "|u1"
         @test Zarr.typestr(UInt32) === "<u4"
         @test Zarr.typestr(UInt128) === "<u16"
         @test Zarr.typestr(Complex{Float32}) === "<c8"
@@ -154,6 +154,7 @@ end
         @test Zarr.fill_value_decoding("-", String) === "-"
         @test Zarr.fill_value_decoding("", Zarr.ASCIIChar) === nothing
         @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
+        @test Zarr.fill_value_decoding(nothing, Zarr.ASCIIChar) === nothing
     end
 end
 
@@ -219,6 +220,12 @@ end
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
   @test_throws ArgumentError resize!(a,(-1,2))
+end
+
+@testset "concatenate" begin
+    a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+    ca = cat(a, a, dims=3)
+    @test size(ca) == (10,10,2)
 end
 
 @testset "string/Char array getindex/setindex" begin

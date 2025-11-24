@@ -26,8 +26,10 @@ Base.zero(t::Union{String, Type{String}}) = ""
 
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
-typestr(t::Type{Bool}) = string('<', 'b', sizeof(t))
+typestr(t::Type{Bool}) = string('|', 'b', sizeof(t))
+typestr(t::Type{<:Int8}) = string("|i1")
 typestr(t::Type{<:Signed}) = string('<', 'i', sizeof(t))
+typestr(t::Type{<:UInt8}) = string("|u1")
 typestr(t::Type{<:Unsigned}) = string('<', 'u', sizeof(t))
 typestr(t::Type{Complex{T}} where T<:AbstractFloat) = string('<', 'c', sizeof(t))
 typestr(t::Type{<:AbstractFloat}) = string('<', 'f', sizeof(t))
@@ -244,7 +246,6 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int}, ::Val{2};
     )
 end
 
-# V3 constructor - delegate to metadata3.jl
 function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int}, ::Val{3};
         node_type::String="array",
         compressor::C=BloscCompressor(),
@@ -265,7 +266,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int}, ::Val{3};
     )
 end
 
-Metadata(s::Union{AbstractString, IO},fill_as_missing) = Metadata(JSON.parse(s),fill_as_missing)
+Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict), fill_as_missing)
 
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
@@ -367,6 +368,7 @@ fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
+fill_value_decoding(v::Nothing, ::Type{Zarr.ASCIIChar}) = v
 # Sometimes when translating between CF (climate and forecast) convention data
 # and Zarr groups, fill values are left as "negative integers" to encode unsigned
 # integers.  So, we have to convert to the signed type with the same number of bytes
