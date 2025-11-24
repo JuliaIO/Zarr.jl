@@ -11,8 +11,8 @@ AWS configuration first, for options look at the documentation of
 account, you can access the dataset without credentials as follows:
 
 ````@example aws
-using Zarr, AWS
-Zarr.AWSS3.AWS.global_aws_config(Zarr.AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+using Zarr, AWSS3
+AWSS3.AWS.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
 ````
 
 Then we can directly open a zarr group stored on s3
