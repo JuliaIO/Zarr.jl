@@ -26,7 +26,22 @@ They may optionally implement the following methods:
 """
 abstract type AbstractStore end
 
-#Define the interface
+# Define the interface
+
+"""
+  S3Store(bucket::String; aws=nothing)
+ 
+An S3-backed Zarr store. Available after loading the `ZarrAWSS3Ext` extension.
+"""
+struct S3Store <: AbstractStore
+    bucket::String
+    aws::Any
+end
+
+function S3Store(args...)
+    error("AWSS3 must be loaded to use S3Store. Try `using AWSS3`.")
+end
+
 """
   storagesize(d::AbstractStore, p::AbstractString)
 
@@ -200,11 +215,11 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 #Here different storage backends can register regexes that are checked against
 #during auto-check of storage format when doing zopen
 storageregexlist = Pair[]
+push!(storageregexlist, r"^s3://" => S3Store)
 
 include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
-include("s3store.jl")
 include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
