@@ -64,7 +64,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             end
         end
 
-        return MetadataV3{Int,0,Nothing,Nothing,'/'}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing)
+        return MetadataV3{Int,0,Nothing,Nothing}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing, ChunkEncoding('/', true))
     end
 
     # Array keys
@@ -110,9 +110,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
 
     # Chunk Key Encoding
     chunk_key_encoding = d["chunk_key_encoding"]
-    if chunk_key_encoding["name"] == "default"
-    elseif chunk_key_encoding["name"] == "v2"
-    else
+    if chunk_key_encoding["name"] ∉ ("default", "v2")
         throw(ArgumentError("Unknown chunk_key_encoding of name, $(chunk_key_encoding["name"])"))
     end
 
@@ -213,9 +211,9 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     # V2 uses '.' while default CKE uses '/' by default
     if chunk_key_encoding["name"] == "v2"
         separator = only(get(cke_configuration, "separator", '.'))
-        S = V2ChunkKeyEncoding{separator}()
+        chunk_encoding = ChunkEncoding(separator, false)
     elseif chunk_key_encoding["name"] == "default"
-        S = only(get(cke_configuration, "separator", '/'))
+        chunk_encoding = ChunkEncoding(only(get(cke_configuration, "separator", '/')), true)
     end
 
     MetadataV3{TU, N, C, F, S}(
@@ -228,6 +226,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         fv,
         order,
         filters,
+        chunk_encoding,
     )
 end
 
@@ -246,7 +245,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     if fill_value === nothing
         fill_value = zero(T)
     end
-    MetadataV3{T2, N, C, typeof(filters), dimension_separator}(
+    MetadataV3{T2,N,C,typeof(filters)}(
         3,
         node_type,
         size(A),
@@ -255,7 +254,8 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         compressor,
         fill_value,
         order,
-        filters
+        filters,
+        ChunkEncoding(dimension_separator, true)
     )
 end
 

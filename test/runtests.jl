@@ -12,9 +12,7 @@ using Dates
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-        @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
-
+            @test z isa ZArray{Int64,2,Zarr.DictStore,Zarr.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -32,8 +30,7 @@ using Dates
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
-        @test z.metadata.dimension_separator === Zarr.DS
-        @test :dimension_separator ∈ propertynames(z.metadata)
+            @test z.metadata.chunk_encoding === Zarr.ChunkEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')
@@ -41,9 +38,7 @@ using Dates
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-        @test z isa ZArray{Int64, 2, Zarr.BloscCompressor,
-            Zarr.FormattedStore{2, '.', Zarr.DictStore}}
-
+            @test z isa ZArray{Int64,2,Zarr.DictStore,Zarr.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)
@@ -64,7 +59,7 @@ using Dates
                 compressor=Zarr.NoCompressor())
 
             @test z.metadata.compressor === Zarr.NoCompressor()
-            @test z.storage === Zarr.FormattedStore{2 ,'.'}(Zarr.DirectoryStore("$dir/$name"))
+                @test z.storage === Zarr.DirectoryStore("$dir/$name")
             @test isdir("$dir/$name")
             @test ispath("$dir/$name/.zarray")
             @test ispath("$dir/$name/.zattrs")
@@ -94,8 +89,8 @@ end
     store = DirectoryStore(tempname())
     g = zgroup(store,"mygroup")
     g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
-    @test Zarr.is_zgroup(store,"mygroup")
-    @test Zarr.is_zgroup(store,"mygroup/asubgroup")
+        @test Zarr.is_zgroup(Zarr.DV, store, "mygroup")
+        @test Zarr.is_zgroup(Zarr.DV, store, "mygroup/asubgroup")
     @test g2.attrs["a1"]==5
     @test isdir(joinpath(store.folder,"mygroup"))
     @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
@@ -183,7 +178,7 @@ end
   @test all(ismissing,amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
   # Test that chunk containing only missings is not initialized
-  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkEncoding('/', false), CartesianIndex((1, 5))))
   #
   amiss = zcreate(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=false)
   amiss[:,1] = 1:10
@@ -195,7 +190,7 @@ end
   @test all(==(-1),amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,-1,3]))
   # Test that chunk containing only fill values is not initialized
-  @test !Zarr.isinitialized(amiss.storage,Zarr.citostring(CartesianIndex((1,5))))
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkEncoding('/', false), CartesianIndex((1, 5))))
 end
 
 @testset "resize" begin

@@ -13,32 +13,29 @@ ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
 
 zname(g::ZGroup) = zname(g.path)
 
+
+
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
+function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=false) where T<:AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
-
+  zv = if zarr_format == :auto
+    ZarrFormat(s, path)
+  else
+    ZarrFormat(zarr_format)
+  end
   for d in subdirs(s,path)
     dshort = split(d,'/')[end]
     subpath = _concatpath(path,dshort)
-    if is_zarr2(s, subpath)
-        # check for zarr2 first
-    elseif is_zarr3(s, subpath)
-        s = set_zarr_format(s, 3)
-    end
-    if is_zarray(s, subpath)
-      meta = getmetadata(s, subpath, false)
-      if dimension_separator(s) != meta.dimension_separator
-          s = set_dimension_separator(s, meta.dimension_separator)
-      end
-      m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
+    if is_zarray(zv, s, subpath)
+      m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       arrays[dshort] = m
     elseif is_zgroup(s, subpath)
-      m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
+      m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       groups[dshort] = m
     end
   end
-  attrs = getattrs(s,path)
+  attrs = getattrs(zv, s, path)
   startswith(path,"/") && error("Paths should never start with a leading '/'")
   ZGroup(s, path, arrays, groups, attrs,mode=="w")
 end
@@ -50,19 +47,20 @@ Works like `zopen` with the single difference that no error is thrown when
 the path or store does not point to a valid zarr array or group, but nothing 
 is returned instead.
 """
-function zopen_noerr(s::AbstractStore, mode="r";
+function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
   consolidated = false, 
   path="", 
   lru = 0,
-  fill_as_missing)
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path,lru=lru,fill_as_missing=fill_as_missing)
-    if lru !== 0 
-      error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
-    end
-    if is_zarray(s, path)
-        return ZArray(s,mode,path;fill_as_missing=fill_as_missing)
-    elseif is_zgroup(s,path)
-        return ZGroup(s,mode,path;fill_as_missing=fill_as_missing)
+  fill_as_missing=false)
+
+  consolidated && isinitialized(s, ".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  if lru !== 0
+    error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
+  end
+  if is_zarray(zv, s, path)
+    return ZArray(s, mode, path, zv; fill_as_missing=fill_as_missing)
+  elseif is_zgroup(zv, s, path)
+    return ZGroup(s, mode, path, zv; fill_as_missing=fill_as_missing)
     else
         return nothing
     end
@@ -87,6 +85,7 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
+
 """
     zopen(s::AbstractStore, mode="r"; consolidated = false, path = "", lru = 0)
 
@@ -95,20 +94,29 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups. Setting `lru` to a value > 0 means that chunks that have been
 accessed before will be cached and consecutive reads will happen from the cache. 
-Here, `lru` denotes the number of chunks that remain in memory. 
+Here, `lru` denotes the number of chunks that remain in memory. The expected zarr version
+can be supplied through `zarr_format` and defaults to `:auto` which tries to detect 
+if the zarr version is v2 or v3.
 """
 function zopen(s::AbstractStore, mode="r"; 
+  zarr_format=:auto,
   consolidated = false, 
   path = "", 
   lru = 0,
   fill_as_missing = false)
-    # add interfaces to Stores later    
-    r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
-    if r === nothing
-        throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
-    else
-        return r
-    end
+
+  zarr_format = if zarr_format == :auto
+    ZarrFormat(s, path)
+  else
+    ZarrFormat(zarr_format)
+  end
+  # add interfaces to Stores later    
+  r = zopen_noerr(s, mode, zarr_format; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  if r === nothing
+    throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
+  else
+    return r
+  end
 end
 
 """
@@ -127,21 +135,8 @@ function storefromstring(s, create=true)
       return storefromstring(t,s,create)
     end
   end
-  if create
-      return FormattedStore(DirectoryStore(s)), ""
-  elseif isdir(s)
-    # parse metadata to determine store kind
-    temp_store = DirectoryStore(s)
-    if is_zarr3(temp_store, "")
-        temp_store = set_zarr_format(temp_store, 3)
-    end
-    if is_zarray(temp_store, "")
-        meta = getmetadata(temp_store, "", false)
-        store = FormattedStore{meta.zarr_format, meta.dimension_separator}(temp_store)
-    else
-        store = FormattedStore(temp_store)
-    end
-    return store, ""
+  if create || isdir(s)
+    return DirectoryStore(s), ""
   else
     throw(ArgumentError("Path $s is not a directory."))
   end
@@ -152,7 +147,7 @@ end
 
 Create a new zgroup in the store `s`
 """
-function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bool= false)
+function zgroup(s::AbstractStore, path::String="", zarr_format=ZarrFormat(2); attrs=Dict(), indent_json::Bool=false)
     d = Dict("zarr_format"=>DV)
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
@@ -164,7 +159,7 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bo
     end
 
     s[path,".zgroup"]=take!(b)
-    writeattrs(s,path,attrs, indent_json=indent_json)
+  writeattrs(DV, s, path, attrs, indent_json=indent_json)
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 

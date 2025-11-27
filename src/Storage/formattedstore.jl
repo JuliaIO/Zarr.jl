@@ -13,75 +13,79 @@ default_sep(version) = version == 2 ? DS2 :
                        error("Unknown version: $version")
 const DS = default_sep(DV)
 
-# Chunk Key Encodings for Zarr v3
-# A Char is the separator for the default chunk key encoding
-abstract type ChunkKeyEncoding end
-struct V2ChunkKeyEncoding{SEP} <: ChunkKeyEncoding end
-separator(c::Char) = c
-separator(v2cke::V2ChunkKeyEncoding{SEP}) where SEP = SEP
-
-"""
-    FormattedStore{V,CKE,STORE <: AbstractStore} <: AbstractStore
-
-FormattedStore wraps an AbstractStore to indicate a specific Zarr format.
-The path of a chunk depends on the version and chunk key encoding.
-
-# Type Parameters
-
-- V: Zarr format version
-- CKE: Chunk key encoding or dimension separator.
-       CKE could be a `Char` or a subtype of `ChunkKeyEncoding`.
-- STORE: Type of AbstractStore wrapped
-
-# Chunk Path Formats
-
-## Zarr version 2
-
-### '.' dimension separator (default)
-
-Chunks are encoded as "1.2.3"
-
-### '/' dimension separator
-
-Chunks are encoded as "1/2/3"
-
-## Zarr version 3
-
-### '/' dimension separator (default)
-
-Chunks are encoded as "c/1/2/3"
-
-### '.' dimension separator
-
-Chunks are encoded as "c.1.2.3"
-
-### V2ChunkKeyEncoding{SEP}
-
-See Zarr version 2
-"""
-struct FormattedStore{V,SEP,STORE <: AbstractStore} <: AbstractStore
-    parent::STORE
-end
-FormattedStore(args...) = FormattedStore{DV,DS}(args...)
-FormattedStore(s::FormattedStore) = s
-FormattedStore{V}(args...) where V = FormattedStore{V, default_sep(V)}(args...)
-FormattedStore{V}(s::FormattedStore{<:Any,S}) where {V,S} = FormattedStore{V, S}(s)
-FormattedStore{<: Any, S}(args...) where S = FormattedStore{DV, S}(args...)
-FormattedStore{<: Any, S}(s::FormattedStore{V}) where {V,S} = FormattedStore{V, S}(s)
-function FormattedStore{V,S}(store::AbstractStore) where {V,S}
-    return FormattedStore{V,S,typeof(store)}(store)
-end
-function FormattedStore{V,S}(store::FormattedStore) where {V,S}
-    p = parent(store)
-    return FormattedStore{V,S,typeof(p)}(p)
+# # Chunk Key Encodings for Zarr v3
+# # A Char is the separator for the default chunk key encoding
+# abstract type ChunkKeyEncoding end
+struct V2ChunkKeyEncoding <: ChunkKeyEncoding
+  sep::Char
 end
 
-Base.parent(store::FormattedStore) = store.parent
+struct V3ChunkKeyEncoding <: ChunkKeyEncoding
+  sep::Char
+end
 
-@inline citostring(i::CartesianIndex, version::Int, sep::Char=default_sep(version)) = (version == 3 ? "c$sep" : "" ) * join(reverse((i - oneunit(i)).I), sep)
-@inline citostring(::CartesianIndex{0}, version::Int, sep::Char=default_sep(version)) = (version == 3 ? "c$(sep)0" : "0" )
-@inline citostring(i::CartesianIndex, ::Int, ::Type{V2ChunkKeyEncoding{S}}) where S = citostring(i, 2, S)
-citostring(i::CartesianIndex, s::FormattedStore{V, S}) where {V,S} = citostring(i, V, S)
+# """
+#     FormattedStore{V,CKE,STORE <: AbstractStore} <: AbstractStore
+
+# FormattedStore wraps an AbstractStore to indicate a specific Zarr format.
+# The path of a chunk depends on the version and chunk key encoding.
+
+# # Type Parameters
+
+# - V: Zarr format version
+# - CKE: Chunk key encoding or dimension separator.
+#        CKE could be a `Char` or a subtype of `ChunkKeyEncoding`.
+# - STORE: Type of AbstractStore wrapped
+
+# # Chunk Path Formats
+
+# ## Zarr version 2
+
+# ### '.' dimension separator (default)
+
+# Chunks are encoded as "1.2.3"
+
+# ### '/' dimension separator
+
+# Chunks are encoded as "1/2/3"
+
+# ## Zarr version 3
+
+# ### '/' dimension separator (default)
+
+# Chunks are encoded as "c/1/2/3"
+
+# ### '.' dimension separator
+
+# Chunks are encoded as "c.1.2.3"
+
+# ### V2ChunkKeyEncoding{SEP}
+
+# See Zarr version 2
+# """
+# struct FormattedStore{V,SEP,STORE <: AbstractStore} <: AbstractStore
+#     parent::STORE
+# end
+# FormattedStore(args...) = FormattedStore{DV,DS}(args...)
+# FormattedStore(s::FormattedStore) = s
+# FormattedStore{V}(args...) where V = FormattedStore{V, default_sep(V)}(args...)
+# FormattedStore{V}(s::FormattedStore{<:Any,S}) where {V,S} = FormattedStore{V, S}(s)
+# FormattedStore{<: Any, S}(args...) where S = FormattedStore{DV, S}(args...)
+# FormattedStore{<: Any, S}(s::FormattedStore{V}) where {V,S} = FormattedStore{V, S}(s)
+# function FormattedStore{V,S}(store::AbstractStore) where {V,S}
+#     return FormattedStore{V,S,typeof(store)}(store)
+# end
+# function FormattedStore{V,S}(store::FormattedStore) where {V,S}
+#     p = parent(store)
+#     return FormattedStore{V,S,typeof(p)}(p)
+# end
+
+# Base.parent(store::FormattedStore) = store.parent
+
+@inline citostring(i::CartesianIndex, cke::V3ChunkKeyEncoding) = "c$(cke.sep)" * join(reverse((i - oneunit(i)).I), cke.sep)
+@inline citostring(::CartesianIndex{0}, cke::V3ChunkKeyEncoding) = "c$(cke.sep)0"
+@inline citostring(i::CartesianIndex, cke::V2ChunkKeyEncoding) = join(reverse((i - oneunit(i)).I), cke.sep)
+@inline citostring(::CartesianIndex{0}, cke::V2ChunkKeyEncoding) = "0"
 
 Base.getindex(s::FormattedStore, p, i::CartesianIndex) = s[p, citostring(i,s)]
 Base.delete!(s::FormattedStore, p, i::CartesianIndex) = delete!(s, p, citostring(i,s))

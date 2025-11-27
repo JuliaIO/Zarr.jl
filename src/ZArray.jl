@@ -30,10 +30,8 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 
 # Struct representing a Zarr Array in Julia, note that
 # chunks(chunk size) and size are always in Julia column-major order
-# Currently this is not an AbstractArray, because indexing single elements is
-# would be really slow, although most AbstractArray interface functions are implemented
-struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
-  metadata::AbstractMetadata{T, N, C}
+struct ZArray{T,N,S<:AbstractStore,M<:AbstractMetadata{T,N}} <: AbstractDiskArray{T,N}
+  metadata::M
   storage::S
   path::String
   attrs::Dict
@@ -117,14 +115,21 @@ function zinfo(io::IO,z::ZArray)
   end
 end
 
-function ZArray(s::T, mode="r",path="";fill_as_missing=false) where T <: AbstractStore
-  metadata = getmetadata(s,path,fill_as_missing)
-  attrs    = getattrs(s,path)
+function ZArray(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=false) where T<:AbstractStore
+  zv = if zarr_format == :auto
+    ZarrFormat(s, path)
+  else
+    ZarrFormat(zarr_format)
+  end
+  metadata = getmetadata(zv, s, path, fill_as_missing)
+  attrs = getattrs(zv, s, path)
   writeable = mode == "w"
   startswith(path,"/") && error("Paths should never start with a leading '/'")
-  ZArray{eltype(metadata), length(metadata.shape[]), typeof(metadata.compressor), T}(
-  metadata, s, path, attrs, writeable)
+  ZArray(metadata, s, string(path), attrs, writeable)
 end
+
+zarr_format(z::ZArray) = zarr_format(z.metadata)
+dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
 
 """
@@ -174,7 +179,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
   task = @async begin
-    read_items!($z.storage,c, $z.path, $blockr)
+    read_items!($(z.storage), c, $(z.metadata.chunk_encoding), $(z.path), $(blockr))
   end
   bind(c,task)
 
@@ -210,14 +215,14 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
   readtask = @async begin 
-    read_items!(z.storage,readchannel, z.path, blockr)
+    read_items!(z.storage, readchannel, z.metadata.chunk_encoding, z.path, blockr)
   end
   bind(readchannel,readtask)
 
   writechannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
 
   writetask = @async begin
-    write_items!(z.storage,writechannel,z.path,blockr)
+    write_items!(z.storage, writechannel, z.metadata.chunk_encoding, z.path, blockr)
   end
   bind(writechannel,writetask)
   
@@ -332,17 +337,12 @@ function zcreate(::Type{T}, dims::Integer...;
   kwargs...
   ) where T
 
-  if dimension_separator isa AbstractString
-      # Convert AbstractString to Char
-      dimension_separator = only(dimension_separator)
-  end
-
   if path===nothing
-    store = FormattedStore{zarr_format, dimension_separator}(DictStore())
+    store = DictStore()
   else
-    store = FormattedStore{zarr_format, dimension_separator}(DirectoryStore(joinpath(path,name)))
+    store = DirectoryStore(joinpath(path, name))
   end
-  zcreate(T, store, dims...; zarr_format, kwargs...)
+  zcreate(T, store, dims...; zarr_format, dimension_separator, kwargs...)
 end
 
 function zcreate(::Type{T},storage::AbstractStore,
@@ -360,12 +360,15 @@ function zcreate(::Type{T},storage::AbstractStore,
   dimension_separator=nothing
   ) where {T}
 
+  v = ZarrFormat(zarr_format)
   if isnothing(dimension_separator)
-      dimension_separator = Zarr.dimension_separator(storage)
-  elseif dimension_separator != Zarr.dimension_separator(storage)
-      error("The dimension separator keyword value, $dimension_separator,
-      must agree with the dimension separator type parameter, $(Zarr.dimension_separator(storage))")
+    dimension_separator = default_sep(v)
   end
+  if dimension_separator isa AbstractString
+    # Convert AbstractString to Char
+    dimension_separator = only(dimension_separator)
+  end
+  chunk_encoding = ChunkEncoding(dimension_separator, default_prefix(v))
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
@@ -374,13 +377,12 @@ function zcreate(::Type{T},storage::AbstractStore,
   # Create a dummy array to use with Metadata constructor
   # This allows us to leverage the multiple dispatch in Metadata constructors
   dummy_array = Array{T,N}(undef, dims...)
-  metadata = Metadata(dummy_array, chunks;
-      zarr_format=zarr_format,
+  metadata = Metadata(dummy_array, chunks, v;
       compressor=compressor,
       fill_value=fill_value,
       filters=filters,
       fill_as_missing=fill_as_missing,
-      dimension_separator=dimension_separator
+    chunk_encoding=chunk_encoding
   )
   
   # Extract the element type from the metadata (handles T2 calculation)
@@ -388,12 +390,11 @@ function zcreate(::Type{T},storage::AbstractStore,
   
   isemptysub(storage,path) || error("$storage $path is not empty")
   
-  writemetadata(storage, path, metadata, indent_json=indent_json)
+  writemetadata(v, storage, path, metadata, indent_json=indent_json)
   
-  writeattrs(storage, path, attrs, indent_json=indent_json)
+  writeattrs(v, storage, path, attrs, indent_json=indent_json)
   
-  ZArray{T2, N, typeof(compressor), typeof(storage)}(
-  metadata, storage, path, attrs, writeable)
+  ZArray(metadata, storage, path, attrs, writeable)
 end
 
 filterfromtype(::Type{<:Any}) = nothing
@@ -436,7 +437,7 @@ function zzeros(T,dims...;kwargs...)
   data_encoded = compress_raw(as,z)
   p = z.path
   for i in chunkindices(z)
-    z.storage[p,i] = data_encoded
+    store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
   end
   z
 end
@@ -454,9 +455,9 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   z.metadata.shape[] = newsize
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
-    prune_oob_chunks(z.storage,z.path,oldsize,newsize, z.metadata.chunks)
+    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_encoding)
   end
-  writemetadata(z.storage, z.path, z.metadata)
+  writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
   nothing
 end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
@@ -504,7 +505,7 @@ function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
     allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
     r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
     for cI in CartesianIndices(r)
-      delete!(s,path,cI)
+      store_deletechunk(s, path, cI, chunk_encoding)
     end
   end
 end
