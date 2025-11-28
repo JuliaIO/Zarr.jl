@@ -13,45 +13,60 @@ ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
 
 zname(g::ZGroup) = zname(g.path)
 
+
+
 #Open an existing ZGroup
-function ZGroup(s::T,mode="r",path="";fill_as_missing=false) where T <: AbstractStore
+function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=false) where T<:AbstractStore
   arrays = Dict{String, ZArray}()
   groups = Dict{String, ZGroup}()
-
+  zv = if zarr_format == :auto
+    ZarrFormat(s, path)
+  else
+    ZarrFormat(zarr_format)
+  end
   for d in subdirs(s,path)
     dshort = split(d,'/')[end]
-    m = zopen_noerr(s,mode,path=_concatpath(path,dshort),fill_as_missing=fill_as_missing)
-    if isa(m, ZArray)
+    subpath = _concatpath(path,dshort)
+    if is_zarray(zv, s, subpath)
+      m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       arrays[dshort] = m
-    elseif isa(m, ZGroup)
+    elseif is_zgroup(s, subpath)
+      m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       groups[dshort] = m
     end
   end
-  attrs = getattrs(s,path)
+  attrs = getattrs(zv, s, path)
   startswith(path,"/") && error("Paths should never start with a leading '/'")
   ZGroup(s, path, arrays, groups, attrs,mode=="w")
 end
+
+#Function to guess a Zarr format from a store and a path, useful for guessing format when trying to open a group/array
+ZarrFormat(s::AbstractStore, path) = is_zarr2(s, path) ? ZarrFormat(2) :
+                                     is_zarr3(s, path) ? ZarrFormat(3) :
+                                     throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup in a recognized zarr format."))
+
 
 """
     zopen_noerr(AbstractStore, mode = "r"; consolidated = false)
 
 Works like `zopen` with the single difference that no error is thrown when 
 the path or store does not point to a valid zarr array or group, but nothing 
-is returned instead. 
+is returned instead.
 """
-function zopen_noerr(s::AbstractStore, mode="r"; 
+function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
   consolidated = false, 
   path="", 
   lru = 0,
-  fill_as_missing)
-    consolidated && isinitialized(s,".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path,lru=lru,fill_as_missing=fill_as_missing)
-    if lru !== 0 
-      error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
-    end
-    if is_zarray(s, path)
-        return ZArray(s,mode,path;fill_as_missing=fill_as_missing)
-    elseif is_zgroup(s,path)
-        return ZGroup(s,mode,path;fill_as_missing=fill_as_missing)
+  fill_as_missing=false)
+
+  consolidated && isinitialized(s, ".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  if lru !== 0
+    error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
+  end
+  if is_zarray(zv, s, path)
+    return ZArray(s, mode, path, zv; fill_as_missing=fill_as_missing)
+  elseif is_zgroup(zv, s, path)
+    return ZGroup(s, mode, path, zv; fill_as_missing=fill_as_missing)
     else
         return nothing
     end
@@ -76,6 +91,7 @@ function Base.getindex(g::ZGroup, k)
     end
 end
 
+
 """
     zopen(s::AbstractStore, mode="r"; consolidated = false, path = "", lru = 0)
 
@@ -84,20 +100,29 @@ Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups. Setting `lru` to a value > 0 means that chunks that have been
 accessed before will be cached and consecutive reads will happen from the cache. 
-Here, `lru` denotes the number of chunks that remain in memory. 
+Here, `lru` denotes the number of chunks that remain in memory. The expected zarr version
+can be supplied through `zarr_format` and defaults to `:auto` which tries to detect 
+if the zarr version is v2 or v3.
 """
 function zopen(s::AbstractStore, mode="r"; 
+  zarr_format=:auto,
   consolidated = false, 
   path = "", 
   lru = 0,
   fill_as_missing = false)
-    # add interfaces to Stores later    
-    r = zopen_noerr(s,mode; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
-    if r === nothing
-        throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
-    else
-        return r
-    end
+
+  zarr_format = if zarr_format == :auto
+    ZarrFormat(s, path)
+  else
+    ZarrFormat(zarr_format)
+  end
+  # add interfaces to Stores later    
+  r = zopen_noerr(s, mode, zarr_format; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  if r === nothing
+    throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
+  else
+    return r
+  end
 end
 
 """
@@ -128,8 +153,8 @@ end
 
 Create a new zgroup in the store `s`
 """
-function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bool= false)
-    d = Dict("zarr_format"=>2)
+function zgroup(s::AbstractStore, path::String="", zarr_format=ZarrFormat(2); attrs=Dict(), indent_json::Bool=false)
+  d = Dict("zarr_format" => Int(DV))
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     
@@ -140,7 +165,7 @@ function zgroup(s::AbstractStore, path::String=""; attrs=Dict(), indent_json::Bo
     end
 
     s[path,".zgroup"]=take!(b)
-    writeattrs(s,path,attrs, indent_json=indent_json)
+  writeattrs(DV, s, path, attrs, indent_json=indent_json)
     ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
 end
 
