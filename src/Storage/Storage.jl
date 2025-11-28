@@ -78,34 +78,7 @@ Returns the keys of files in the given store.
 """
 function subkeys end 
 
-# Default Zarr v2 separator
-const DS2 = '.'
-# Default Zarr v3 separator
-const DS3 = '/'
-
-default_sep(::ZarrFormat{2}) = DS2
-default_sep(::ZarrFormat{3}) = DS3
-default_prefix(::ZarrFormat{2}) = false
-default_prefix(::ZarrFormat{3}) = true
-const DS = default_sep(DV)
-
-ZarrFormat(s::AbstractStore, path) = is_zarr2(s, path) ? ZarrFormat(2) :
-                                     is_zarr3(s, path) ? ZarrFormat(3) :
-                                     throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup in a recognized zarr format."))
-
-
-@inline function citostring(e::ChunkEncoding, i::CartesianIndex)
-  if e.prefix
-    "c$(e.sep)" * join(reverse((i - oneunit(i)).I), e.sep)
-  else
-    join(reverse((i - oneunit(i)).I), e.sep)
-  end
-end
-@inline citostring(e::ChunkEncoding, ::CartesianIndex{0}) = e.prefix ? "c$(e.sep)0" : "0"
-
-_concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
-
-# Function to read a chunk from store s
+# Function to construct the full path to a chunk given the base path, Cartesian Index i, and the chunk ecoding
 store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::ChunkEncoding) = s[p, citostring(e, i)]
 store_deletechunk(s::AbstractStore, p, i::CartesianIndex, e::ChunkEncoding) = delete!(s, p, citostring(e, i))
 store_writechunk(s::AbstractStore, v, p, i::CartesianIndex, e::ChunkEncoding) = s[p, citostring(e, i)] = v
@@ -117,7 +90,6 @@ Base.getindex(s::AbstractStore, p, i::AbstractString) = s[_concatpath(p, i)]
 Base.delete!(s::AbstractStore, p, i::AbstractString) = delete!(s, _concatpath(p, i))
 Base.haskey(s::AbstractStore, k::AbstractString) = isinitialized(s, k)
 Base.setindex!(s::AbstractStore, v, p, i::AbstractString) = setindex!(s, v, _concatpath(p, i))
-
 
 
 maybecopy(x) = copy(x)

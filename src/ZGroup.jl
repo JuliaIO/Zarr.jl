@@ -40,6 +40,12 @@ function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=fals
   ZGroup(s, path, arrays, groups, attrs,mode=="w")
 end
 
+#Function to guess a Zarr format from a store and a path, useful for guessing format when trying to open a group/array
+ZarrFormat(s::AbstractStore, path) = is_zarr2(s, path) ? ZarrFormat(2) :
+                                     is_zarr3(s, path) ? ZarrFormat(3) :
+                                     throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup in a recognized zarr format."))
+
+
 """
     zopen_noerr(AbstractStore, mode = "r"; consolidated = false)
 
@@ -148,7 +154,7 @@ end
 Create a new zgroup in the store `s`
 """
 function zgroup(s::AbstractStore, path::String="", zarr_format=ZarrFormat(2); attrs=Dict(), indent_json::Bool=false)
-    d = Dict("zarr_format"=>DV)
+  d = Dict("zarr_format" => Int(DV))
     isemptysub(s, path) || error("Store is not empty")
     b = IOBuffer()
     

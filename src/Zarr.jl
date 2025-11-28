@@ -6,11 +6,13 @@ import Blosc
 struct ZarrFormat{V}
   version::Val{V}
 end
+Base.Int(v::ZarrFormat{V}) where V = V
 @inline ZarrFormat(v::Int) = ZarrFormat(Val(v))
 ZarrFormat(v::ZarrFormat) = v
 #Default Zarr Version
 const DV = ZarrFormat(Val(2))
 
+include("chunkencoding.jl")
 include("metadata.jl")
 include("metadata3.jl")
 include("Compressors/Compressors.jl")

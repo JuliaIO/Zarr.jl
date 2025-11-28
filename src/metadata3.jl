@@ -325,7 +325,7 @@ function lower3(md::MetadataV3{T}) where T
     end
 
     Dict{String, Any}(
-        "zarr_format" => md.zarr_format,
+        "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
         "data_type" => typestr3(T),

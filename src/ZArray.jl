@@ -93,7 +93,7 @@ nobytes(z::ZArray{<:String}) = "unknown"
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
-    isinitialized(z.storage,z.path,i)
+    store_isinitialized(z.storage, z.path, i, z.metadata.chunk_encoding)
   end
   allinfos = [
   "Type" => "ZArray",
@@ -498,7 +498,7 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
   nothing
 end
 
-function prune_oob_chunks(s::AbstractStore,path,oldsize, newsize, chunks)
+function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_encoding)
   dimstoshorten = findall(map(<,newsize, oldsize))
   for idim in dimstoshorten
     delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))

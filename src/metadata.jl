@@ -86,10 +86,6 @@ function typestr(s::AbstractString, filterlist=nothing)
     end
 end
 
-struct ChunkEncoding
-    sep::Char
-    prefix::Bool
-end
 
 """Metadata configuration of the stored array
 
@@ -108,6 +104,8 @@ value of the ".zarray" key within an array store.
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
 abstract type AbstractMetadata{T,N,C,F} end
+Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
+
 
 """Metadata for Zarr version 2 arrays"""
 struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F}
@@ -130,6 +128,7 @@ struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F}
         new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_encoding)
     end
 end
+zarr_format(::MetadataV2) = ZarrFormat(Val(2))
 
 """Metadata for Zarr version 3 arrays"""
 struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N,C,F}
@@ -152,6 +151,7 @@ struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N,C,F}
         new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_encoding)
     end
 end
+zarr_format(::MetadataV3) = ZarrFormat(Val(3))
 
 # Type alias for backward compatibility
 const Metadata = AbstractMetadata
@@ -296,7 +296,7 @@ end
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::MetadataV2)
     Dict{String, Any}(
-        "zarr_format" => md.zarr_format,
+        "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
         "chunks" => md.chunks |> reverse,
