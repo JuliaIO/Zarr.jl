@@ -5,11 +5,11 @@ DocTestSetup  = quote
 end
 ```
 
-## Tutorial
+# Tutorial
 
 Zarr provides classes and functions for working with N-dimensional arrays that behave like Julia arrays but whose data is divided into chunks and each chunk is compressed. If you are already familiar with HDF5 then Zarr arrays provide similar functionality, but with some additional flexibility. This tutorial is an attempt to recreate this  [Python Zarr tutorial](https://zarr.readthedocs.io/en/stable/tutorial.html) as closely as possible and some of the explanation text is just copied and modified from this source.
 
-### Creating an in-memory array
+## Creating an in-memory array
 
 Zarr has several functions for creating arrays. For example:
 
@@ -24,7 +24,7 @@ The code above creates a 2-dimensional array of 32-bit integers with 10000 rows 
 
 Other Array creation routines are [`zcreate`, `zones` and `zfill`].
 
-### Reading and Writing data
+## Reading and Writing data
 
 Zarr arrays support a similar interface to Julia arrays for reading and writing data, although they don't implement the all indexing methods of an `AbstractArray` yet. For example, the entire array can be filled with a scalar value:
 
@@ -83,7 +83,7 @@ julia> z[1:5,1:10]
  5  42  42  42  42  42  42  42  42  42
 ```
 
-### Persistent arrays
+## Persistent arrays
 
 In the examples above, compressed data for each chunk of the array was stored in main memory. Zarr arrays can also be stored on a file system, enabling persistence of data between sessions. For example:
 
@@ -123,7 +123,7 @@ true
 
 *A Julia-equivalent for zarr.load and zarr.save is still missing...*
 
-### Resizing and appending
+## Resizing and appending
 
 A Zarr array can be resized, which means that any of its dimensions can be increased or decreased in length. For example:
 
@@ -163,7 +163,7 @@ julia> size(z)
 (2000, 20000)
 ```
 
-### Compressors
+## Compressors
 
 A number of different compressors can be used with Zarr. In this Julia package we currently support only Blosc compression, but more compression methods will be supported in the future. Different compressors can be provided via the compressor keyword argument accepted by all array creation functions. For example:
 
@@ -216,7 +216,7 @@ julia> storageratio(z)
 1.0
 ```
 
-### Ragged Arrays
+## Ragged Arrays
 
 If you need to store an array of arrays, where each member array can be of any length and stores the same data type (a.k.a. a ragged array), `VLenArray` filter will be used, e.g.:
 
