@@ -73,14 +73,14 @@ end
 
 
 """
-storagesize(z::ZArray)
+    storagesize(z::ZArray)
 
 Returns the size of the compressed data stored in the ZArray `z` in bytes
 """
 storagesize(z::ZArray) = storagesize(z.storage,z.path)
 
 """
-storageratio(z::ZArray)
+    storageratio(z::ZArray)
 
 Returns the ratio of the size of the uncompressed data in `z` and the size of the compressed data.
 """
@@ -128,7 +128,7 @@ end
 
 
 """
-trans_ind(r, bs)
+    trans_ind(r, bs)
 
 For a given index and blocksize determines which chunks of the Zarray will have to
 be accessed.
@@ -262,7 +262,7 @@ DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
 """
-uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
+    uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
 
 Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
@@ -306,7 +306,7 @@ end
 
 
 """
-zcreate(T, dims...;kwargs)
+    zcreate(T, dims...;kwargs)
 
 Creates a new empty zarr array with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
 
@@ -396,14 +396,14 @@ function ZArray(a::AbstractArray, args...; kwargs...)
 end
 
 """
-chunkindices(z::ZArray)
+    chunkindices(z::ZArray)
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
 chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
 
 """
-zzeros(T, dims...; kwargs... )
+    zzeros(T, dims...; kwargs... )
 
 Creates a zarr array and initializes all values with zero. Accepts the same keyword arguments as `zcreate`
 """
@@ -420,7 +420,7 @@ end
 
 #Resizing Zarr arrays
 """
-resize!(z::ZArray{T,N}, newsize::NTuple{N})
+    resize!(z::ZArray{T,N}, newsize::NTuple{N})
 
 Resizes a `ZArray` to the new specified size. If the size along any of the
 axes is decreased, unused chunks will be deleted from the store.
@@ -439,7 +439,7 @@ end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
 
 """
-append!(z::ZArray{<:Any, N},a;dims = N)
+    append!(z::ZArray{<:Any, N},a;dims = N)
 
 Appends an AbstractArray to an existinng `ZArray` along the dimension dims. The
 size of the `ZArray` is increased accordingly and data appended.

@@ -29,7 +29,7 @@ abstract type AbstractStore end
 # Define the interface
 
 """
-  S3Store(bucket::String; aws=nothing)
+    S3Store(bucket::String; aws=nothing)
  
 An S3-backed Zarr store. Available after loading the `ZarrAWSS3Ext` extension.
 """
@@ -43,7 +43,7 @@ function S3Store(args...)
 end
 
 """
-  storagesize(d::AbstractStore, p::AbstractString)
+    storagesize(d::AbstractStore, p::AbstractString)
 
 This function shall return the size of all data files in a store at path `p`.
 """
