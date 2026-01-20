@@ -14,10 +14,39 @@ using AWSS3
     @test Zarr.normalize_path("/path/to/a") == "/path/to/a"
 end
 
+@testset "Version and Dimension Separator" begin
+    v2cke_period = Zarr.V2ChunkKeyEncoding{'.'}
+    v2cke_slash = Zarr.V2ChunkKeyEncoding{'/'}
+    let ci = CartesianIndex()
+        @test Zarr.citostring(ci, 2, '.') == "0"
+        @test Zarr.citostring(ci, 2, '/') == "0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0"
+        @test Zarr.citostring(ci, 3, '.') == "c.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/0"
+    end
+    let ci = CartesianIndex(1,1,1)
+        @test Zarr.citostring(ci, 2, '.') == "0.0.0"
+        @test Zarr.citostring(ci, 2, '/') == "0/0/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0.0.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0/0/0"
+        @test Zarr.citostring(ci, 3, '.') == "c.0.0.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/0/0/0"
+    end
+    let ci = CartesianIndex(1,3,5)
+        @test Zarr.citostring(ci, 2, '.') == "4.2.0"
+        @test Zarr.citostring(ci, 2, '/') == "4/2/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "4.2.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "4/2/0"
+        @test Zarr.citostring(ci, 3, '.') == "c.4.2.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/4/2/0"
+    end
+end
+
 """
 Function to test the interface of AbstractStore. Every complete implementation should pass this test.
 """
-function test_store_common(ds)
+function test_store_common(ds::Zarr.AbstractStore)
   @test !Zarr.is_zgroup(ds,"")
   ds[".zgroup"]=rand(UInt8,50)
   @test haskey(ds,".zgroup")
@@ -37,17 +66,23 @@ function test_store_common(ds)
   @test Zarr.subdirs(ds,"bar") == String[]
   #Test getindex and setindex
   data = rand(UInt8,50)
-  ds["bar/0.0.0"] = data
+  V = Zarr.zarr_format(ds)
+  S = Zarr.dimension_separator(ds)
+  first_ci_str = Zarr.citostring(CartesianIndex(1,1,1), V, S)
+  second_ci_str = Zarr.citostring(CartesianIndex(2,1,1), V, S)
+  ds["bar/" * first_ci_str] = data
   @test ds["bar/0.0.0"]==data
   @test Zarr.storagesize(ds,"bar")==50
-  @test Zarr.isinitialized(ds,"bar/0.0.0")
-  @test !Zarr.isinitialized(ds,"bar/0.0.1")
+  @test Zarr.isinitialized(ds,"bar/" * first_ci_str)
+  @test !Zarr.isinitialized(ds,"bar/" * second_ci_str)
   Zarr.writeattrs(ds,"bar",Dict("a"=>"b"))
   @test Zarr.getattrs(ds,"bar")==Dict("a"=>"b")
-  delete!(ds,"bar/0.0.0")
-  @test !Zarr.isinitialized(ds,"bar",CartesianIndex((0,0,0)))
-  @test !Zarr.isinitialized(ds,"bar/0.0.0")
-  ds["bar/0.0.0"] = data
+  delete!(ds,"bar/" * first_ci_str)
+  @test !Zarr.isinitialized(ds,"bar",CartesianIndex((1,1,1)))
+  @test !Zarr.isinitialized(ds,"bar/" * first_ci_str)
+  ds["bar/" * first_ci_str] = data
+  @test !Zarr.isinitialized(ds, "bar", CartesianIndex(0,0,0))
+  @test Zarr.isinitialized(ds, "bar", CartesianIndex(1,1,1))
   #Add tests for empty storage
   @test Zarr.isemptysub(ds,"ba")
   @test Zarr.isemptysub(ds,"ba/")
