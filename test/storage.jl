@@ -14,10 +14,39 @@ using AWSS3
     @test Zarr.normalize_path("/path/to/a") == "/path/to/a"
 end
 
+@testset "Version and Dimension Separator" begin
+    v2cke_period = Zarr.V2ChunkKeyEncoding{'.'}
+    v2cke_slash = Zarr.V2ChunkKeyEncoding{'/'}
+    let ci = CartesianIndex()
+        @test Zarr.citostring(ci, 2, '.') == "0"
+        @test Zarr.citostring(ci, 2, '/') == "0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0"
+        @test Zarr.citostring(ci, 3, '.') == "c.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/0"
+    end
+    let ci = CartesianIndex(1,1,1)
+        @test Zarr.citostring(ci, 2, '.') == "0.0.0"
+        @test Zarr.citostring(ci, 2, '/') == "0/0/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "0.0.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "0/0/0"
+        @test Zarr.citostring(ci, 3, '.') == "c.0.0.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/0/0/0"
+    end
+    let ci = CartesianIndex(1,3,5)
+        @test Zarr.citostring(ci, 2, '.') == "4.2.0"
+        @test Zarr.citostring(ci, 2, '/') == "4/2/0"
+        @test Zarr.citostring(ci, 3, v2cke_period) == "4.2.0"
+        @test Zarr.citostring(ci, 3, v2cke_slash) == "4/2/0"
+        @test Zarr.citostring(ci, 3, '.') == "c.4.2.0"
+        @test Zarr.citostring(ci, 3, '/') == "c/4/2/0"
+    end
+end
+
 """
 Function to test the interface of AbstractStore. Every complete implementation should pass this test.
 """
-function test_store_common(ds)
+function test_store_common(ds::Zarr.AbstractStore)
   @test !Zarr.is_zgroup(ds,"")
   ds[".zgroup"]=rand(UInt8,50)
   @test haskey(ds,".zgroup")
@@ -37,17 +66,23 @@ function test_store_common(ds)
   @test Zarr.subdirs(ds,"bar") == String[]
   #Test getindex and setindex
   data = rand(UInt8,50)
-  ds["bar/0.0.0"] = data
+  V = Zarr.zarr_format(ds)
+  S = Zarr.dimension_separator(ds)
+  first_ci_str = Zarr.citostring(CartesianIndex(1,1,1), V, S)
+  second_ci_str = Zarr.citostring(CartesianIndex(2,1,1), V, S)
+  ds["bar/" * first_ci_str] = data
   @test ds["bar/0.0.0"]==data
   @test Zarr.storagesize(ds,"bar")==50
-  @test Zarr.isinitialized(ds,"bar/0.0.0")
-  @test !Zarr.isinitialized(ds,"bar/0.0.1")
+  @test Zarr.isinitialized(ds,"bar/" * first_ci_str)
+  @test !Zarr.isinitialized(ds,"bar/" * second_ci_str)
   Zarr.writeattrs(ds,"bar",Dict("a"=>"b"))
   @test Zarr.getattrs(ds,"bar")==Dict("a"=>"b")
-  delete!(ds,"bar/0.0.0")
-  @test !Zarr.isinitialized(ds,"bar",CartesianIndex((0,0,0)))
-  @test !Zarr.isinitialized(ds,"bar/0.0.0")
-  ds["bar/0.0.0"] = data
+  delete!(ds,"bar/" * first_ci_str)
+  @test !Zarr.isinitialized(ds,"bar",CartesianIndex((1,1,1)))
+  @test !Zarr.isinitialized(ds,"bar/" * first_ci_str)
+  ds["bar/" * first_ci_str] = data
+  @test !Zarr.isinitialized(ds, "bar", CartesianIndex(0,0,0))
+  @test Zarr.isinitialized(ds, "bar", CartesianIndex(1,1,1))
   #Add tests for empty storage
   @test Zarr.isemptysub(ds,"ba")
   @test Zarr.isemptysub(ds,"ba/")
@@ -157,6 +192,7 @@ end
 
 
 @testset "Minio S3 storage" begin
+  @info "Testing Minio S3 storage"
   A = fill(1.0, 30, 20)
   chunks = (5,10)
   metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
@@ -177,6 +213,7 @@ end
 end
 
 @testset "AWS S3 Storage" begin
+  @info "Testing AWS S3 storage"
   AWSS3.AWS.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
   S3, p = Zarr.storefromstring("s3://mur-sst/zarr-v1")
   @test Zarr.is_zgroup(S3, p)
@@ -189,6 +226,7 @@ end
 end
 
 @testset "GCS Storage" begin
+  @info "Testing GCS storage"
   for s in (
     "gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
     "https://storage.googleapis.com/cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706",
@@ -210,6 +248,7 @@ end
 end
 
 @testset "HTTP Storage" begin
+  @info "Testing HTTP Storage"
   s = Zarr.DictStore()
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
@@ -245,6 +284,7 @@ end
 end
 
 @testset "Zip Storage" begin
+  @info "Testing Zip Storage"
   s = Zarr.DictStore()
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
@@ -265,4 +305,5 @@ end
     Zarr.writezip(io, ds)
     Zarr.ZipStore(take!(io))
   end
+  @info "Finished testing ZipStore"
 end

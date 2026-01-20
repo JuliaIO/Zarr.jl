@@ -33,7 +33,7 @@ Base.IndexStyle(::Type{<:SenMissArray})=Base.IndexLinear()
 # Currently this is not an AbstractArray, because indexing single elements is
 # would be really slow, although most AbstractArray interface functions are implemented
 struct ZArray{T, N, C<:Compressor, S<:AbstractStore} <: AbstractDiskArray{T,N}
-  metadata::Metadata{T, N, C}
+  metadata::AbstractMetadata{T, N, C}
   storage::S
   path::String
   attrs::Dict
@@ -42,20 +42,20 @@ end
 
 Base.eltype(::ZArray{T}) where {T} = T
 Base.ndims(::ZArray{<:Any,N}) where {N} = N
-Base.size(z::ZArray) = z.metadata.shape[]
-function Base.size(z::ZArray,i)
+Base.size(z::ZArray{<:Any,N}) where {N} = z.metadata.shape[]::NTuple{N, Int}
+function Base.size(z::ZArray{<:Any,N}, i::Integer) where {N}
   len = length(z.metadata.shape[])
   if 0 < i <= len
-    z.metadata.shape[][i]
+    z.metadata.shape[][i]::Int
   elseif i > len
     1
   else
     error("arraysize: dimension out of range")
   end
 end
-Base.length(z::ZArray) = prod(z.metadata.shape[])
-Base.lastindex(z::ZArray,n) = size(z,n)
-Base.lastindex(z::ZArray{<:Any,1}) = size(z,1)
+Base.length(z::ZArray) = prod(z.metadata.shape[])::Int
+Base.lastindex(z::ZArray{<:Any,N}, n::Integer) where {N} = size(z, n)::Int
+Base.lastindex(z::ZArray{<:Any,1}) = size(z, 1)::Int
 
 function Base.show(io::IO,z::ZArray)
   print(io, "ZArray{", eltype(z) ,"} of size ",join(string.(size(z)), " x "))
@@ -312,6 +312,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 
 * `path=""` directory name to store a persistent array. If left empty, an in-memory array will be created
 * `name=""` name of the zarr array, defaults to the directory name
+* `zarr_format`=$(DV) Zarr format version (2 or 3)
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
 * `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
 * `fill_value=nothing` value to represent missing values
@@ -321,23 +322,33 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
+* `dimension_separator='.'` sets how chunks are encoded. The Zarr v2 default is '.' such that the first 3D chunk would be `0.0.0`. The Zarr v3 default is `/`.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
   path=nothing,
+  zarr_format=DV,
+  dimension_separator=default_sep(zarr_format),
   kwargs...
   ) where T
-  if path===nothing
-    store = DictStore()
-  else
-    store = DirectoryStore(joinpath(path,name))
+
+  if dimension_separator isa AbstractString
+      # Convert AbstractString to Char
+      dimension_separator = only(dimension_separator)
   end
-  zcreate(T, store, dims...; kwargs...)
+
+  if path===nothing
+    store = FormattedStore{zarr_format, dimension_separator}(DictStore())
+  else
+    store = FormattedStore{zarr_format, dimension_separator}(DirectoryStore(joinpath(path,name)))
+  end
+  zcreate(T, store, dims...; zarr_format, kwargs...)
 end
 
 function zcreate(::Type{T},storage::AbstractStore,
   dims...;
   path = "",
+  zarr_format = DV,
   chunks=dims,
   fill_value=nothing,
   fill_as_missing=false,
@@ -345,23 +356,35 @@ function zcreate(::Type{T},storage::AbstractStore,
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,
-  indent_json=false
-  ) where T
+  indent_json=false,
+  dimension_separator=nothing
+  ) where {T}
+
+  if isnothing(dimension_separator)
+      dimension_separator = Zarr.dimension_separator(storage)
+  elseif dimension_separator != Zarr.dimension_separator(storage)
+      error("The dimension separator keyword value, $dimension_separator,
+      must agree with the dimension separator type parameter, $(Zarr.dimension_separator(storage))")
+  end
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
-  T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-  metadata = Metadata{T2, N, C, typeof(filters)}(
-  2,
-  dims,
-  chunks,
-  typestr(T),
-  compressor,
-  fill_value,
-  'C',
-  filters,
+  
+  # Create a dummy array to use with Metadata constructor
+  # This allows us to leverage the multiple dispatch in Metadata constructors
+  dummy_array = Array{T,N}(undef, dims...)
+  metadata = Metadata(dummy_array, chunks;
+      zarr_format=zarr_format,
+      compressor=compressor,
+      fill_value=fill_value,
+      filters=filters,
+      fill_as_missing=fill_as_missing,
+      dimension_separator=dimension_separator
   )
+  
+  # Extract the element type from the metadata (handles T2 calculation)
+  T2 = eltype(metadata)
   
   isemptysub(storage,path) || error("$storage $path is not empty")
   
