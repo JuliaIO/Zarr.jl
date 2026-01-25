@@ -56,6 +56,19 @@ foreach([Float16,Float32,Float64,Int8,Int16,Int32,Int64,Int128,
     typemap[(typecharf(t),sizemapf(t))] = t
 end
 
+function is_big_endian(s::AbstractString)
+    m = match(typestr_regex, s)
+    if m === nothing
+        throw(ArgumentError("$s is not a valid numpy typestr"))
+    end
+
+    byteorder, typecode, typesize, typespec = m.captures
+    if byteorder == ">"
+        return true
+    end
+    return false
+end
+
 function typestr(s::AbstractString, filterlist=nothing)
     m = match(typestr_regex, s)
     if m === nothing
@@ -63,9 +76,6 @@ function typestr(s::AbstractString, filterlist=nothing)
     else
 
         byteorder, typecode, typesize, typespec = m.captures
-        if byteorder == ">"
-            throw(ArgumentError("Big-endian data not yet supported"))
-        end
         if typecode == "O"
             if filterlist === nothing
                 throw(ArgumentError("Object array can only be parsed when an appropriate filter is defined"))
@@ -103,14 +113,15 @@ struct Metadata{T, N, C, F}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    function Metadata{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters) where {T2,N,C,F}
+    big_endian::Bool
+    function Metadata{T2, N, C, F}(zarr_format, shape, chunks, dtype, compressor,fill_value, order, filters, big_endian) where {T2,N,C,F}
         #We currently only support version 
         zarr_format == 2 || throw(ArgumentError("Zarr.jl currently only support v2 of the protocol"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters)
+        new{T2, N, C, F}(zarr_format, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor,fill_value, order, filters, big_endian)
     end
 end
 
@@ -124,7 +135,8 @@ function ==(m1::Metadata, m2::Metadata)
   m1.compressor == m2.compressor &&
   m1.fill_value == m2.fill_value &&
   m1.order == m2.order &&
-  m1.filters == m2.filters
+  m1.filters == m2.filters &&
+  m1.big_endian == m2.big_endian
 end
 
 
@@ -136,8 +148,10 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order::Char='C',
         filters::Nothing=nothing,
         fill_as_missing = false,
+        big_endian = false
     ) where {T, N, C}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
+
     Metadata{T2, N, C, typeof(filters)}(
         zarr_format,
         size(A),
@@ -146,7 +160,8 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         compressor,
         fill_value,
         order,
-        filters
+        filters,
+        big_endian
     )
 end
 
@@ -168,6 +183,7 @@ function Metadata(d::AbstractDict, fill_as_missing)
     filters = getfilters(d)
 
     T = typestr(d["dtype"], filters)
+    big_endian = is_big_endian(d["dtype"])
     N = length(d["shape"])
     C = typeof(compressor)
     F = typeof(filters)
@@ -176,6 +192,8 @@ function Metadata(d::AbstractDict, fill_as_missing)
 
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
+    ## add endian to metadata
+    ## just support for read
     Metadata{TU, N, C, F}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
@@ -185,6 +203,7 @@ function Metadata(d::AbstractDict, fill_as_missing)
         fv,
         first(d["order"]),
         filters,
+        big_endian
     )
 end
 

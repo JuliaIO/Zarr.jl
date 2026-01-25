@@ -155,6 +155,7 @@ _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
+is_big_endian(s::ZArray) = s.metadata.big_endian
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
@@ -193,13 +194,19 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   finally
     close(c)
   end
+
+  if is_big_endian(z)
+    aout .= ntoh.(aout)
+  end
+  
   aout
 end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
   
   z.writeable || error("Can not write to read-only ZArray")
-
+  !is_big_endian(z) || error("Big-endian is only supported for read")
+  
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
@@ -352,6 +359,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   N = length(dims)
   C = typeof(compressor)
   T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
+  big_endian = false
   metadata = Metadata{T2, N, C, typeof(filters)}(
   2,
   dims,
@@ -361,6 +369,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   fill_value,
   'C',
   filters,
+  big_endian
   )
   
   isemptysub(storage,path) || error("$storage $path is not empty")
