@@ -192,8 +192,6 @@ function Metadata(d::AbstractDict, fill_as_missing)
 
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
-    ## add endian to metadata
-    ## just support for read
     Metadata{TU, N, C, F}(
         d["zarr_format"],
         NTuple{N, Int}(d["shape"]) |> reverse,
