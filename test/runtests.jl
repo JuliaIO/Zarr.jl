@@ -274,6 +274,15 @@ end
     
   end
 
+big_endian_test_path = joinpath(@__DIR__, "data", "big_endian_test.zarr")
+@testset "Big-endian reading" begin
+    zg = zopen(big_endian_test_path)
+    z_array = zg["big_endian_var"]
+    @info "run big endian test"
+    @test z_array[:] == collect(0:9)
+    @test z_array.metadata.big_endian == true
+end
+
 include("storage.jl")
 
 include("Filters.jl")
