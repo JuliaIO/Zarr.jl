@@ -39,6 +39,11 @@ typestr(::Type{<:Array}) = "|O"
 typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
 
+function typestr(t::Type, big_endian::Bool)
+    s = typestr(t)
+    big_endian ? replace(s, '<' => '>') : s
+end
+
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
@@ -156,7 +161,7 @@ function Metadata(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         zarr_format,
         size(A),
         chunks,
-        typestr(eltype(A)),
+        typestr(eltype(A), big_endian),
         compressor,
         fill_value,
         order,
