@@ -26,11 +26,11 @@ struct CachingHTTPStore <: AbstractStore
     cache::DirectoryStore
 end
 
-function CachingHTTPStore(url::String, cache_path::String)
+function CachingHTTPStore(url::AbstractString, cache_path::AbstractString)
     CachingHTTPStore(HTTPStore(url), DirectoryStore(cache_path))
 end
 
-function Base.getindex(s::CachingHTTPStore, k::String)
+function Base.getindex(s::CachingHTTPStore, k::AbstractString)
     # Check cache first
     cached = s.cache[k]
     if cached !== nothing
@@ -46,10 +46,10 @@ function Base.getindex(s::CachingHTTPStore, k::String)
 end
 
 # Write to cache (for metadata etc)
-Base.setindex!(s::CachingHTTPStore, v, k::String) = s.cache[k] = v
+Base.setindex!(s::CachingHTTPStore, v, k::AbstractString) = s.cache[k] = v
 
 # Delete from cache
-Base.delete!(s::CachingHTTPStore, k::String) = delete!(s.cache, k)
+Base.delete!(s::CachingHTTPStore, k::AbstractString) = delete!(s.cache, k)
 
 # Delegate to cache for discovery (after consolidated metadata is cached)
 subdirs(s::CachingHTTPStore, p) = subdirs(s.cache, p)
