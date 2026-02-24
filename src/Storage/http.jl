@@ -59,6 +59,7 @@ missing_chunk_return_code!(s::ConsolidatedStore,code) = missing_chunk_return_cod
 missing_chunk_return_code!(s::HTTPStore, code::Integer) = push!(s.allowed_codes,code)
 missing_chunk_return_code!(s::HTTPStore, codes::AbstractVector{<:Integer}) = foreach(c->push!(s.allowed_codes,c),codes)
 store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[])
+has_configurable_missing_chunks(::HTTPStore) = true
 
 
 ## This is a server implementation for Zarr datasets
