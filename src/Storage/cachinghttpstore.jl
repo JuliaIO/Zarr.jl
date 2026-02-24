@@ -30,6 +30,9 @@ function CachingHTTPStore(url::AbstractString, cache_path::AbstractString)
     CachingHTTPStore(HTTPStore(url), DirectoryStore(cache_path))
 end
 
+# Accept any object with url and cache fields (e.g., RasterDataSources.CachedCloudSource)
+CachingHTTPStore(source) = CachingHTTPStore(source.url, source.cache)
+
 function Base.getindex(s::CachingHTTPStore, k::AbstractString)
     # Check cache first
     cached = s.cache[k]
