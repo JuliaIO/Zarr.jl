@@ -20,6 +20,7 @@ include("Codecs/Codecs.jl")
 include("Storage/Storage.jl")
 include("Filters/Filters.jl")
 include("ZArray.jl")
+include("pipeline.jl")
 include("ZGroup.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,

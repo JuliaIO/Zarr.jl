@@ -61,4 +61,62 @@ end
     @test decoded == data
 end
 
+@testset "V2Pipeline encode/decode round-trip" begin
+    comp = Zarr.BloscCompressor()
+    pipeline = Zarr.V2Pipeline(comp, nothing)
+    data = zeros(Int64, 4, 4)
+    data[1, 1] = 42
+
+    encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+    @test encoded isa Vector{UInt8}
+    @test !isempty(encoded)
+
+    output = zeros(Int64, 4, 4)
+    Zarr.pipeline_decode!(pipeline, output, encoded)
+    @test output == data
+end
+
+@testset "V2Pipeline with fill_value returns nothing" begin
+    comp = Zarr.BloscCompressor()
+    pipeline = Zarr.V2Pipeline(comp, nothing)
+    data = fill(Int64(-1), 4, 4)
+    encoded = Zarr.pipeline_encode(pipeline, data, Int64(-1))
+    @test encoded === nothing
+end
+
+@testset "V3Pipeline encode/decode round-trip" begin
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    gzip_codec = Zarr.Codecs.V3Codecs.GzipV3Codec(6)
+    pipeline = Zarr.V3Pipeline((), bytes_codec, (gzip_codec,))
+
+    data = Int32[1, 2, 3, 4]
+    encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+    @test encoded isa Vector{UInt8}
+
+    output = zeros(Int32, 4)
+    Zarr.pipeline_decode!(pipeline, output, encoded)
+    @test output == data
+end
+
+@testset "V3Pipeline with no compression" begin
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((), bytes_codec, ())
+
+    data = Float64[1.5, 2.5, 3.5]
+    encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+    @test encoded isa Vector{UInt8}
+
+    output = zeros(Float64, 3)
+    Zarr.pipeline_decode!(pipeline, output, encoded)
+    @test output == data
+end
+
+@testset "V3Pipeline fill_value returns nothing" begin
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((), bytes_codec, ())
+    data = fill(Int32(0), 4)
+    encoded = Zarr.pipeline_encode(pipeline, data, Int32(0))
+    @test encoded === nothing
+end
+
 end # V3 Codecs
