@@ -1,5 +1,6 @@
 using Test
 using Zarr
+using JSON
 
 @testset "V3 Codecs" begin
 
@@ -179,6 +180,22 @@ end
         compressor=Zarr.NoCompressor(), fill_value=Float32(0))
     z[:] = Float32.(1:6)
     @test z[:] == Float32.(1:6)
+end
+
+@testset "V3 Group Creation" begin
+    store = Zarr.DictStore()
+    g = zgroup(store, "", Zarr.ZarrFormat(3))
+    @test haskey(store, "zarr.json")
+    md = JSON.parse(String(copy(store["zarr.json"])))
+    @test md["zarr_format"] == 3
+    @test md["node_type"] == "group"
+
+    # Create subgroup
+    g2 = zgroup(g, "sub"; attrs=Dict("key" => "val"))
+    md2 = JSON.parse(String(copy(store["sub/zarr.json"])))
+    @test md2["zarr_format"] == 3
+    @test md2["node_type"] == "group"
+    @test md2["attributes"]["key"] == "val"
 end
 
 end # V3 Codecs
