@@ -198,4 +198,20 @@ end
     @test md2["attributes"]["key"] == "val"
 end
 
+@testset "Read Julia-generated v3 fixtures" begin
+    fixture_path = joinpath(@__DIR__, "v3_julia", "data.zarr")
+    if isdir(fixture_path)
+        store = Zarr.DirectoryStore(fixture_path)
+        # Read a simple 1d array
+        z = zopen(store; path="1d.contiguous.raw.i2")
+        @test z[:] == Int16[1, 2, 3, 4]
+
+        # Read a chunked 2d array
+        z2 = zopen(store; path="2d.chunked.i2")
+        @test z2[:, :] == Int16[1 2; 3 4]
+    else
+        @warn "v3 fixtures not found at $fixture_path, skipping"
+    end
+end
+
 end # V3 Codecs
