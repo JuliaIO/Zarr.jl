@@ -1,8 +1,13 @@
 module V3Codecs
 
 import ..Codecs: zencode, zdecode, zencode!, zdecode!
+# Import compressor types and functions from Zarr (grandparent module)
+import ...Zarr: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
+import ...Zarr: BloscCompressor as ZarrBloscCompressor
 using CRC32c: CRC32c
 using JSON: JSON
+using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
+using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
 const codectypes = Dict{String, V3Codec}()
@@ -523,9 +528,104 @@ function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{
     return data
 end
 
-struct TransposeCodec <: V3Codec{:array, :array}
+struct TransposeCodecImpl{N} <: V3Codec{:array, :array}
+    order::NTuple{N, Int}  # permutation (1-based Julia indexing)
 end
-name(::TransposeCodec) = "transpose"
+name(::TransposeCodecImpl) = "transpose"
 
+# ============================================================
+# codec_encode / codec_decode methods for V3 codecs
+# ============================================================
+
+# --- BytesCodec (array -> bytes) ---
+
+function codec_encode(::BytesCodec, data::AbstractArray)
+    return reinterpret(UInt8, vec(data)) |> collect
+end
+
+function codec_decode(::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}) where {T, N}
+    arr = reinterpret(T, encoded)
+    return reshape(collect(arr), shape)
+end
+
+# --- TransposeCodecImpl (array -> array) ---
+
+function codec_encode(c::TransposeCodecImpl, data::AbstractArray)
+    return permutedims(data, c.order)
+end
+
+function codec_decode(c::TransposeCodecImpl, encoded::AbstractArray)
+    inv_order = Tuple(invperm(collect(c.order)))
+    return permutedims(encoded, inv_order)
+end
+
+# --- Wrapper codecs (bytes -> bytes) that delegate to Zarr compressors ---
+# These use fully-qualified names to avoid conflicts with the BloscCompressor
+# enum and other names already defined in this module.
+
+struct GzipV3Codec <: V3Codec{:bytes, :bytes}
+    level::Int
+end
+GzipV3Codec() = GzipV3Codec(6)
+name(::GzipV3Codec) = "gzip"
+
+function codec_encode(c::GzipV3Codec, data::Vector{UInt8})
+    opts = GzipEncodeOptions(; level=c.level)
+    return cc_encode(opts, data)
+end
+
+function codec_decode(c::GzipV3Codec, encoded::Vector{UInt8})
+    return cc_decode(LibZGzipCodec(), encoded)
+end
+
+struct BloscV3Codec <: V3Codec{:bytes, :bytes}
+    cname::String
+    clevel::Int
+    shuffle::Int
+    blocksize::Int
+    typesize::Int
+end
+BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
+name(::BloscV3Codec) = "blosc"
+
+function codec_encode(c::BloscV3Codec, data::Vector{UInt8})
+    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle > 0)
+    return zcompress(data, comp)
+end
+
+function codec_decode(c::BloscV3Codec, encoded::Vector{UInt8})
+    comp = ZarrBloscCompressor()
+    return collect(zuncompress(encoded, comp, UInt8))
+end
+
+struct ZstdV3Codec <: V3Codec{:bytes, :bytes}
+    level::Int
+end
+ZstdV3Codec() = ZstdV3Codec(3)
+name(::ZstdV3Codec) = "zstd"
+
+function codec_encode(c::ZstdV3Codec, data::Vector{UInt8})
+    comp = ZstdCompressor(level=c.level)
+    return zcompress(data, comp)
+end
+
+function codec_decode(c::ZstdV3Codec, encoded::Vector{UInt8})
+    comp = ZstdCompressor(level=c.level)
+    return collect(zuncompress(encoded, comp, UInt8))
+end
+
+struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
+end
+name(::CRC32cV3Codec) = "crc32c"
+
+function codec_encode(c::CRC32cV3Codec, data::Vector{UInt8})
+    out = UInt8[]
+    return zencode!(out, data, CRC32cCodec())
+end
+
+function codec_decode(c::CRC32cV3Codec, encoded::Vector{UInt8})
+    out = UInt8[]
+    return zdecode!(out, encoded, CRC32cCodec())
+end
 
 end

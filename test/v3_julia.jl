@@ -13,12 +13,8 @@ if isdir(path_v3)
 end
 
 # Create store and root group for v3
-store = Zarr.FormattedStore{3, '/'}(Zarr.DirectoryStore(path_v3))
-# Manually create v3 group metadata (zgroup defaults to v2) # TODO: we need to fix this!
-group_meta = Dict("zarr_format" => 3, "node_type" => "group")
-b = IOBuffer()
-JSON.print(b, group_meta)
-store["", "zarr.json"] = take!(b)
+store = Zarr.DirectoryStore(path_v3)
+g = zgroup(store, "", Zarr.ZarrFormat(3))
 
 # Helper: create array and set data
 function create_and_fill(store, name, data; 
@@ -300,9 +296,6 @@ create_and_fill(store, "3d.chunked.mixed.compressed.sharded.i2", reshape(Int16.(
 
 # Group with spaces in the name
 group_path = "my group with spaces"
-group_meta2 = Dict("zarr_format" => 3, "node_type" => "group", "attributes" => Dict("description" => "A group with spaces in the name"))
-b2 = IOBuffer()
-JSON.print(b2, group_meta2)
-store[group_path, "zarr.json"] = take!(b2)
+zgroup(g, group_path; attrs=Dict("description" => "A group with spaces in the name"))
 
 @info "Zarr v3 fixtures generated at: $path_v3"

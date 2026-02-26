@@ -11,6 +11,7 @@ const DS3 = '/'
 
 default_sep(::ZarrFormat{2}) = DS2
 default_sep(::ZarrFormat{3}) = DS3
+default_sep(v::Int) = default_sep(ZarrFormat(v))
 default_prefix(::ZarrFormat{2}) = false
 default_prefix(::ZarrFormat{3}) = true
 const DS = default_sep(DV)
