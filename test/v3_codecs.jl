@@ -153,4 +153,32 @@ end
     @test md.node_type == "group"
 end
 
+@testset "V3 ZArray round-trip" begin
+    z = zcreate(Int32, 8; zarr_format=3, chunks=(4,), fill_value=Int32(0))
+    z[:] = Int32.(1:8)
+    @test z[:] == Int32.(1:8)
+    @test z[3:6] == Int32[3, 4, 5, 6]
+end
+
+@testset "V3 ZArray with gzip" begin
+    z = zcreate(Float64, 4, 4; zarr_format=3, chunks=(2, 2),
+        compressor=Zarr.ZlibCompressor(), fill_value=0.0)
+    z[:, :] = reshape(Float64.(1:16), 4, 4)
+    @test z[:, :] == reshape(Float64.(1:16), 4, 4)
+end
+
+@testset "V3 ZArray with blosc" begin
+    z = zcreate(Int64, 10; zarr_format=3, chunks=(5,),
+        compressor=Zarr.BloscCompressor(), fill_value=Int64(0))
+    z[:] = Int64.(1:10)
+    @test z[:] == Int64.(1:10)
+end
+
+@testset "V3 ZArray no compressor" begin
+    z = zcreate(Float32, 6; zarr_format=3, chunks=(3,),
+        compressor=Zarr.NoCompressor(), fill_value=Float32(0))
+    z[:] = Float32.(1:6)
+    @test z[:] == Float32.(1:6)
+end
+
 end # V3 Codecs
