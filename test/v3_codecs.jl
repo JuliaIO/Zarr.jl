@@ -214,4 +214,35 @@ end
     end
 end
 
+@testset "V3 Integration" begin
+    @testset "zzeros with v3" begin
+        z = zzeros(Float32, 10, 10; zarr_format=3, chunks=(5, 5), fill_value=Float32(0))
+        @test size(z) == (10, 10)
+        @test all(==(0.0f0), z[:, :])
+    end
+
+    @testset "V3 zopen round-trip with DirectoryStore" begin
+        mktempdir() do dir
+            path = joinpath(dir, "test.zarr")
+            z = zcreate(Int64, 4, 4; path=path, zarr_format=3,
+                chunks=(2, 2), fill_value=Int64(0))
+            z[:, :] = reshape(Int64.(1:16), 4, 4)
+
+            z2 = zopen(path)
+            @test z2[:, :] == reshape(Int64.(1:16), 4, 4)
+        end
+    end
+
+    @testset "V3 group with arrays" begin
+        store = Zarr.DictStore()
+        g = zgroup(store, "", Zarr.ZarrFormat(3))
+        a = zcreate(Float64, g, "myarray", 10; zarr_format=3,
+            chunks=(5,), fill_value=0.0)
+        a[:] = Float64.(1:10)
+
+        g2 = zopen(store)
+        @test g2["myarray"][:] == Float64.(1:10)
+    end
+end
+
 end # V3 Codecs

@@ -430,8 +430,10 @@ function zzeros(T,dims...;kwargs...)
   as = zeros(T, z.metadata.chunks...)
   data_encoded = compress_raw(as,z)
   p = z.path
-  for i in chunkindices(z)
-    store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
+  if data_encoded !== nothing
+    for i in chunkindices(z)
+      store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
+    end
   end
   z
 end
