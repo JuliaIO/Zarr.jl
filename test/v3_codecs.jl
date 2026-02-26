@@ -245,4 +245,125 @@ end
     end
 end
 
+@testset "Read Python-generated v3 fixtures" begin
+    fixture_path = joinpath(@__DIR__, "v3_python", "data.zarr")
+    if !isdir(fixture_path)
+        @warn "Python v3 fixtures not found at $fixture_path, skipping"
+    else
+        store = Zarr.DirectoryStore(fixture_path)
+
+        @testset "1D contiguous arrays" begin
+            # gzip compressed
+            z = zopen(store; path="1d.contiguous.gzip.i2")
+            @test eltype(z) == Int16
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # blosc compressed
+            z = zopen(store; path="1d.contiguous.blosc.i2")
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # "raw" — actually zstd in modern Python zarr v3
+            z = zopen(store; path="1d.contiguous.raw.i2")
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # Int32
+            z = zopen(store; path="1d.contiguous.i4")
+            @test eltype(z) == Int32
+            @test z[:] == Int32[1, 2, 3, 4]
+
+            # UInt8
+            z = zopen(store; path="1d.contiguous.u1")
+            @test eltype(z) == UInt8
+            @test z[:] == UInt8[255, 0, 255, 0]
+
+            # Float16 little-endian
+            z = zopen(store; path="1d.contiguous.f2.le")
+            @test eltype(z) == Float16
+            @test z[:] == Float16[-1000.5, 0.0, 1000.5, 0.0]
+
+            # Float32 little-endian
+            z = zopen(store; path="1d.contiguous.f4.le")
+            @test eltype(z) == Float32
+            @test z[:] == Float32[-1000.5, 0.0, 1000.5, 0.0]
+
+            # Float64
+            z = zopen(store; path="1d.contiguous.f8")
+            @test eltype(z) == Float64
+            @test z[:] == Float64[1.5, 2.5, 3.5, 4.5]
+
+            # Bool
+            z = zopen(store; path="1d.contiguous.b1")
+            @test eltype(z) == Bool
+            @test z[:] == Bool[true, false, true, false]
+        end
+
+        @testset "1D chunked arrays" begin
+            z = zopen(store; path="1d.chunked.i2")
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # Ragged: shape (5,) with chunks (2,) — last chunk is partial
+            z = zopen(store; path="1d.chunked.ragged.i2")
+            @test size(z) == (5,)
+            @test z[:] == Int16[1, 2, 3, 4, 5]
+        end
+
+        @testset "2D arrays" begin
+            # Python [[1,2],[3,4]] row-major -> Julia [1 3; 2 4] column-major
+            z = zopen(store; path="2d.contiguous.i2")
+            @test size(z) == (2, 2)
+            @test z[:, :] == Int16[1 3; 2 4]
+
+            # 2D chunked with (1,1) chunks
+            z = zopen(store; path="2d.chunked.i2")
+            @test size(z) == (2, 2)
+            @test z[:, :] == Int16[1 3; 2 4]
+
+            # 2D chunked ragged: Python [[1,2,3],[4,5,6],[7,8,9]] (3x3, chunks 2x2)
+            z = zopen(store; path="2d.chunked.ragged.i2")
+            @test size(z) == (3, 3)
+            @test z[:, :] == Int16[1 4 7; 2 5 8; 3 6 9]
+        end
+
+        @testset "3D arrays" begin
+            # Python np.arange(27).reshape(3,3,3) in C order
+            # In Julia column-major: reshape(Int16.(0:26), 3, 3, 3)
+            expected_3d = reshape(Int16.(0:26), 3, 3, 3)
+
+            z = zopen(store; path="3d.contiguous.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == expected_3d
+
+            # Chunked with (1,1,1) chunks — same data, different chunking
+            z = zopen(store; path="3d.chunked.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == expected_3d
+
+            # Mixed chunking (3,3,1) in Julia (reversed from Python's (1,3,3))
+            z = zopen(store; path="3d.chunked.mixed.i2.C")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == expected_3d
+        end
+
+        @testset "3D with transpose codec (F-order)" begin
+            # Same data as 3d.chunked.mixed.i2.C but with transpose([2,1,0]) codec
+            expected_3d = reshape(Int16.(0:26), 3, 3, 3)
+            z = zopen(store; path="3d.chunked.mixed.i2.F")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == expected_3d
+        end
+
+        @testset "Big-endian is rejected" begin
+            # Big-endian bytes codec is not yet supported
+            @test_throws ArgumentError zopen(store; path="1d.contiguous.f4.be")
+        end
+
+        @testset "Sharded arrays are rejected" begin
+            # Sharding codec is not yet wired into the read pipeline
+            @test_throws ArgumentError zopen(store; path="1d.contiguous.compressed.sharded.i2")
+        end
+    end
+end
+
 end # V3 Codecs

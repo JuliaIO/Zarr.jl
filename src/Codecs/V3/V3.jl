@@ -6,6 +6,8 @@ import ...Zarr: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
 import ...Zarr: BloscCompressor as ZarrBloscCompressor
 using CRC32c: CRC32c
 using JSON: JSON
+using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
+using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
 const codectypes = Dict{String, V3Codec}()
@@ -568,13 +570,12 @@ GzipV3Codec() = GzipV3Codec(6)
 name(::GzipV3Codec) = "gzip"
 
 function codec_encode(c::GzipV3Codec, data::Vector{UInt8})
-    comp = ZlibCompressor(clevel=c.level)
-    return zcompress(data, comp)
+    opts = GzipEncodeOptions(; level=c.level)
+    return cc_encode(opts, data)
 end
 
 function codec_decode(c::GzipV3Codec, encoded::Vector{UInt8})
-    comp = ZlibCompressor(clevel=c.level)
-    return collect(zuncompress(encoded, comp, UInt8))
+    return cc_decode(LibZGzipCodec(), encoded)
 end
 
 struct BloscV3Codec <: V3Codec{:bytes, :bytes}
