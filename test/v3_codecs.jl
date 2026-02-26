@@ -119,4 +119,38 @@ end
     @test encoded === nothing
 end
 
+@testset "V3 Metadata Parsing" begin
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":[0]}},{"name":"bytes","configuration":{"endian":"little"}},{"name":"gzip","configuration":{"level":6}}]}"""
+    md = Zarr.Metadata(json_str, false)
+    @test md isa Zarr.MetadataV3
+    @test md.shape[] == (4,)
+    @test md.chunks == (4,)
+    @test md.fill_value == Int32(0)
+
+    pipeline = Zarr.get_pipeline(md)
+    @test pipeline isa Zarr.V3Pipeline
+    @test length(pipeline.array_array) == 1
+    @test pipeline.array_bytes isa Zarr.Codecs.V3Codecs.BytesCodec
+    @test length(pipeline.bytes_bytes) == 1
+end
+
+@testset "V3 Metadata JSON round-trip" begin
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"float64","chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},"chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},"fill_value":0.0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},{"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"noshuffle","blocksize":0,"typesize":4}}]}"""
+    md = Zarr.Metadata(json_str, false)
+    @test md isa Zarr.MetadataV3
+
+    # Serialize back to JSON
+    lowered = JSON.lower(md)
+    @test lowered["zarr_format"] == 3
+    @test lowered["codecs"][1]["name"] == "bytes"
+    @test lowered["codecs"][2]["name"] == "blosc"
+end
+
+@testset "V3 Group Metadata Parsing" begin
+    json_str = """{"zarr_format":3,"node_type":"group"}"""
+    md = Zarr.Metadata(json_str, false)
+    @test md isa Zarr.MetadataV3
+    @test md.node_type == "group"
+end
+
 end # V3 Codecs

@@ -13,6 +13,7 @@ ZarrFormat(v::ZarrFormat) = v
 const DV = ZarrFormat(Val(2))
 
 include("chunkencoding.jl")
+abstract type AbstractCodecPipeline end
 include("metadata.jl")
 include("metadata3.jl")
 include("Compressors/Compressors.jl")

@@ -1,5 +1,3 @@
-abstract type AbstractCodecPipeline end
-
 """
 V2Pipeline wraps the existing v2 compressor + filter pair.
 Delegates to zcompress!/zuncompress! with zero behavior change.
@@ -71,3 +69,4 @@ end
 
 # Convenience: extract pipeline from metadata
 get_pipeline(m::MetadataV2) = V2Pipeline(m.compressor, m.filters)
+get_pipeline(m::MetadataV3) = m.pipeline

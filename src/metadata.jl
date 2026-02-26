@@ -131,24 +131,22 @@ end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
 
 """Metadata for Zarr version 3 arrays"""
-struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N}
+struct MetadataV3{T,N,P<:AbstractCodecPipeline} <: AbstractMetadata{T,N}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
     dtype::String  # data_type in v3
-    compressor::C
+    pipeline::P
     fill_value::Union{T, Nothing}
     order::Char
-    filters::F  # not yet supported
     chunk_encoding::ChunkEncoding
-    function MetadataV3{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_encoding) where {T2,N,C,F}
+    function MetadataV3{T2,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, order, chunk_encoding) where {T2,N,P}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
-        order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_encoding)
+        new{T2,N,P}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, order, chunk_encoding)
     end
 end
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
@@ -158,7 +156,7 @@ const Metadata = AbstractMetadata
 
 #To make unit tests pass with ref shape
 import Base.==
-function ==(m1::AbstractMetadata, m2::AbstractMetadata)
+function ==(m1::MetadataV2, m2::MetadataV2)
   m1.zarr_format == m2.zarr_format &&
   m1.node_type == m2.node_type &&
   m1.shape[] == m2.shape[] &&
@@ -168,7 +166,18 @@ function ==(m1::AbstractMetadata, m2::AbstractMetadata)
   m1.fill_value == m2.fill_value &&
   m1.order == m2.order &&
   m1.filters == m2.filters &&
-        m1.chunk_encoding == m2.chunk_encoding
+  m1.chunk_encoding == m2.chunk_encoding
+end
+
+function ==(m1::MetadataV3, m2::MetadataV3)
+  m1.zarr_format == m2.zarr_format &&
+  m1.node_type == m2.node_type &&
+  m1.shape[] == m2.shape[] &&
+  m1.chunks == m2.chunks &&
+  m1.dtype == m2.dtype &&
+  m1.fill_value == m2.fill_value &&
+  m1.order == m2.order &&
+  m1.chunk_encoding == m2.chunk_encoding
 end
 
 
@@ -234,7 +243,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         order=order,
         filters=filters,
         fill_as_missing=fill_as_missing,
-        chunk_encoding=chunk_encoding
+        dimension_separator=chunk_encoding.sep
     )
 end
 
