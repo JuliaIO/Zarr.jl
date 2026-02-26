@@ -103,12 +103,12 @@ value of the ".zarray" key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-abstract type AbstractMetadata{T,N,C,F} end
+abstract type AbstractMetadata{T,N} end
 Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
 """Metadata for Zarr version 2 arrays"""
-struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F}
+struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
@@ -131,7 +131,7 @@ end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
 
 """Metadata for Zarr version 3 arrays"""
-struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N,C,F}
+struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
