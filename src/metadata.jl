@@ -39,11 +39,6 @@ typestr(::Type{<:Array}) = "|O"
 typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
 
-function typestr(t::Type, big_endian::Bool)
-    s = typestr(t)
-    big_endian ? replace(s, '<' => '>') : s
-end
-
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
@@ -59,19 +54,6 @@ foreach([Float16,Float32,Float64,Int8,Int16,Int32,Int64,Int128,
   UInt8,UInt16,UInt32,UInt64,UInt128,
   Complex{Float16},Complex{Float32},Complex{Float64}]) do t
     typemap[(typecharf(t),sizemapf(t))] = t
-end
-
-function is_big_endian(s::AbstractString)
-    m = match(typestr_regex, s)
-    if m === nothing
-        throw(ArgumentError("$s is not a valid numpy typestr"))
-    end
-
-    byteorder, typecode, typesize, typespec = m.captures
-    if byteorder == ">"
-        return true
-    end
-    return false
 end
 
 function typestr(s::AbstractString, filterlist=nothing)
@@ -224,7 +206,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         node_type,
         size(A),
         chunks,
-        typestr(eltype(A), big_endian),
+        typestr(eltype(A)),
         compressor,
         fill_value,
         order,
@@ -279,7 +261,6 @@ function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{2})
     filters = getfilters(d)
 
     T = typestr(d["dtype"], filters)
-    big_endian = is_big_endian(d["dtype"])
     N = length(d["shape"])
     C = typeof(compressor)
     F = typeof(filters)

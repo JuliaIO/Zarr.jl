@@ -160,7 +160,6 @@ _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
-is_big_endian(s::ZArray) = s.metadata.big_endian
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
@@ -198,10 +197,6 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     end
   finally
     close(c)
-  end
-
-  if is_big_endian(z)
-    aout .= ntoh.(aout)
   end
   
   aout
@@ -306,8 +301,7 @@ function compress_raw(a,z)
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
-    data = is_big_endian(z) ? hton.(a) : a
-    zcompress!(dtemp,data,z.metadata.compressor, z.metadata.filters)
+    zcompress!(dtemp, a, z.metadata.compressor, z.metadata.filters)
     dtemp
   else
     nothing
