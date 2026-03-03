@@ -71,14 +71,14 @@ end
 
 
 """
-storagesize(z::ZArray)
+    storagesize(z::ZArray)
 
 Returns the size of the compressed data stored in the ZArray `z` in bytes
 """
 storagesize(z::ZArray) = storagesize(z.storage,z.path)
 
 """
-storageratio(z::ZArray)
+    storageratio(z::ZArray)
 
 Returns the ratio of the size of the uncompressed data in `z` and the size of the compressed data.
 """
@@ -133,7 +133,7 @@ dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
 
 """
-trans_ind(r, bs)
+    trans_ind(r, bs)
 
 For a given index and blocksize determines which chunks of the Zarray will have to
 be accessed.
@@ -160,6 +160,7 @@ _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
+is_big_endian(s::ZArray) = s.metadata.big_endian
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
@@ -198,13 +199,17 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   finally
     close(c)
   end
+
+  if is_big_endian(z)
+    aout .= ntoh.(aout)
+  end
+  
   aout
 end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
   
   z.writeable || error("Can not write to read-only ZArray")
-
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
@@ -267,7 +272,7 @@ DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
 DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
 
 """
-uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
+    uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
 
 Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
@@ -301,7 +306,8 @@ function compress_raw(a,z)
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
-    zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
+    data = is_big_endian(z) ? hton.(a) : a
+    zcompress!(dtemp,data,z.metadata.compressor, z.metadata.filters)
     dtemp
   else
     nothing
@@ -311,7 +317,7 @@ end
 
 
 """
-zcreate(T, dims...;kwargs)
+    zcreate(T, dims...;kwargs)
 
 Creates a new empty zarr array with element type `T` and array dimensions `dims`. The following keyword arguments are accepted:
 
@@ -420,14 +426,14 @@ function ZArray(a::AbstractArray, args...; kwargs...)
 end
 
 """
-chunkindices(z::ZArray)
+    chunkindices(z::ZArray)
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
 chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
 
 """
-zzeros(T, dims...; kwargs... )
+    zzeros(T, dims...; kwargs... )
 
 Creates a zarr array and initializes all values with zero. Accepts the same keyword arguments as `zcreate`
 """
@@ -444,7 +450,7 @@ end
 
 #Resizing Zarr arrays
 """
-resize!(z::ZArray{T,N}, newsize::NTuple{N})
+    resize!(z::ZArray{T,N}, newsize::NTuple{N})
 
 Resizes a `ZArray` to the new specified size. If the size along any of the
 axes is decreased, unused chunks will be deleted from the store.
@@ -463,7 +469,7 @@ end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
 
 """
-append!(z::ZArray{<:Any, N},a;dims = N)
+    append!(z::ZArray{<:Any, N},a;dims = N)
 
 Appends an AbstractArray to an existinng `ZArray` along the dimension dims. The
 size of the `ZArray` is increased accordingly and data appended.
