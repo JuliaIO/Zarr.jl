@@ -155,6 +155,7 @@ _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
+is_big_endian(s::ZArray) = s.metadata.big_endian
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
@@ -193,13 +194,17 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   finally
     close(c)
   end
+
+  if is_big_endian(z)
+    aout .= ntoh.(aout)
+  end
+  
   aout
 end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
   
   z.writeable || error("Can not write to read-only ZArray")
-
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
@@ -296,7 +301,8 @@ function compress_raw(a,z)
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   if !all(isequal(z.metadata.fill_value),a)
     dtemp = UInt8[]
-    zcompress!(dtemp,a,z.metadata.compressor, z.metadata.filters)
+    data = is_big_endian(z) ? hton.(a) : a
+    zcompress!(dtemp,data,z.metadata.compressor, z.metadata.filters)
     dtemp
   else
     nothing
@@ -345,7 +351,8 @@ function zcreate(::Type{T},storage::AbstractStore,
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,
-  indent_json=false
+  indent_json=false,
+  big_endian=false
   ) where T
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
@@ -356,11 +363,12 @@ function zcreate(::Type{T},storage::AbstractStore,
   2,
   dims,
   chunks,
-  typestr(T),
+  typestr(T, big_endian),
   compressor,
   fill_value,
   'C',
   filters,
+  big_endian
   )
   
   isemptysub(storage,path) || error("$storage $path is not empty")

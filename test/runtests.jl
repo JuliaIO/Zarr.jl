@@ -274,6 +274,32 @@ end
     
   end
 
+@testset "Big-endian test" begin
+    # Create a big-endian Int32 array
+    p = tempname()
+    z = zcreate(Int32, 10, path=p, chunks=(5,), big_endian=true)
+    @test z.metadata.big_endian == true
+    @test startswith(z.metadata.dtype, ">")
+    @test z.metadata.dtype == ">i4"
+
+    # Write and read back
+    z[:] = Int32.(1:10)
+    @test z[:] == Int32.(1:10)
+
+    # Round-trip: reopen from disk and verify
+    z2 = zopen(p)
+    @test z2.metadata.big_endian == true
+    @test z2.metadata.dtype == ">i4"
+    @test z2[:] == Int32.(1:10)
+
+    # Test Float64
+    p2 = tempname()
+    zf = zcreate(Float64, 5, path=p2, chunks=(5,), big_endian=true)
+    @test zf.metadata.dtype == ">f8"
+    zf[:] = [1.0, 2.5, 3.0, 4.5, 5.0]
+    @test zf[:] == [1.0, 2.5, 3.0, 4.5, 5.0]
+end
+
 include("storage.jl")
 
 include("Filters.jl")
