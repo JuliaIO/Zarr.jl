@@ -1,5 +1,6 @@
+abstract type AbstractChunkKeyEncoding end
 
-struct ChunkEncoding
+struct ChunkKeyEncoding <: AbstractChunkKeyEncoding
     sep::Char
     prefix::Bool
 end
@@ -16,13 +17,13 @@ default_prefix(::ZarrFormat{2}) = false
 default_prefix(::ZarrFormat{3}) = true
 const DS = default_sep(DV)
 
-@inline function citostring(e::ChunkEncoding, i::CartesianIndex)
+@inline function citostring(e::ChunkKeyEncoding, i::CartesianIndex)
   if e.prefix
     "c$(e.sep)" * join(reverse((i - oneunit(i)).I), e.sep)
   else
     join(reverse((i - oneunit(i)).I), e.sep)
   end
 end
-@inline citostring(e::ChunkEncoding, ::CartesianIndex{0}) = e.prefix ? "c$(e.sep)0" : "0"
+@inline citostring(e::ChunkKeyEncoding, ::CartesianIndex{0}) = e.prefix ? "c$(e.sep)0" : "0"
 
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
