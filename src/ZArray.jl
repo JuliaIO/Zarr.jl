@@ -368,7 +368,7 @@ function zcreate(::Type{T},storage::AbstractStore,
     # Convert AbstractString to Char
     dimension_separator = only(dimension_separator)
   end
-  chunk_encoding = ChunkEncoding(dimension_separator, default_prefix(v))
+  chunk_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)

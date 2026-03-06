@@ -100,12 +100,12 @@ value of the ".zarray" key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-abstract type AbstractMetadata{T,N,C,F} end
+abstract type AbstractMetadata{T,N,C,F,E} end
 Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
 """Metadata for Zarr version 2 arrays"""
-struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F}
+struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F,ChunkKeyEncoding}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
@@ -115,7 +115,7 @@ struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,C,F}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    chunk_encoding::ChunkEncoding
+    chunk_encoding::ChunkKeyEncoding
     function MetadataV2{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_encoding) where {T2,N,C,F}
         zarr_format == 2 || throw(ArgumentError("MetadataV2 only functions if zarr_format == 2"))
         #Do some sanity checks to make sure we have a sane array
@@ -128,7 +128,7 @@ end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
 
 """Metadata for Zarr version 3 arrays"""
-struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N,C,F}
+struct MetadataV3{T,N,C,F,E} <: AbstractMetadata{T,N,C,F,E}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
@@ -138,14 +138,14 @@ struct MetadataV3{T,N,C,F} <: AbstractMetadata{T,N,C,F}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    chunk_encoding::ChunkEncoding
-    function MetadataV3{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_encoding) where {T2,N,C,F}
+    chunk_key_encoding::E
+    function MetadataV3{T2,N,C,F,E}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_encoding) where {T2,N,C,F,E}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_encoding)
+        new{T2,N,C,F,E}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
     end
 end
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
@@ -186,7 +186,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         order=order,
         filters=filters,
         fill_as_missing=fill_as_missing,
-        chunk_encoding=ChunkEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
+        chunk_encoding=ChunkKeyEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
     )
 end
 
@@ -198,7 +198,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         order::Char='C',
         filters::F=nothing,
         fill_as_missing = false,
-    chunk_encoding=ChunkEncoding('.', false)
+    chunk_encoding=ChunkKeyEncoding('.', false)
     ) where {T, N, C, F}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     MetadataV2{T2,N,C,typeof(filters)}(
@@ -222,7 +222,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         order::Char='C',
         filters::F=nothing,
         fill_as_missing = false,
-    chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
+    chunk_encoding::ChunkKeyEncoding=ChunkKeyEncoding('/', true)
     ) where {T, N, C, F}
     return Metadata3(A, chunks;
         node_type=node_type,
@@ -281,7 +281,7 @@ function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{2})
         fv,
         first(d["order"]),
         filters,
-        ChunkEncoding(dim_sep, false),
+        ChunkKeyEncoding(dim_sep, false),
     )
 end
 
