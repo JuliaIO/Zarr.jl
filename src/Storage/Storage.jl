@@ -205,6 +205,16 @@ struct ConcurrentRead
 end
 store_read_strategy(::AbstractStore) = SequentialRead()
 
+"""
+    has_configurable_missing_chunks(s::AbstractStore)
+
+Trait indicating whether a store supports `missing_chunk_return_code!` for configuring
+which HTTP error codes should be treated as "chunk not found" rather than errors.
+
+Returns `false` by default. HTTP-based stores that support this should return `true`.
+"""
+has_configurable_missing_chunks(::AbstractStore) = false
+
 channelsize(s) = channelsize(store_read_strategy(s))
 channelsize(::SequentialRead) = 0
 channelsize(c::ConcurrentRead) = c.ntasks
@@ -272,4 +282,5 @@ include("dictstore.jl")
 include("gcstore.jl")
 include("consolidated.jl")
 include("http.jl")
+include("cachinghttpstore.jl")
 include("zipstore.jl")

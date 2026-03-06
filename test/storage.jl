@@ -309,3 +309,50 @@ end
   end
   @info "Finished testing ZipStore"
 end
+
+@testset "Caching HTTP Storage" begin
+  # Create source data
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs = Dict("groupatt"=>5))
+  a = zcreate(Int, g, "a1", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5))
+  a .= reshape(1:200, 10, 20)
+
+  # Start HTTP server
+  using Zarr.HTTP, Sockets
+  server = Sockets.listen(0)
+  ip, port = getsockname(server)
+  @async HTTP.serve(g, ip, port, server=server)
+  sleep(0.5)  # wait for server to start
+
+  # Create caching store with temp cache directory
+  cache_dir = mktempdir()
+  caching_store = Zarr.CachingHTTPStore("http://$ip:$port", cache_dir)
+
+  # Wrap in ConsolidatedStore (like HTTPStore requires)
+  consolidated = Zarr.ConsolidatedStore(caching_store, "")
+
+  # Open and read data
+  g2 = zopen(consolidated)
+  @test g2.attrs == Dict("groupatt"=>5)
+  @test g2["a1"].attrs == Dict("arratt"=>2.5)
+  @test g2["a1"][:,:] == reshape(1:200, 10, 20)
+
+  # Verify data is cached locally
+  @test isfile(joinpath(cache_dir, ".zmetadata"))
+
+  # Test show method
+  @test sprint(show, caching_store) == "Caching HTTP Storage"
+
+  # Stop server
+  close(server)
+
+  # Verify we can still read from cache after server is down
+  caching_store2 = Zarr.CachingHTTPStore("http://$ip:$port", cache_dir)
+  consolidated2 = Zarr.ConsolidatedStore(caching_store2, "")
+  g3 = zopen(consolidated2)
+  @test g3.attrs == Dict("groupatt"=>5)
+  @test g3["a1"][:,:] == reshape(1:200, 10, 20)
+
+  # Cleanup
+  rm(cache_dir, recursive=true)
+end

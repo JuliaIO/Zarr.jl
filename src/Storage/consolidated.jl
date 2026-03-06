@@ -77,6 +77,7 @@ function Base.delete!(d::ConsolidatedStore,i::String)
 end
 
 store_read_strategy(s::ConsolidatedStore) = store_read_strategy(s.parent)
+has_configurable_missing_chunks(s::ConsolidatedStore) = has_configurable_missing_chunks(s.parent)
 
 function consolidate_metadata(s::AbstractStore,d,prefix)
   for k in (".zattrs",".zarray",".zgroup")
