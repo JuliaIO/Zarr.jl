@@ -93,6 +93,8 @@ julia> using Zarr
 julia> p = "data/example.zarr"
 "data/example.zarr"
 
+julia> isdir(p) && rm(p, recursive=true); mkpath(dirname(p));
+
 julia> z1 = zcreate(Int, 10000,10000,path = p,chunks=(1000, 1000))
 ZArray{Int64} of size 10000 x 10000
 ```
