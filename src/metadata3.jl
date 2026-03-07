@@ -64,7 +64,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             end
         end
 
-        return MetadataV3{Int,0,Nothing,Nothing}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing, ChunkEncoding('/', true))
+        return MetadataV3{Int,0,Nothing,Nothing,Nothing}(zarr_format, node_type, (), (), "", nothing, 0, 'C', nothing, ChunkKeyEncoding('/', true))
     end
 
     # Array keys
@@ -211,12 +211,16 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     # V2 uses '.' while default CKE uses '/' by default
     if chunk_key_encoding["name"] == "v2"
         separator = only(get(cke_configuration, "separator", '.'))
-        chunk_encoding = ChunkEncoding(separator, false)
+        chunk_encoding = ChunkKeyEncoding(separator, false)
+        E = ChunkKeyEncoding
     elseif chunk_key_encoding["name"] == "default"
-        chunk_encoding = ChunkEncoding(only(get(cke_configuration, "separator", '/')), true)
+        chunk_encoding = ChunkKeyEncoding(only(get(cke_configuration, "separator", '/')), true)
+        E = ChunkKeyEncoding
+    else
+        error("Unknown chunk key encoding: ", chunk_key_encoding["name"])
     end
 
-    MetadataV3{TU, N, C, F, S}(
+    MetadataV3{TU, N, C, F, S, ChunkKeyEncoding}(
         zarr_format,
         node_type,
         NTuple{N, Int}(shape) |> reverse,
@@ -255,7 +259,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         fill_value,
         order,
         filters,
-        ChunkEncoding(dimension_separator, true)
+        ChunkKeyEncoding(dimension_separator, true)
     )
 end
 
@@ -286,8 +290,9 @@ function lower3(md::MetadataV3{T}) where T
 
     chunk_key_encoding = Dict{String,Any}(
         "name" => isa(md.dimension_separator, Char) ? "default" :
-                  isa(md.dimension_separator, V2ChunkKeyEncoding) ? "v2" :
-                  error("Unknown encoding for $(md.dimension_separator)"),
+                  isa(md.dimension_separator, ChunkKeyEncoding) ?
+                    md.dimension_separator.prefix ? "default" : "v2" : 
+                    error("Unknown encoding for $(md.dimension_separator)"),
         "configuration" => Dict{String,Any}(
             "separator" => separator(md.dimension_separator)
         )
