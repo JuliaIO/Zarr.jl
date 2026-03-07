@@ -93,6 +93,8 @@ julia> using Zarr
 julia> p = "data/example.zarr"
 "data/example.zarr"
 
+julia> isdir(p) && rm(p, recursive=true); mkpath(dirname(p));
+
 julia> z1 = zcreate(Int, 10000,10000,path = p,chunks=(1000, 1000))
 ZArray{Int64} of size 10000 x 10000
 ```
@@ -197,7 +199,7 @@ Order               : C
 Read-Only           : false
 Compressor          : Zarr.BloscCompressor(0, 3, "zstd", 1)
 Filters             : nothing
-Store type          : Zarr.FormattedStore{2, '.', Zarr.DictStore}(Dictionary Storage)
+Store type          : Dictionary Storage
 No. bytes           : 400000000
 No. bytes stored    : 2412289
 Storage ratio       : 165.81761140559857
