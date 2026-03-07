@@ -100,7 +100,7 @@ value of the ".zarray" key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-abstract type AbstractMetadata{T,N,C,F,E} end
+abstract type AbstractMetadata{T,N,C,F,E <: AbstractChunkKeyEncoding} end
 Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
