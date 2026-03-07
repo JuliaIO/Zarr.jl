@@ -56,7 +56,9 @@ julia> readdir(p)
 ## Dealing with Julia's Missing type in Zarr.jl
 Like most data storage formats, also Zarr supports storing most of the standard C-compatible data types like integers, unsigned integers and floating point types of different sizes. This means that it is no problem to directly map a `Vector{Int64}` to a Zarr array. However, the story gets complicated for arrays containing missings with a Union element type like `Union{Int64,Missing}`, since they can not be passed to compression libraries as simple C pointers and are not very inter-operable with other languages.
 
-One solution to this problem is to use Zarrs `fillvalue`s to represent missing values. Here we open the previously created array and use the `fill_as_missing` option. In this case accessing an element whose stored value equals the fill value will return `missing`. Since both written chunks hold `5`, all elements in this range read back as `5`. Elements in chunks that were never written (i.e. beyond row 20) would return `missing`:
+One solution to this problem is to use Zarr's `fillvalue`s to represent missing values. Here, we open the previously created array and use the `fill_as_missing` option.  Then, accessing an element whose stored value equals the fill value will return `missing`. 
+
+Since both written chunks hold `5`, all elements in this range read back as `5`. Elements in chunks that were never written, beyond row 20, would return `missing`:
 
 ```jldoctest fillval
 julia> z = zopen(p, fill_as_missing=true)
