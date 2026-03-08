@@ -7,12 +7,12 @@ a s3-compatible cloud store. Here we provide examples on how to read data from c
 
 First we show how to access the zarr-demo bucket on AWS S3. We have to setup a
 AWS configuration first, for options look at the documentation of
-[AWS.jl](https://github.com/JuliaCloud/AWS.jl). If you don't have an
+[AWSS3.jl](https://github.com/JuliaCloud/AWSS3.jl). If you don't have an
 account, you can access the dataset without credentials as follows:
 
 ````@example aws
 using Zarr, AWSS3
-AWSS3.AWS.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+AWSS3.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
 ````
 
 Then we can directly open a zarr group stored on s3
@@ -128,44 +128,42 @@ In the examples above we only accessed data from several sources. Here we show
 how to store data on an own Minio server that we launch for testing purposes. First
 we launch the Minio server:
 
-````@example minio
+````julia
 using Minio
 s = Minio.Server(tempname(), address="localhost:9005")
 run(s, wait=false)
 ````
 
-In the next step we configure AWS.jl to connect to our Minio instance by default. 
+In the next step we configure AWSS3.jl to connect to our Minio instance by default. 
 Afterwards we create an new bucket where we can store our data:
 
-````@example minio
-using AWS
+````julia
+using AWSS3
 cfg = MinioConfig("http://localhost:9005")
-AWS.global_aws_config(cfg)
-@service S3
-S3.create_bucket("zarrdata")
+AWSS3.global_aws_config(cfg)
+AWSS3.S3.create_bucket("zarrdata")
 ````
 
 Next we create a new zarr group in the just created bucket:
 
-````@example minio
+````julia
 using Zarr
 g = zgroup(S3Store("zarrdata"),"group_1")
 ````
 
 and a new array inside the group and fill it with some data:
 
-````@example minio
+````julia
 a = zcreate(Float32, g, "bar", 2,3,4, chunks=(1,2,2), attrs = Dict("att1"=>"one", "att2"=>2.5))
 a[:,:,:] = reshape(1.0:24.0, (2,3,4))
 ````
 
 Now we test if the data can be accessed
 
-````@example minio
+````julia
 a2 = zopen("s3://zarrdata/group_1/bar")
 a2[2,2,1:4]
 ````
-`````
 
 
 
