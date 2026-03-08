@@ -5,6 +5,12 @@ using JSON: json
 using Pkg
 using Dates
 
+if !isdefined(Base, :manifest_uuid_path)
+    # Fixes nightly as of 2026-03-08
+    # https://github.com/JuliaPy/CondaPkg.jl/pull/206
+    Pkg.add(url="https://github.com/JamesWrigley/CondaPkg.jl", rev="manifest-check")
+end
+
 
 @testset "Zarr" begin
 
