@@ -167,7 +167,8 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             shuffle_int = shuffle_val isa Integer ? shuffle_val :
                           shuffle_val == "noshuffle" ? 0 :
                           shuffle_val == "shuffle" ? 1 :
-                          shuffle_val == "bitshuffle" ? 2 : 0
+                          shuffle_val == "bitshuffle" ? 2 :
+                          throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
             blocksize = get(config, "blocksize", 0)
             typesize = get(config, "typesize", 4)
             push!(bytes_bytes_codecs, Codecs.V3Codecs.BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize))
@@ -311,7 +312,10 @@ function lower3(md::MetadataV3{T}) where T
                 "configuration" => Dict{String,Any}(
                     "cname" => codec.cname,
                     "clevel" => codec.clevel,
-                    "shuffle" => codec.shuffle == 0 ? "noshuffle" : codec.shuffle == 1 ? "shuffle" : "bitshuffle",
+                    "shuffle" => codec.shuffle == 0 ? "noshuffle" :
+                                 codec.shuffle == 1 ? "shuffle" :
+                                 codec.shuffle == 2 ? "bitshuffle" :
+                                 throw(ArgumentError("Unknown shuffle integer: $(codec.shuffle)")),
                     "blocksize" => codec.blocksize,
                     "typesize" => codec.typesize
                 )

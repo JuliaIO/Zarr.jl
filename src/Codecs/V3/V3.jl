@@ -589,7 +589,7 @@ BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
 name(::BloscV3Codec) = "blosc"
 
 function codec_encode(c::BloscV3Codec, data::Vector{UInt8})
-    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle > 0)
+    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle)
     return zcompress(data, comp)
 end
 
