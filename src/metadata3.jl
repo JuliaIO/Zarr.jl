@@ -148,7 +148,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
                     order = 'F'
                 end
             end
-            push!(array_array_codecs, Codecs.V3Codecs.TransposeCodecImpl(perm))
+            push!(array_array_codecs, Codecs.V3Codecs.TransposeCodec(perm))
         elseif codec_name == "bytes"
             if haskey(config, "endian")
                 config["endian"] == "little" ||
@@ -282,7 +282,7 @@ function lower3(md::MetadataV3{T}) where T
 
     # array->array codecs
     for codec in p.array_array
-        if codec isa Codecs.V3Codecs.TransposeCodecImpl
+        if codec isa Codecs.V3Codecs.TransposeCodec
             push!(codecs, Dict{String,Any}(
                 "name" => "transpose",
                 "configuration" => Dict("order" => collect(codec.order .- 1))

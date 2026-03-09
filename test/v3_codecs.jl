@@ -14,13 +14,13 @@ using JSON
     @test decoded == data
 end
 
-@testset "TransposeCodecImpl" begin
-    codec_c = Zarr.Codecs.V3Codecs.TransposeCodecImpl((1, 2, 3))
+@testset "TransposeCodec" begin
+    codec_c = Zarr.Codecs.V3Codecs.TransposeCodec((1, 2, 3))
     data = reshape(collect(1:24), 2, 3, 4)
     encoded = Zarr.Codecs.V3Codecs.codec_encode(codec_c, data)
     @test encoded == data
 
-    codec_f = Zarr.Codecs.V3Codecs.TransposeCodecImpl((3, 2, 1))
+    codec_f = Zarr.Codecs.V3Codecs.TransposeCodec((3, 2, 1))
     encoded_f = Zarr.Codecs.V3Codecs.codec_encode(codec_f, data)
     decoded_f = Zarr.Codecs.V3Codecs.codec_decode(codec_f, encoded_f)
     @test decoded_f == data

@@ -528,10 +528,10 @@ function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{
     return data
 end
 
-struct TransposeCodecImpl{N} <: V3Codec{:array, :array}
+struct TransposeCodec{N} <: V3Codec{:array, :array}
     order::NTuple{N, Int}  # permutation (1-based Julia indexing)
 end
-name(::TransposeCodecImpl) = "transpose"
+name(::TransposeCodec) = "transpose"
 
 # ============================================================
 # codec_encode / codec_decode methods for V3 codecs
@@ -548,13 +548,13 @@ function codec_decode(::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NT
     return reshape(collect(arr), shape)
 end
 
-# --- TransposeCodecImpl (array -> array) ---
+# --- TransposeCodec (array -> array) ---
 
-function codec_encode(c::TransposeCodecImpl, data::AbstractArray)
+function codec_encode(c::TransposeCodec, data::AbstractArray)
     return permutedims(data, c.order)
 end
 
-function codec_decode(c::TransposeCodecImpl, encoded::AbstractArray)
+function codec_decode(c::TransposeCodec, encoded::AbstractArray)
     inv_order = Tuple(invperm(collect(c.order)))
     return permutedims(encoded, inv_order)
 end
