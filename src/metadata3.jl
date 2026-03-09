@@ -136,7 +136,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
                     perm = ntuple(i -> n - i + 1, n)
                     order = 'F'
                 else
-                    error("Unknown transpose order string: $_order")
+                    throw(ArgumentError("Unknown transpose order string: $_order"))
                 end
             else
                 perm = Tuple(Int.(_order) .+ 1)
@@ -243,7 +243,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     elseif compressor isa ZstdCompressor
         (Codecs.V3Codecs.ZstdV3Codec(compressor.config.compressionLevel),)
     else
-        error("Unsupported compressor type for v3: $(typeof(compressor))")
+        throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
     end
     pipeline = V3Pipeline((), array_bytes_codec, bytes_bytes_codecs)
 
