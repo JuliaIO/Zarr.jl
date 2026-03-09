@@ -63,9 +63,6 @@ function typestr(s::AbstractString, filterlist=nothing)
     else
 
         byteorder, typecode, typesize, typespec = m.captures
-        if byteorder == ">"
-            throw(ArgumentError("Big-endian data not yet supported"))
-        end
         if typecode == "O"
             if filterlist === nothing
                 throw(ArgumentError("Object array can only be parsed when an appropriate filter is defined"))

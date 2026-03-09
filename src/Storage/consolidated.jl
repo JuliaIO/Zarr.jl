@@ -27,15 +27,29 @@ storagesize(d::ConsolidatedStore,p) = storagesize(d.parent,p)
 function Base.getindex(d::ConsolidatedStore,i::String) 
     d.parent[i]
 end
-getmetadata(d::ConsolidatedStore,p,fill_as_missing) = Metadata(d.cons[_unconcpath(d,p,".zarray")],fill_as_missing)
-getattrs(d::ConsolidatedStore, p) = get(d.cons,_unconcpath(d,p,".zattrs"), Dict{String,Any}())
+function getmetadata(::ZarrFormat{2}, d::ConsolidatedStore, p, fill_as_missing)
+    return Metadata(d.cons[_unconcpath(d, p, ".zarray")], fill_as_missing)
+end
+function getmetadata(::ZarrFormat{3}, d::ConsolidatedStore, p, fill_as_missing)
+    return Metadata(d.cons[_unconcpath(d, p, "zarr.json")], fill_as_missing)
+end
+function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
+  return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
+end
+
+function getattrs(::ZarrFormat{3}, d::ConsolidatedStore, p)
+    return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
+end
 function _unconcpath(d,p)
   startswith(p,d.path) || error("Requested key is not in consolidated path")
   lstrip(replace(p,d.path=>"", count=1),'/')
 end
 _unconcpath(d,p,s) = _concatpath(_unconcpath(d,p),s)
-is_zarray(d::ConsolidatedStore,p) = haskey(d.cons,_unconcpath(d,p,".zarray"))
-is_zgroup(d::ConsolidatedStore,p) = haskey(d.cons,_unconcpath(d,p,".zgroup"))
+is_zarray(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, ".zarray"))
+is_zgroup(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, ".zgroup"))
+is_zarray(::ZarrFormat{3}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, "zarr.json")) && get(d.cons[_unconcpath(d, p, "zarr.json")], "node_type", "") == "array"
+is_zgroup(::ZarrFormat{3}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, "zarr.json")) && get(d.cons[_unconcpath(d, p, "zarr.json")], "node_type", "") == "group"
+ZarrFormat(d::ConsolidatedStore, path) = ZarrFormat(d.parent, path)  # detect format from parent, not cons
 check_consolidated_write(i::String) = split(i,'/')[end] in (".zattrs",".zarray",".zgroup") &&
     throw(ArgumentError("Can not modify consolidated metadata, please re-open the dataset with `consolidated=false`"))
 
