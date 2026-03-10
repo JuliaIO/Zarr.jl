@@ -585,6 +585,14 @@ end
             # Sharding codec is not yet wired into the read pipeline
             @test_throws ArgumentError zopen(store; path="1d.contiguous.compressed.sharded.i2")
         end
+
+        @testset "Group with spaces in name" begin
+            g = zopen(store)
+            @test haskey(g, "my group with spaces")
+            sub = g["my group with spaces"]
+            @test sub isa Zarr.ZGroup
+            @test sub.attrs["description"] == "A group with spaces in the name"
+        end
     end
 end
 
