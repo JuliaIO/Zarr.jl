@@ -32,6 +32,25 @@ using JSON
 
     # default constructor uses little endian
     @test Zarr.Codecs.V3Codecs.BytesCodec().endian == :little
+
+    # floating-point round-trips for both endian modes
+    for (FT, data_f) in [
+        (Float16, Float16[-1.5, 0.0, 1.5, 2.5]),
+        (Float32, Float32[-1000.5, 0.0, 1.0, 1000.5]),
+        (Float64, Float64[-1.5e300, 0.0, 1.0, 1.5e300]),
+    ]
+        for codec in (codec_le, codec_be)
+            encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data_f)
+            @test encoded isa Vector{UInt8}
+            @test length(encoded) == length(data_f) * sizeof(FT)
+            decoded = Zarr.Codecs.V3Codecs.codec_decode(codec, encoded, FT, (4,))
+            @test decoded == data_f
+        end
+        # little and big-endian encodings differ for multi-byte floats
+        enc_le = Zarr.Codecs.V3Codecs.codec_encode(codec_le, data_f)
+        enc_be = Zarr.Codecs.V3Codecs.codec_encode(codec_be, data_f)
+        @test enc_le != enc_be
+    end
 end
 
 @testset "TransposeCodec" begin
