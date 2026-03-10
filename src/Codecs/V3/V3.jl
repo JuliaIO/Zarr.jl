@@ -609,7 +609,7 @@ function codec_encode(c::BloscV3Codec, data::Vector{UInt8})
 end
 
 function codec_decode(c::BloscV3Codec, encoded::Vector{UInt8})
-    comp = ZarrBloscCompressor()
+    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle)
     return collect(zuncompress(encoded, comp, UInt8))
 end
 
