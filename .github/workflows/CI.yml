@@ -35,13 +35,17 @@ jobs:
         env:
           PYTHON:
       - name: Generate Julia and Python v3 fixtures
+        uses: nick-fields/retry@v3
         env:
           PYTHON:
-        run: |
-          julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.resolve(); Pkg.instantiate()'
-          julia --project=test test/v3_julia.jl
-          julia --project=test test/v3_python.jl
-          rm test/Manifest.toml
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          command: |
+            julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test test/v3_julia.jl
+            julia --project=test test/v3_python.jl
+            rm -f test/Manifest.toml
       - uses: julia-actions/julia-runtest@v1
         env:
           PYTHON:
