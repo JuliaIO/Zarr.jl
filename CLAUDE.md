@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Zarr.jl is a Julia implementation of the Zarr specification for chunked, compressed, N-dimensional arrays. It supports Zarr v2 (stable) and v3 (experimental, in development on `fg/continue_v3pr` branch). The package provides multiple storage backends (filesystem, in-memory, S3, GCS, HTTP, ZIP) and compressors (Blosc, zlib, Zstandard).
+Zarr.jl is a Julia implementation of the Zarr specification for chunked, compressed, N-dimensional arrays. It supports Zarr v2 (stable) and v3 (experimental, in development on `as/continue_v3` branch). The package provides multiple storage backends (filesystem, in-memory, S3, GCS, HTTP, ZIP) and compressors (Blosc, zlib, Zstandard).
 
 ## Build & Test Commands
 
@@ -12,14 +12,11 @@ Zarr.jl is a Julia implementation of the Zarr specification for chunked, compres
 # Run all tests
 julia --project -e 'using Pkg; Pkg.test()'
 
-# Run tests directly (equivalent)
-julia --project test/runtests.jl
+# Run a single test file interactively (use the test/ project environment)
+julia --project=test -e 'using Test, Zarr, JSON; include("test/v3_codecs.jl")'
 
-# Run a single test file interactively
-julia --project -e 'using Test, Zarr, JSON; include("test/storage.jl")'
-
-# Instantiate dependencies (first time setup)
-julia --project -e 'using Pkg; Pkg.instantiate()'
+# Instantiate test dependencies (after Julia version change or first time setup)
+julia --project=test -e 'using Pkg; Pkg.instantiate()'
 ```
 
 Julia version requirement: 1.10+. CI tests against Julia LTS, stable (`1`), nightly, and pre-release on Ubuntu, macOS, and Windows.
@@ -29,9 +26,9 @@ Julia version requirement: 1.10+. CI tests against Julia LTS, stable (`1`), nigh
 ### Core Type Hierarchy
 
 ```
-AbstractMetadata{T,N,C,F}
+AbstractMetadata{T,N}
 ├── MetadataV2{T,N,C,F}   # .zarray + .zattrs (v2)
-└── MetadataV3{T,N,C,F}   # zarr.json (v3)
+└── MetadataV3{T,N,P}     # zarr.json (v3), P<:AbstractCodecPipeline
 
 AbstractStore
 ├── DirectoryStore          # Filesystem
@@ -49,13 +46,13 @@ ZGroup{S<:AbstractStore}
 ### Module/File Layout
 
 - `src/Zarr.jl` — Module entry point, defines `ZarrFormat{V}` (Val-parameterized version tag, default `DV = ZarrFormat(Val(2))`)
-- `src/metadata.jl` — `MetadataV2`, `MetadataV3` structs, type string encoding (`typestr`/`typestr3`), fill value encoding/decoding, `Metadata()` constructors dispatching on `ZarrFormat{2}` vs `ZarrFormat{3}`
-- `src/metadata3.jl` — V3-specific metadata parsing (`Metadata3(dict)`) and serialization (`lower3`), codec pipeline parsing
+- `src/metadata.jl` — `MetadataV2` struct, type string encoding (`typestr`), fill value encoding/decoding, `Metadata()` constructors for V2; dispatches V3 to `metadata3.jl`
+- `src/metadata3.jl` — All V3-specific code: `MetadataV3` struct and constructors, `Metadata3(dict)` parsing, `lower3` serialization, codec pipeline parsing, `get_order`, `JSON.lower(::MetadataV3)`
 - `src/chunkencoding.jl` — `ChunkEncoding` struct (separator char + prefix bool), `citostring()` for chunk path generation. V2 default: `'.'` separator, no prefix. V3 default: `'/'` separator, `"c/"` prefix
 - `src/ZArray.jl` — Core array type, `readblock!`/`writeblock!` (DiskArrays interface), `zcreate`, `zzeros`, `zopen`, resize/append
 - `src/ZGroup.jl` — Hierarchical group support, `zopen`, `zgroup`, auto-detection of zarr version via `ZarrFormat(store, path)`
 - `src/Compressors/` — `Compressor` abstract type, `compressortypes` registry (keyed by spec name string), implementations: `blosc.jl`, `zlib.jl`, `zstd.jl`, `v3.jl` (v3 wrapper `Compressor_v3{C}`)
-- `src/Codecs/` — V3 codec system (`Codec` abstract type), `V3/V3.jl` defines `V3Codec{In,Out}` with `BloscCodec`, `BytesCodec`, `CRC32cCodec`, `GzipCodec`, `ShardingCodec`, `TransposeCodec`
+- `src/Codecs/` — V3 codec system (`Codec` abstract type), `V3/V3.jl` defines `V3Codec{In,Out}` with `BloscV3Codec`, `BytesCodec`, `CRC32cV3Codec`, `GzipV3Codec`, `ShardingCodec`, `TransposeCodec`, `ZstdV3Codec`
 - `src/Filters/` — `Filter{T,TENC}` abstract type, implementations for variable-length arrays, strings, Fletcher32, shuffle, delta, quantize
 - `src/Storage/Storage.jl` — `AbstractStore` interface, I/O strategy (`SequentialRead`/`ConcurrentRead`), chunk read/write/delete helpers, metadata read/write dispatched on `ZarrFormat{2}` vs `ZarrFormat{3}`
 
@@ -75,13 +72,29 @@ New store backends must implement: `getindex(store, key)::Union{Vector{UInt8}, N
 ### V3 Status (Experimental)
 
 V3 support is under active development. Current state:
-- Metadata parsing/serialization works for basic arrays with `bytes`, `blosc`, `gzip`, `zstd`, `transpose` codecs
-- Sharding codec (`sharding_indexed`) has struct definitions and encode/decode logic in `Codecs/V3/V3.jl` but is not yet wired into the main read/write pipeline (throws `ArgumentError` when encountered)
-- `crc32c` codec has encode/decode implementations but also throws when encountered in metadata parsing
+
+**Codecs (`src/Codecs/V3/V3.jl`)**
+- `BytesCodec` — stores `endian::Symbol` (`:little` or `:big`); encode/decode byte-swap elements when the target endian differs from the system byte order (`Base.ENDIAN_BOM`). Default is `:little`.
+- `TransposeCodec` — array→array permutation codec (renamed from `TransposeCodecImpl`)
+- `BloscV3Codec` — shuffle stored as integer (0=noshuffle, 1=shuffle, 2=bitshuffle); parsed from spec strings (`"noshuffle"`, `"shuffle"`, `"bitshuffle"`) and serialized back to strings
+- Sharding codec (`sharding_indexed`) has struct definitions and encode/decode logic but is not yet wired into the main read/write pipeline (throws `ArgumentError` when encountered)
+- `crc32c` codec has encode/decode implementations and is parseable from metadata
+
+**Metadata (`src/metadata3.jl`)**
+- `MetadataV3{T,N,P}` has no `order` field; storage order is encoded in the pipeline via `TransposeCodec`
+- Two constructors:
+  - Primary inner constructor: `MetadataV3{T,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding)` — takes a pre-built pipeline, no `order` argument
+  - Convenience outer constructor: `MetadataV3{T,N}(...; order, endian, compressor, chunk_encoding)` — builds the pipeline from `order` (→ `TransposeCodec`), `endian` (→ `BytesCodec`), and `compressor` (→ bytes→bytes codecs)
+- `get_order(md::MetadataV3)` — derives `'C'`/`'F'` from the pipeline; throws `ArgumentError` when order is ambiguous: multiple array→array codecs, an unrecognized array→array codec, or a `TransposeCodec` with a permutation that is neither the identity (C) nor the full reversal (F)
+- `get_order(md::MetadataV2)` — returns `md.order`
+- `==` for `MetadataV3` compares `pipeline` (not `order`)
+
+**Other V3 status**
 - V3 groups work via `zarr.json` with `node_type: "group"`
-- Test fixtures exist in `test/v3_julia.jl` (Julia-generated) and `test/v3_python.jl` (Python-generated via PythonCall), but reference removed `FormattedStore`
 - `zgroup()` currently always creates v2 groups (hardcoded `DV` format)
 - Filters are not implemented for v3 (`filters = nothing` hardcoded in `Metadata3`)
+- Test fixtures: `test/v3_julia.jl` (Julia-generated), `test/v3_python.jl` (Python-generated via PythonCall)
+- V3 codec tests are in `test/v3_codecs.jl`
 
 ### Extension System
 
