@@ -22,12 +22,12 @@ function typestr3(s::AbstractString, codecs=nothing)
         if startswith(s, "r")
             num_bits = tryparse(Int, s[2:end])
             if isnothing(num_bits)
-                raise(ArgumentError("$s is not a known type"))
+                throw(ArgumentError("$s is not a known type"))
             end
             if mod(num_bits, 8) == 0
                 return NTuple{num_bits÷8,UInt8}
             else
-                raise(ArgumentError("$s must describe a raw type with bit size that is a multiple of 8 bits"))
+                throw(ArgumentError("$s must describe a raw type with bit size that is a multiple of 8 bits"))
             end
         end
     end
