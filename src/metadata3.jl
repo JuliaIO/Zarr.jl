@@ -51,17 +51,50 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline} <: AbstractMetadata{T,N}
     dtype::String  # data_type in v3
     pipeline::P
     fill_value::Union{T, Nothing}
-    order::Char
     chunk_encoding::ChunkEncoding
-    function MetadataV3{T2,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, order, chunk_encoding) where {T2,N,P}
+    function MetadataV3{T2,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding) where {T2,N,P}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
-        new{T2,N,P}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, order, chunk_encoding)
+        new{T2,N,P}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_encoding)
     end
 end
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
+
+"""
+Convenience constructor for MetadataV3 that builds the codec pipeline from
+`order` (translated to a TransposeCodec), `endian` (translated to a BytesCodec),
+and `compressor` (translated to bytes->bytes codecs).
+"""
+function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::NTuple{N,Int},
+        dtype::String, fill_value;
+        order::Char='C',
+        endian::Symbol=:little,
+        compressor=BloscCompressor(),
+        chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
+    ) where {T2, N}
+    T_base = Base.nonmissingtype(T2)
+    array_array_codecs = if order == 'F'
+        (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
+    else
+        ()
+    end
+    array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
+    bytes_bytes_codecs = if compressor isa NoCompressor
+        ()
+    elseif compressor isa BloscCompressor
+        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, sizeof(T_base)),)
+    elseif compressor isa ZlibCompressor
+        (Codecs.V3Codecs.GzipV3Codec(compressor.config.level),)
+    elseif compressor isa ZstdCompressor
+        (Codecs.V3Codecs.ZstdV3Codec(compressor.config.compressionLevel),)
+    else
+        throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
+    end
+    pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
+    return MetadataV3{T2,N,typeof(pipeline)}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding)
+end
 
 function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.zarr_format == m2.zarr_format &&
@@ -70,9 +103,52 @@ function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.chunks == m2.chunks &&
   m1.dtype == m2.dtype &&
   m1.fill_value == m2.fill_value &&
-  m1.order == m2.order &&
+  m1.pipeline == m2.pipeline &&
   m1.chunk_encoding == m2.chunk_encoding
 end
+
+"""
+Derive the storage order ('C' or 'F') from the codec pipeline of a MetadataV3.
+
+Throws `ArgumentError` if the order cannot be unambiguously determined, which
+occurs when:
+- the pipeline contains more than one array->array codec,
+- an array->array codec is not a `TransposeCodec` (unknown effect on order), or
+- the `TransposeCodec` permutation is neither the identity (C order) nor the
+  full reversal (F order).
+"""
+function get_order(md::MetadataV3)
+    array_array = md.pipeline.array_array
+    if length(array_array) == 0
+        return 'C'
+    end
+    if length(array_array) > 1
+        throw(ArgumentError(
+            "Cannot determine storage order: pipeline has $(length(array_array)) " *
+            "array->array codecs; composed permutations yield an indeterminate order"
+        ))
+    end
+    codec = only(array_array)
+    if !(codec isa Codecs.V3Codecs.TransposeCodec)
+        throw(ArgumentError(
+            "Cannot determine storage order: unrecognized array->array codec $(typeof(codec))"
+        ))
+    end
+    N = ndims(md)
+    c_perm  = ntuple(identity, N)
+    f_perm  = ntuple(i -> N - i + 1, N)
+    if codec.order == c_perm
+        return 'C'
+    elseif codec.order == f_perm
+        return 'F'
+    else
+        throw(ArgumentError(
+            "Cannot determine storage order: TransposeCodec permutation $(codec.order) " *
+            "is neither C order $c_perm nor F order $f_perm"
+        ))
+    end
+end
+get_order(md::MetadataV2) = md.order
 
 function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, ("zarr_format", "node_type"))
@@ -97,7 +173,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         end
 
         group_pipeline = V3Pipeline((), Codecs.V3Codecs.BytesCodec(), ())
-        return MetadataV3{Int,0,typeof(group_pipeline)}(zarr_format, node_type, (), (), "", group_pipeline, 0, 'C', ChunkEncoding('/', true))
+        return MetadataV3{Int,0,typeof(group_pipeline)}(zarr_format, node_type, (), (), "", group_pipeline, 0, ChunkEncoding('/', true))
     end
 
     # Array keys
@@ -244,7 +320,6 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         data_type,
         pipeline,
         fv,
-        order,
         chunk_encoding,
     )
 end
@@ -255,6 +330,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         compressor=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
+        endian::Symbol=:little,
         filters=nothing,
         fill_as_missing = false,
         dimension_separator::Char = '/'
@@ -264,32 +340,17 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     if fill_value === nothing
         fill_value = zero(T)
     end
-
-    # Build V3Pipeline
-    array_bytes_codec = Codecs.V3Codecs.BytesCodec()
-    bytes_bytes_codecs = if compressor isa NoCompressor
-        ()
-    elseif compressor isa BloscCompressor
-        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, sizeof(T)),)
-    elseif compressor isa ZlibCompressor
-        (Codecs.V3Codecs.GzipV3Codec(compressor.config.level),)
-    elseif compressor isa ZstdCompressor
-        (Codecs.V3Codecs.ZstdV3Codec(compressor.config.compressionLevel),)
-    else
-        throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
-    end
-    pipeline = V3Pipeline((), array_bytes_codec, bytes_bytes_codecs)
-
-    MetadataV3{T2,N,typeof(pipeline)}(
+    return MetadataV3{T2, N}(
         3,
         node_type,
         size(A),
         chunks,
         typestr3(eltype(A)),
-        pipeline,
-        fill_value,
-        order,
-        ChunkEncoding(dimension_separator, true)
+        fill_value;
+        order=order,
+        endian=endian,
+        compressor=compressor,
+        chunk_encoding=ChunkEncoding(dimension_separator, true)
     )
 end
 
@@ -379,6 +440,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         compressor::C=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
+        endian::Symbol=:little,
         filters::F=nothing,
         fill_as_missing = false,
         chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
@@ -388,6 +450,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         compressor=compressor,
         fill_value=fill_value,
         order=order,
+        endian=endian,
         filters=filters,
         fill_as_missing=fill_as_missing,
         dimension_separator=chunk_encoding.sep

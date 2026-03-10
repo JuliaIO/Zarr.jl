@@ -46,6 +46,44 @@ end
     @test decoded_f == data
 end
 
+@testset "get_order" begin
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+
+    # No array->array codecs → 'C'
+    p = Zarr.V3Pipeline((), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test Zarr.get_order(md) == 'C'
+
+    # Single TransposeCodec with identity permutation → 'C'
+    tc_c = Zarr.Codecs.V3Codecs.TransposeCodec((1,2,3))
+    p = Zarr.V3Pipeline((tc_c,), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test Zarr.get_order(md) == 'C'
+
+    # Single TransposeCodec with reverse permutation → 'F'
+    tc_f = Zarr.Codecs.V3Codecs.TransposeCodec((3,2,1))
+    p = Zarr.V3Pipeline((tc_f,), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test Zarr.get_order(md) == 'F'
+
+    # Single TransposeCodec with arbitrary (non-C, non-F) permutation → ArgumentError
+    tc_other = Zarr.Codecs.V3Codecs.TransposeCodec((2,1,3))
+    p = Zarr.V3Pipeline((tc_other,), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test_throws ArgumentError Zarr.get_order(md)
+
+    # Multiple array->array codecs → ArgumentError
+    p = Zarr.V3Pipeline((tc_f, tc_f), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test_throws ArgumentError Zarr.get_order(md)
+
+    # Unrecognized array->array codec type → ArgumentError
+    struct _FakeCodec <: Zarr.Codecs.V3Codecs.V3Codec{:array,:array} end
+    p = Zarr.V3Pipeline((_FakeCodec(),), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    @test_throws ArgumentError Zarr.get_order(md)
+end
+
 @testset "GzipV3Codec" begin
     codec = Zarr.Codecs.V3Codecs.GzipV3Codec(6)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
@@ -137,7 +175,7 @@ end
         bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec(),
         bad_pipeline = Zarr.V3Pipeline((), bytes_codec, (bad_blosc,))
         bad_md = Zarr.MetadataV3{Int32,1,typeof(bad_pipeline)}(
-            3, "array", (4,), (4,), "int32", bad_pipeline, Int32(0), 'C',
+            3, "array", (4,), (4,), "int32", bad_pipeline, Int32(0),
             Zarr.ChunkEncoding('/', true)
         )
         @test_throws ArgumentError JSON.lower(bad_md)

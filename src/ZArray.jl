@@ -100,7 +100,7 @@ function zinfo(io::IO,z::ZArray)
   "Data type" => eltype(z),
   "Shape" => size(z),
   "Chunk Shape" => z.metadata.chunks,
-  "Order" => z.metadata.order,
+  "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,
   "Compressor" => z.metadata isa MetadataV2 ? z.metadata.compressor : get_pipeline(z.metadata),
   "Filters" => z.metadata isa MetadataV2 ? z.metadata.filters : nothing,
