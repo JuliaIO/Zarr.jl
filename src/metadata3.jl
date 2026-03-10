@@ -42,6 +42,38 @@ function check_keys(d::AbstractDict, keys)
     end
 end
 
+"""Metadata for Zarr version 3 arrays"""
+struct MetadataV3{T,N,P<:AbstractCodecPipeline} <: AbstractMetadata{T,N}
+    zarr_format::Int
+    node_type::String
+    shape::Base.RefValue{NTuple{N, Int}}
+    chunks::NTuple{N, Int}
+    dtype::String  # data_type in v3
+    pipeline::P
+    fill_value::Union{T, Nothing}
+    order::Char
+    chunk_encoding::ChunkEncoding
+    function MetadataV3{T2,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, order, chunk_encoding) where {T2,N,P}
+        zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
+        #Do some sanity checks to make sure we have a sane array
+        any(<(0), shape) && throw(ArgumentError("Size must be positive"))
+        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+        new{T2,N,P}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, order, chunk_encoding)
+    end
+end
+zarr_format(::MetadataV3) = ZarrFormat(Val(3))
+
+function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
+  m1.zarr_format == m2.zarr_format &&
+  m1.node_type == m2.node_type &&
+  m1.shape[] == m2.shape[] &&
+  m1.chunks == m2.chunks &&
+  m1.dtype == m2.dtype &&
+  m1.fill_value == m2.fill_value &&
+  m1.order == m2.order &&
+  m1.chunk_encoding == m2.chunk_encoding
+end
+
 function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, ("zarr_format", "node_type"))
 
@@ -340,4 +372,33 @@ function lower3(md::MetadataV3{T}) where T
         "fill_value" => fill_value_encoding(md.fill_value),
         "codecs" => codecs
     )
+end
+
+function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
+        node_type::String="array",
+        compressor::C=BloscCompressor(),
+        fill_value::Union{T, Nothing}=nothing,
+        order::Char='C',
+        filters::F=nothing,
+        fill_as_missing = false,
+        chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
+    ) where {T, N, C, F}
+    return Metadata3(A, chunks;
+        node_type=node_type,
+        compressor=compressor,
+        fill_value=fill_value,
+        order=order,
+        filters=filters,
+        fill_as_missing=fill_as_missing,
+        dimension_separator=chunk_encoding.sep
+    )
+end
+
+# V3 constructor from Dict - delegate to Metadata3
+function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{3})
+    return Metadata3(d, fill_as_missing)
+end
+
+function JSON.lower(md::MetadataV3)
+    return lower3(md)
 end
