@@ -533,9 +533,7 @@ struct TransposeCodec{N} <: V3Codec{:array, :array}
 end
 name(::TransposeCodec) = "transpose"
 
-# ============================================================
 # codec_encode / codec_decode methods for V3 codecs
-# ============================================================
 
 # --- BytesCodec (array -> bytes) ---
 
