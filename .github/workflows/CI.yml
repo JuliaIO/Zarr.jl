@@ -42,7 +42,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
             rm -f test/Manifest.toml
