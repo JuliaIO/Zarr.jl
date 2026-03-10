@@ -241,6 +241,29 @@ end
     @test g2["sub"].attrs["num"] == 42
 end
 
+@testset "CRC32c end-to-end ZArray" begin
+    crc32c_codec = Zarr.Codecs.V3Codecs.CRC32cV3Codec()
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((), bytes_codec, (crc32c_codec,))
+    md = Zarr.MetadataV3{Int32,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int32", pipeline, Int32(0),
+        Zarr.ChunkEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+    data = Int32[10, 20, 30, 40]
+    z[:] = data
+    @test z[:] == data
+
+    # CRC32c checksum corruption is detected on decode
+    # Corrupt the stored bytes and verify an error is thrown
+    key = only(keys(store.a))
+    stored = copy(store.a[key])
+    stored[end] = stored[end] ⊻ 0xFF   # flip bits in the checksum
+    store.a[key] = stored
+    @test_throws Exception z[:]
+end
+
 @testset "V2Pipeline encode/decode round-trip" begin
     comp = Zarr.BloscCompressor()
     pipeline = Zarr.V2Pipeline(comp, nothing)
