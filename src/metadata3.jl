@@ -238,7 +238,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     bytes_bytes_codecs = if compressor isa NoCompressor
         ()
     elseif compressor isa BloscCompressor
-        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, 0),)
+        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, sizeof(T)),)
     elseif compressor isa ZlibCompressor
         (Codecs.V3Codecs.GzipV3Codec(compressor.config.level),)
     elseif compressor isa ZstdCompressor
