@@ -44,6 +44,86 @@ end
     @test decoded == data
 end
 
+@testset "BloscV3Codec shuffle parameter" begin
+    data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
+
+    # --- encode/decode round-trip for each shuffle mode ---
+    for (shuffle_str, shuffle_int) in (("noshuffle", 0), ("shuffle", 1), ("bitshuffle", 2))
+        codec = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, shuffle_int, 0, 4)
+        encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
+        @test encoded isa Vector{UInt8}
+        decoded = Zarr.Codecs.V3Codecs.codec_decode(codec, encoded)
+        @test decoded == data
+    end
+
+    # --- metadata parsing: shuffle string -> integer ---
+    for (shuffle_str, expected_int) in (("noshuffle", 0), ("shuffle", 1), ("bitshuffle", 2))
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"$shuffle_str","blocksize":0,"typesize":4}}
+            ]}"""
+        md = Zarr.Metadata(json_str, false)
+        pipeline = Zarr.get_pipeline(md)
+        blosc = pipeline.bytes_bytes[1]
+        @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
+        @test blosc.shuffle == expected_int
+    end
+
+    # --- metadata parsing: integer shuffle passthrough ---
+    for (shuffle_int, expected_int) in ((0, 0), (1, 1), (2, 2))
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":$shuffle_int,"blocksize":0,"typesize":4}}
+            ]}"""
+        md = Zarr.Metadata(json_str, false)
+        pipeline = Zarr.get_pipeline(md)
+        blosc = pipeline.bytes_bytes[1]
+        @test blosc.shuffle == expected_int
+    end
+
+    # --- metadata parsing: unknown shuffle string raises ArgumentError ---
+    bad_json = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"bytes","configuration":{"endian":"little"}},
+            {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"invalid","blocksize":0,"typesize":4}}
+        ]}"""
+    @test_throws ArgumentError Zarr.Metadata(bad_json, false)
+
+    # --- serialization: integer -> shuffle string ---
+    for (shuffle_int, expected_str) in ((0, "noshuffle"), (1, "shuffle"), (2, "bitshuffle"))
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":$shuffle_int,"blocksize":0,"typesize":4}}
+            ]}"""
+        md = Zarr.Metadata(json_str, false)
+        lowered = JSON.lower(md)
+        blosc_config = lowered["codecs"][2]["configuration"]
+        @test blosc_config["shuffle"] == expected_str
+    end
+
+    # --- serialization: unknown shuffle integer raises ArgumentError via lower3 ---
+    let bad_blosc = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, 99, 0, 4),
+        bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec(),
+        bad_pipeline = Zarr.V3Pipeline((), bytes_codec, (bad_blosc,))
+        bad_md = Zarr.MetadataV3{Int32,1,typeof(bad_pipeline)}(
+            3, "array", (4,), (4,), "int32", bad_pipeline, Int32(0), 'C',
+            Zarr.ChunkEncoding('/', true)
+        )
+        @test_throws ArgumentError JSON.lower(bad_md)
+    end
+end
+
 @testset "ZstdV3Codec" begin
     codec = Zarr.Codecs.V3Codecs.ZstdV3Codec(3)
     data = reinterpret(UInt8, Float64[1.5, 2.5, 3.5, 4.5]) |> collect
