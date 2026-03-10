@@ -38,6 +38,11 @@ name(::BloscCodec) = "blosc"
 
 struct BytesCodec <: V3Codec{:array, :bytes}
     endian::Symbol  # :little or :big
+    function BytesCodec(endian::Symbol)
+        endian ∈ (:little, :big) ||
+            throw(ArgumentError("BytesCodec endian must be :little or :big, got :$endian"))
+        new(endian)
+    end
 end
 BytesCodec() = BytesCodec(:little)
 name(::BytesCodec) = "bytes"

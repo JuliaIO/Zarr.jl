@@ -200,6 +200,16 @@ end
     @test decoded == data
 end
 
+@testset "BytesCodec endian validation" begin
+    # Valid endian values are accepted
+    @test Zarr.Codecs.V3Codecs.BytesCodec(:little).endian == :little
+    @test Zarr.Codecs.V3Codecs.BytesCodec(:big).endian == :big
+
+    # Invalid endian value throws ArgumentError
+    @test_throws ArgumentError Zarr.Codecs.V3Codecs.BytesCodec(:invalid)
+    @test_throws ArgumentError Zarr.Codecs.V3Codecs.BytesCodec(:native)
+end
+
 @testset "V2Pipeline encode/decode round-trip" begin
     comp = Zarr.BloscCompressor()
     pipeline = Zarr.V2Pipeline(comp, nothing)
