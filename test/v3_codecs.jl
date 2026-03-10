@@ -375,6 +375,176 @@ end
     @test md.node_type == "group"
 end
 
+@testset "typestr3 raw types" begin
+    @test Zarr.typestr3("r8")  == NTuple{1,UInt8}
+    @test Zarr.typestr3("r16") == NTuple{2,UInt8}
+    @test Zarr.typestr3("r64") == NTuple{8,UInt8}
+    @test_throws ArgumentError Zarr.typestr3("rxyz")   # non-numeric bits
+    @test_throws ArgumentError Zarr.typestr3("r7")     # not a multiple of 8
+end
+
+@testset "V3 Metadata parsing error paths" begin
+    base = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+
+    # Unknown node_type
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"unknown"}""", false)
+
+    # Extra key in group metadata
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"group","bad_key":1}""", false)
+
+    # Missing required key (shape)
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Unknown chunk_grid name
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"unknown","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Shape/chunk rank mismatch
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Unknown chunk_key_encoding name
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"unknown"},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Unknown codec
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},{"name":"unknown_codec"}]}""", false)
+
+    # Deprecated string transpose order "C"
+    @test_logs (:warn,) Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":"C"}},
+        {"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Deprecated string transpose order "F"
+    @test_logs (:warn,) Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":"F"}},
+        {"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
+    # Unknown string transpose order
+    @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":"X"}},
+        {"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+end
+
+@testset "V3 Metadata parsing extended codecs" begin
+    # zstd codec parses correctly
+    json_zstd = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},
+        {"name":"zstd","configuration":{"level":3}}]}"""
+    md = Zarr.Metadata(json_zstd, false)
+    pipeline = Zarr.get_pipeline(md)
+    @test pipeline.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+    @test pipeline.bytes_bytes[1].level == 3
+
+    # crc32c codec parses correctly
+    json_crc = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},
+        {"name":"crc32c"}]}"""
+    md = Zarr.Metadata(json_crc, false)
+    pipeline = Zarr.get_pipeline(md)
+    @test pipeline.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.CRC32cV3Codec
+
+    # F-order from numeric reverse permutation sets order='F'
+    json_f = """{"zarr_format":3,"node_type":"array","shape":[3,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[3,4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":[1,0]}},
+        {"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md = Zarr.Metadata(json_f, false)
+    @test Zarr.get_order(md) == 'F'
+
+    # v2 chunk_key_encoding (prefix=false, separator='.')
+    json_v2enc = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"v2","configuration":{"separator":"."}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md = Zarr.Metadata(json_v2enc, false)
+    @test md.chunk_encoding.prefix == false
+    @test md.chunk_encoding.sep == '.'
+end
+
+@testset "V3 lower3 extended codecs" begin
+    # ZstdV3Codec serialization
+    json_zstd = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},
+        {"name":"zstd","configuration":{"level":5}}]}"""
+    md = Zarr.Metadata(json_zstd, false)
+    lowered = JSON.lower(md)
+    @test lowered["codecs"][2]["name"] == "zstd"
+    @test lowered["codecs"][2]["configuration"]["level"] == 5
+
+    # CRC32cV3Codec serialization
+    json_crc = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}},
+        {"name":"crc32c"}]}"""
+    md = Zarr.Metadata(json_crc, false)
+    lowered = JSON.lower(md)
+    @test lowered["codecs"][2]["name"] == "crc32c"
+
+    # TransposeCodec serialization
+    json_trans = """{"zarr_format":3,"node_type":"array","shape":[3,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[3,4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[{"name":"transpose","configuration":{"order":[1,0]}},
+        {"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md = Zarr.Metadata(json_trans, false)
+    lowered = JSON.lower(md)
+    @test lowered["codecs"][1]["name"] == "transpose"
+    @test lowered["codecs"][1]["configuration"]["order"] == [1, 0]
+end
+
+@testset "MetadataV3 convenience constructor" begin
+    # order='F' creates a TransposeCodec
+    data = zeros(Int32, 4, 4)
+    md = Zarr.Metadata3(data, (4,4); order='F')
+    @test Zarr.get_order(md) == 'F'
+    pipeline = Zarr.get_pipeline(md)
+    @test length(pipeline.array_array) == 1
+    @test pipeline.array_array[1] isa Zarr.Codecs.V3Codecs.TransposeCodec
+
+    # ZstdCompressor translates to ZstdV3Codec
+    md_zstd = Zarr.Metadata3(data, (4,4); compressor=Zarr.ZstdCompressor())
+    pipeline_zstd = Zarr.get_pipeline(md_zstd)
+    @test pipeline_zstd.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+
+    # fill_value=nothing defaults to zero(T)
+    md_nofv = Zarr.Metadata3(data, (4,4))
+    @test md_nofv.fill_value == Int32(0)
+
+    # Unsupported compressor throws ArgumentError
+    struct _BadCompressor <: Zarr.Compressor end
+    @test_throws ArgumentError Zarr.Metadata3(data, (4,4); compressor=_BadCompressor())
+end
+
 @testset "V3 ZArray round-trip" begin
     z = zcreate(Int32, 8; zarr_format=3, chunks=(4,), fill_value=Int32(0))
     z[:] = Int32.(1:8)
