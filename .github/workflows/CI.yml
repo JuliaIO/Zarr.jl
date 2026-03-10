@@ -35,8 +35,10 @@ jobs:
         env:
           PYTHON:
       - name: Generate Julia and Python v3 fixtures
+        env:
+          PYTHON:
         run: |
-          julia --project=test -e 'using Pkg; Pkg.develop(url="."); Pkg.resolve(); Pkg.instantiate()'
+          julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.resolve(); Pkg.instantiate()'
           julia --project=test test/v3_julia.jl
           julia --project=test test/v3_python.jl
           rm test/Manifest.toml
