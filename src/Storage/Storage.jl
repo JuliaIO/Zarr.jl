@@ -110,7 +110,7 @@ function getattrs(::ZarrFormat{3}, s::AbstractStore, p)
   if md === nothing
     error("zarr.json not found")
   else
-    md = JSON.parse(replace(String(maybecopy(md)), ": NaN," => ": \"NaN\","))
+    md = JSON.parse(replace(String(maybecopy(md)), ": NaN," => ": \"NaN\","); dicttype=Dict{String,Any})
     return get(md, "attributes", Dict{String,Any}())
   end
 end
@@ -156,12 +156,28 @@ is_zarr2(s::AbstractStore, p) = is_zarray(ZarrFormat(Val(2)), s, p) || is_zgroup
 
 is_zgroup(::ZarrFormat{2}, s::AbstractStore, p) = isinitialized(s, _concatpath(p, ".zgroup"))
 is_zarray(::ZarrFormat{2}, s::AbstractStore, p) = isinitialized(s, _concatpath(p, ".zarray"))
-is_zgroup(::ZarrFormat{3}, s::AbstractStore, p, metadata=getmetadata(s, p, false)) =
-  isinitialized(s, _concatpath(p, "zarr.json")) &&
-  metadata.node_type == "group"
-is_zarray(::ZarrFormat{3}, s::AbstractStore, p, metadata=getmetadata(s, p, false)) =
-  isinitialized(s, _concatpath(p, "zarr.json")) &&
-  metadata.node_type == "array"
+function is_zgroup(::ZarrFormat{3}, s::AbstractStore, p)
+  isinitialized(s, _concatpath(p, "zarr.json")) || return false
+  try
+    metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
+    metadata.node_type == "group"
+  catch e
+    e isa ArgumentError || rethrow()
+    @warn "Skipping $p: $(e.msg)"
+    false
+  end
+end
+function is_zarray(::ZarrFormat{3}, s::AbstractStore, p)
+  isinitialized(s, _concatpath(p, "zarr.json")) || return false
+  try
+    metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
+    metadata.node_type == "array"
+  catch e
+    e isa ArgumentError || rethrow()
+    @warn "Skipping $p: $(e.msg)"
+    false
+  end
+end
 
 
 isinitialized(s::AbstractStore, p, i::AbstractString) = isinitialized(s, _concatpath(p, i))
@@ -233,7 +249,7 @@ function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e:
   for _ in 1:length(i)
       ii,data = take!(c)
       if data === nothing
-        if isinitialized(s,p,ii)
+        if store_isinitialized(s, p, ii, e)
         store_deletechunk(s, p, ii, e)
         end
       else
@@ -248,7 +264,7 @@ function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e
   asyncmap(i,ntasks = ntasks) do _
       ii,data = take!(c)
       if data === nothing
-        if isinitialized(s,ii)
+        if store_isinitialized(s, p, ii, e)
         store_deletechunk(s, p, ii, e)
         end
       else

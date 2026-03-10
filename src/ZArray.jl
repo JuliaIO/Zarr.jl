@@ -100,10 +100,10 @@ function zinfo(io::IO,z::ZArray)
   "Data type" => eltype(z),
   "Shape" => size(z),
   "Chunk Shape" => z.metadata.chunks,
-  "Order" => z.metadata.order,
+  "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,
-  "Compressor" => z.metadata.compressor,
-  "Filters" => z.metadata.filters, 
+  "Compressor" => z.metadata isa MetadataV2 ? z.metadata.compressor : get_pipeline(z.metadata),
+  "Filters" => z.metadata isa MetadataV2 ? z.metadata.filters : nothing,
   "Store type" => z.storage,
   "No. bytes"  => nobytes(z),
   "No. bytes stored" => storagesize(z),
@@ -278,7 +278,7 @@ function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
     end
     fill!(a, z.metadata.fill_value)
   else
-    zuncompress!(a, curchunk, z.metadata.compressor, z.metadata.filters)
+    pipeline_decode!(get_pipeline(z.metadata), a, curchunk)
   end
   a
 end
@@ -299,13 +299,7 @@ end
 
 function compress_raw(a,z)
   length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
-  if !all(isequal(z.metadata.fill_value),a)
-    dtemp = UInt8[]
-    zcompress!(dtemp, a, z.metadata.compressor, z.metadata.filters)
-    dtemp
-  else
-    nothing
-  end
+  pipeline_encode(get_pipeline(z.metadata), a, z.metadata.fill_value)
 end
 
 
@@ -436,8 +430,10 @@ function zzeros(T,dims...;kwargs...)
   as = zeros(T, z.metadata.chunks...)
   data_encoded = compress_raw(as,z)
   p = z.path
-  for i in chunkindices(z)
-    store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
+  if data_encoded !== nothing
+    for i in chunkindices(z)
+      store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
+    end
   end
   z
 end

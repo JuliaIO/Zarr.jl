@@ -283,4 +283,6 @@ include("Filters.jl")
 
 include("python.jl")
 
+include("v3_codecs.jl")
+
 end  # @testset "Zarr"

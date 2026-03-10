@@ -30,7 +30,7 @@ function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=fals
     if is_zarray(zv, s, subpath)
       m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       arrays[dshort] = m
-    elseif is_zgroup(s, subpath)
+    elseif is_zgroup(zv, s, subpath)
       m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       groups[dshort] = m
     end
@@ -154,27 +154,39 @@ end
 Create a new zgroup in the store `s`
 """
 function zgroup(s::AbstractStore, path::String="", zarr_format=ZarrFormat(2); attrs=Dict(), indent_json::Bool=false)
-  d = Dict("zarr_format" => Int(DV))
+    zv = zarr_format isa ZarrFormat ? zarr_format : ZarrFormat(zarr_format)
     isemptysub(s, path) || error("Store is not empty")
-    b = IOBuffer()
-    
-    if indent_json
-      JSON.print(b,d,4)
-    else
-      JSON.print(b,d)
-    end
+    write_group_metadata(zv, s, path, attrs; indent_json=indent_json)
+    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs, true)
+end
 
-    s[path,".zgroup"]=take!(b)
-  writeattrs(DV, s, path, attrs, indent_json=indent_json)
-    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs,true)
+function write_group_metadata(::ZarrFormat{2}, s::AbstractStore, path, attrs; indent_json::Bool=false)
+    d = Dict("zarr_format" => 2)
+    b = IOBuffer()
+    indent_json ? JSON.print(b, d, 4) : JSON.print(b, d)
+    s[path, ".zgroup"] = take!(b)
+    writeattrs(ZarrFormat(Val(2)), s, path, attrs, indent_json=indent_json)
+end
+
+function write_group_metadata(::ZarrFormat{3}, s::AbstractStore, path, attrs; indent_json::Bool=false)
+    d = Dict{String,Any}("zarr_format" => 3, "node_type" => "group")
+    if !isempty(attrs)
+        d["attributes"] = attrs
+    end
+    b = IOBuffer()
+    indent_json ? JSON.print(b, d, 4) : JSON.print(b, d)
+    s[path, "zarr.json"] = take!(b)
 end
 
 zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 
 "Create a subgroup of the group g"
-function zgroup(g::ZGroup, name; attrs=Dict()) 
-  g.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
-  g.groups[name] = zgroup(g.storage,_concatpath(g.path,name),attrs=attrs)
+function zgroup(g::ZGroup, name; attrs=Dict())
+    g.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
+    subpath = _concatpath(g.path, name)
+    # Detect format from parent
+    zv = is_zarr3(g.storage, g.path) ? ZarrFormat(3) : ZarrFormat(2)
+    g.groups[name] = zgroup(g.storage, subpath, zv; attrs=attrs)
 end
 
 "Create a new subarray of the group g"
