@@ -4,3 +4,4 @@ docs/build
 .CondaPkg
 .vscode
 test/CondaPkg.toml
+*.cov
