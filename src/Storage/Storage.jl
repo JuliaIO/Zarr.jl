@@ -158,13 +158,25 @@ is_zgroup(::ZarrFormat{2}, s::AbstractStore, p) = isinitialized(s, _concatpath(p
 is_zarray(::ZarrFormat{2}, s::AbstractStore, p) = isinitialized(s, _concatpath(p, ".zarray"))
 function is_zgroup(::ZarrFormat{3}, s::AbstractStore, p)
   isinitialized(s, _concatpath(p, "zarr.json")) || return false
-  metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
-  metadata.node_type == "group"
+  try
+    metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
+    metadata.node_type == "group"
+  catch e
+    e isa ArgumentError || rethrow()
+    @warn "Skipping $p: $(e.msg)"
+    false
+  end
 end
 function is_zarray(::ZarrFormat{3}, s::AbstractStore, p)
   isinitialized(s, _concatpath(p, "zarr.json")) || return false
-  metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
-  metadata.node_type == "array"
+  try
+    metadata = getmetadata(ZarrFormat(Val(3)), s, p, false)
+    metadata.node_type == "array"
+  catch e
+    e isa ArgumentError || rethrow()
+    @warn "Skipping $p: $(e.msg)"
+    false
+  end
 end
 
 
