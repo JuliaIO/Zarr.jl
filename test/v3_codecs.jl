@@ -230,6 +230,17 @@ end
     @test_throws ArgumentError Zarr.get_order(z.metadata)
 end
 
+@testset "V3 group attributes round-trip" begin
+    store = Zarr.DictStore()
+    g = zgroup(store, "", Zarr.ZarrFormat(3))
+    zgroup(g, "sub"; attrs=Dict("key" => "val", "num" => 42))
+
+    # Re-open the store and verify attributes are preserved
+    g2 = zopen(store)
+    @test g2["sub"].attrs["key"] == "val"
+    @test g2["sub"].attrs["num"] == 42
+end
+
 @testset "V2Pipeline encode/decode round-trip" begin
     comp = Zarr.BloscCompressor()
     pipeline = Zarr.V2Pipeline(comp, nothing)

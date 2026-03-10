@@ -30,7 +30,7 @@ function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=fals
     if is_zarray(zv, s, subpath)
       m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       arrays[dshort] = m
-    elseif is_zgroup(s, subpath)
+    elseif is_zgroup(zv, s, subpath)
       m = zopen_noerr(s, mode, zv, path=_concatpath(path, dshort), fill_as_missing=fill_as_missing)
       groups[dshort] = m
     end
