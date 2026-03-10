@@ -34,6 +34,10 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
+      - name: Generate Julia v3 fixtures
+        run: julia --project=test test/v3_julia.jl
+      - name: Generate Python v3 fixtures
+        run: julia --project=test test/v3_python.jl
       - uses: julia-actions/julia-runtest@v1
         env:
           PYTHON:
