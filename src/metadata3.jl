@@ -182,11 +182,11 @@ function Metadata3(d::AbstractDict, fill_as_missing)
             end
             push!(array_array_codecs, Codecs.V3Codecs.TransposeCodec(perm))
         elseif codec_name == "bytes"
-            if haskey(config, "endian")
-                config["endian"] == "little" ||
-                    throw(ArgumentError("Zarr.jl currently only supports little endian for the bytes codec"))
-            end
-            array_bytes_codec = Codecs.V3Codecs.BytesCodec()
+            endian_str = get(config, "endian", "little")
+            endian = endian_str == "little" ? :little :
+                     endian_str == "big"    ? :big    :
+                     throw(ArgumentError("Unknown endian value: \"$endian_str\""))
+            array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
         elseif codec_name == "sharding_indexed"
             throw(ArgumentError("Zarr.jl currently does not support the sharding_indexed codec"))
         elseif codec_name == "gzip"
@@ -327,7 +327,7 @@ function lower3(md::MetadataV3{T}) where T
     if p.array_bytes isa Codecs.V3Codecs.BytesCodec
         push!(codecs, Dict{String,Any}(
             "name" => "bytes",
-            "configuration" => Dict{String,Any}("endian" => "little")
+            "configuration" => Dict{String,Any}("endian" => string(p.array_bytes.endian))
         ))
     end
 

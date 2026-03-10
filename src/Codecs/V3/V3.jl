@@ -37,8 +37,13 @@ end
 name(::BloscCodec) = "blosc"
 
 struct BytesCodec <: V3Codec{:array, :bytes}
+    endian::Symbol  # :little or :big
 end
+BytesCodec() = BytesCodec(:little)
 name(::BytesCodec) = "bytes"
+
+const _SYSTEM_LITTLE_ENDIAN = Base.ENDIAN_BOM == 0x04030201
+_needs_bswap(endian::Symbol) = (endian == :little) != _SYSTEM_LITTLE_ENDIAN
 
 struct CRC32cCodec <: V3Codec{:bytes, :bytes}
 end
@@ -537,13 +542,20 @@ name(::TransposeCodec) = "transpose"
 
 # --- BytesCodec (array -> bytes) ---
 
-function codec_encode(::BytesCodec, data::AbstractArray)
-    return reinterpret(UInt8, vec(data)) |> collect
+function codec_encode(c::BytesCodec, data::AbstractArray)
+    if _needs_bswap(c.endian)
+        return reinterpret(UInt8, bswap.(vec(data))) |> collect
+    else
+        return reinterpret(UInt8, vec(data)) |> collect
+    end
 end
 
-function codec_decode(::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}) where {T, N}
-    arr = reinterpret(T, encoded)
-    return reshape(collect(arr), shape)
+function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}) where {T, N}
+    arr = collect(reinterpret(T, encoded))
+    if _needs_bswap(c.endian)
+        arr = bswap.(arr)
+    end
+    return reshape(arr, shape)
 end
 
 # --- TransposeCodec (array -> array) ---

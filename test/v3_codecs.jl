@@ -5,13 +5,33 @@ using JSON
 @testset "V3 Codecs" begin
 
 @testset "BytesCodec" begin
-    codec = Zarr.Codecs.V3Codecs.BytesCodec()
     data = Int32[1, 2, 3, 4]
-    encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
-    @test encoded isa Vector{UInt8}
-    @test length(encoded) == 16
-    decoded = Zarr.Codecs.V3Codecs.codec_decode(codec, encoded, Int32, (4,))
-    @test decoded == data
+
+    # little-endian round-trip
+    codec_le = Zarr.Codecs.V3Codecs.BytesCodec(:little)
+    encoded_le = Zarr.Codecs.V3Codecs.codec_encode(codec_le, data)
+    @test encoded_le isa Vector{UInt8}
+    @test length(encoded_le) == 16
+    decoded_le = Zarr.Codecs.V3Codecs.codec_decode(codec_le, encoded_le, Int32, (4,))
+    @test decoded_le == data
+
+    # big-endian round-trip
+    codec_be = Zarr.Codecs.V3Codecs.BytesCodec(:big)
+    encoded_be = Zarr.Codecs.V3Codecs.codec_encode(codec_be, data)
+    @test encoded_be isa Vector{UInt8}
+    @test length(encoded_be) == 16
+    decoded_be = Zarr.Codecs.V3Codecs.codec_decode(codec_be, encoded_be, Int32, (4,))
+    @test decoded_be == data
+
+    # little and big-endian produce different bytes for multi-byte types
+    @test encoded_le != encoded_be
+
+    # cross-decoding: big-endian bytes decoded with big-endian codec == original
+    decoded_cross = Zarr.Codecs.V3Codecs.codec_decode(codec_le, encoded_be, Int32, (4,))
+    @test decoded_cross != data  # mismatched endian gives wrong values
+
+    # default constructor uses little endian
+    @test Zarr.Codecs.V3Codecs.BytesCodec().endian == :little
 end
 
 @testset "TransposeCodec" begin
@@ -434,9 +454,10 @@ end
             @test z[:, :, :] == expected_3d
         end
 
-        @testset "Big-endian is rejected" begin
-            # Big-endian bytes codec is not yet supported
-            @test_throws ArgumentError zopen(store; path="1d.contiguous.f4.be")
+        @testset "Big-endian float32" begin
+            z = zopen(store; path="1d.contiguous.f4.be")
+            @test eltype(z) == Float32
+            @test z[:] == Float32[-1000.5, 0.0, 1000.5, 0.0]
         end
 
         @testset "Sharded arrays are rejected" begin
