@@ -58,7 +58,12 @@ function pipeline_decode!(p::V3Pipeline, output::AbstractArray, compressed::Vect
         bytes = Codecs.V3Codecs.codec_decode(codec, bytes)
     end
     # Phase 2 reverse: bytes->array codec
-    arr = Codecs.V3Codecs.codec_decode(p.array_bytes, bytes, eltype(output), size(output))
+    # Compute the intermediate shape — the shape data has after array_array encoding
+    intermediate_shape = foldl(
+        (sz, codec) -> Codecs.V3Codecs.encoded_shape(codec, sz),
+        p.array_array; init=size(output)
+    )
+    arr = Codecs.V3Codecs.codec_decode(p.array_bytes, bytes, eltype(output), intermediate_shape)
     # Phase 1 reverse: array->array codecs (reverse order)
     for codec in reverse(collect(p.array_array))
         arr = Codecs.V3Codecs.codec_decode(codec, arr)

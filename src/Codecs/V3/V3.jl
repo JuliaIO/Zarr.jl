@@ -565,6 +565,10 @@ end
 
 # --- TransposeCodec (array -> array) ---
 
+"""Return the shape of the output of `codec_encode(codec, data)` given the input shape."""
+encoded_shape(::V3Codec, sz::NTuple{N,Int}) where {N} = sz
+encoded_shape(c::TransposeCodec, sz::NTuple{N,Int}) where {N} = ntuple(i -> sz[c.order[i]], Val{N}())
+
 function codec_encode(c::TransposeCodec, data::AbstractArray)
     return permutedims(data, c.order)
 end

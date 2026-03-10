@@ -210,6 +210,26 @@ end
     @test_throws ArgumentError Zarr.Codecs.V3Codecs.BytesCodec(:native)
 end
 
+@testset "Non-canonical TransposeCodec in ZArray" begin
+    # A permutation like (2,1,3) is not C or F order — get_order should throw,
+    # but data reads and writes must still work correctly.
+    tc = Zarr.Codecs.V3Codecs.TransposeCodec((2, 1, 3))
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((tc,), bytes_codec, ())
+    md = Zarr.MetadataV3{Int32,3,typeof(pipeline)}(
+        3, "array", (2,3,4), (2,3,4), "int32", pipeline, Int32(0),
+        Zarr.ChunkEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+    data = reshape(Int32.(1:24), 2, 3, 4)
+    z[:,:,:] = data
+    @test z[:,:,:] == data
+
+    # get_order throws for non-canonical permutation
+    @test_throws ArgumentError Zarr.get_order(z.metadata)
+end
+
 @testset "V2Pipeline encode/decode round-trip" begin
     comp = Zarr.BloscCompressor()
     pipeline = Zarr.V2Pipeline(comp, nothing)
