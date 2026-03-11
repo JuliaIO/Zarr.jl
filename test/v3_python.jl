@@ -1,13 +1,15 @@
 # Julia script to generate Zarr v3 fixtures using PythonCall + CondaPkg
 # Adapted from: https://github.com/manzt/zarrita.js/blob/23abb3bee9094aabbe60985626caef2802360963/scripts/generate-v3.py
 
-using CondaPkg
+using CondaPkg: CondaPkg, PkgSpec
 using JSON
 
 # Install Python deps into Conda env used by PythonCall (zarr v3 and numpy)
-CondaPkg.add("numpy")
-CondaPkg.add("zarr"; version="3.*")
-CondaPkg.add("numcodecs")
+CondaPkg.add([
+    PkgSpec("numpy"),
+    PkgSpec("zarr"; version="3.*"),
+    PkgSpec("numcodecs")
+])
 
 using PythonCall
 # Import Python modules
