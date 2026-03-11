@@ -11,7 +11,31 @@ using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
 using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
-const codectypes = Dict{String, V3Codec}()
+
+"""
+Registry mapping codec names to parser functions.
+
+Each parser function accepts a configuration `Dict{String,Any}` and an optional
+context value, and returns a `V3Codec`. Use `register_codec` to add new entries.
+"""
+const codec_parsers = Dict{String, Function}()
+
+"""
+    register_codec(parser::Function, name::String)
+
+Register a codec parser under `name`. The parser must accept a
+`Dict{String,Any}` configuration and a context value (or `nothing`),
+and return a `V3Codec`.
+
+Supports do-block syntax:
+
+    register_codec("mycodec") do config, ctx
+        MyCodec(config["param"])
+    end
+"""
+function register_codec(parser::Function, name::String)
+    codec_parsers[name] = parser
+end
 
 @enum BloscCompressor begin
     lz4
@@ -47,6 +71,14 @@ struct BytesCodec <: V3Codec{:array, :bytes}
 end
 BytesCodec() = BytesCodec(:little)
 name(::BytesCodec) = "bytes"
+
+register_codec("bytes") do config, ctx
+    endian_str = get(config, "endian", "little")
+    endian = endian_str == "little" ? :little :
+             endian_str == "big"    ? :big    :
+             throw(ArgumentError("Unknown endian: \"$endian_str\""))
+    BytesCodec(endian)
+end
 
 const _SYSTEM_LITTLE_ENDIAN = Base.ENDIAN_BOM == 0x04030201
 _needs_bswap(endian::Symbol) = (endian == :little) != _SYSTEM_LITTLE_ENDIAN
@@ -116,6 +148,16 @@ struct ShardingCodec{N, P1<:AbstractCodecPipeline, P2<:AbstractCodecPipeline} <:
 end
 name(::ShardingCodec) = "sharding_indexed"
 
+register_codec("sharding_indexed") do config, ctx
+    N = length(config["chunk_shape"])
+    # Zarr spec stores chunk_shape in C-order (row-major); reverse for Julia column-major
+    chunk_shape    = NTuple{N,Int}(reverse(Int.(config["chunk_shape"])))
+    data_pipeline  = getCodec(config["codecs"])
+    index_pipeline = getCodec(config["index_codecs"])
+    index_location = Symbol(get(config, "index_location", "end"))
+    ShardingCodec(chunk_shape, data_pipeline, index_pipeline, index_location)
+end
+
 """
 Build a `V3Pipeline` from a flat ordered list of `V3Codec` values.
 The list must contain: zero or more array→array codecs, exactly one array→bytes codec,
@@ -178,65 +220,27 @@ function JSON.lower(c::ShardingCodec)
 end
 
 """
-    getCodec(d::Dict)
+    getCodec(d::Dict, ctx=nothing)
 
-Deserialize a V3 codec from a JSON dict by dispatching on `d["name"]`.
-Used to parse inner codecs of `ShardingCodec`.
+Deserialize a V3 codec from a JSON dict by dispatching through the `codec_parsers`
+registry. `ctx` is an optional context value (e.g. a NamedTuple with `shape` and
+`elsize`) forwarded to the registered parser.
 """
-function getCodec(d::Dict)
+function getCodec(d::Dict, ctx=nothing)
     codec_name = d["name"]
+    haskey(codec_parsers, codec_name) ||
+        throw(ArgumentError("Zarr.jl does not support the $codec_name codec"))
     config = get(d, "configuration", Dict{String,Any}())
-    if codec_name == "bytes"
-        endian_str = get(config, "endian", "little")
-        endian = endian_str == "little" ? :little :
-                 endian_str == "big"    ? :big    :
-                 throw(ArgumentError("Unknown endian: \"$endian_str\""))
-        return BytesCodec(endian)
-    elseif codec_name == "transpose"
-        perm = Tuple(Int.(config["order"]) .+ 1)
-        return TransposeCodec(perm)
-    elseif codec_name == "gzip"
-        level = get(config, "level", 6)
-        return GzipV3Codec(level)
-    elseif codec_name == "blosc"
-        cname = get(config, "cname", "lz4")
-        clevel = get(config, "clevel", 5)
-        shuffle_val = get(config, "shuffle", "noshuffle")
-        shuffle_int = shuffle_val isa Integer ? shuffle_val :
-                      shuffle_val == "noshuffle"  ? 0 :
-                      shuffle_val == "shuffle"     ? 1 :
-                      shuffle_val == "bitshuffle"  ? 2 :
-                      throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
-        blocksize = get(config, "blocksize", 0)
-        typesize  = get(config, "typesize", 4)
-        return BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize)
-    elseif codec_name == "zstd"
-        level = get(config, "level", 3)
-        return ZstdV3Codec(level)
-    elseif codec_name == "crc32c"
-        return CRC32cV3Codec()
-    elseif codec_name == "sharding_indexed"
-        return getCodec(ShardingCodec, d)
-    else
-        throw(ArgumentError("Unsupported inner codec: $codec_name"))
-    end
+    return codec_parsers[codec_name](config, ctx)
 end
 
 """
-    getCodec(::Type{ShardingCodec}, d::Dict)
+    getCodec(dicts::Vector, ctx=nothing)
 
-Deserialize `ShardingCodec` from a JSON configuration dict.
-`chunk_shape` is reversed from C-order (Zarr spec) to Julia column-major order.
+Deserialize a list of V3 codec dicts into a `V3Pipeline`.
 """
-function getCodec(::Type{ShardingCodec}, d::Dict)
-    config = d["configuration"]
-    N = length(config["chunk_shape"])
-    # Zarr spec stores chunk_shape in C-order (row-major); reverse for Julia column-major
-    chunk_shape    = NTuple{N,Int}(reverse(Int.(config["chunk_shape"])))
-    data_pipeline  = _codecs_to_v3pipeline([getCodec(cd) for cd in config["codecs"]])
-    index_pipeline = _codecs_to_v3pipeline([getCodec(cd) for cd in config["index_codecs"]])
-    index_location = Symbol(get(config, "index_location", "end"))
-    return ShardingCodec(chunk_shape, data_pipeline, index_pipeline, index_location)
+function getCodec(dicts::Vector, ctx=nothing)
+    return _codecs_to_v3pipeline([getCodec(d, ctx) for d in dicts])
 end
 
 const MAX_UINT64 = typemax(UInt64)
@@ -453,6 +457,25 @@ struct TransposeCodec{N} <: V3Codec{:array, :array}
 end
 name(::TransposeCodec) = "transpose"
 
+register_codec("transpose") do config, ctx
+    _order = config["order"]
+    if _order isa AbstractString
+        n = isnothing(ctx) ? error("context with shape required for deprecated string transpose order") : length(ctx.shape)
+        if _order == "C"
+            @warn "Transpose codec dimension order of C is deprecated"
+            perm = ntuple(identity, n)
+        elseif _order == "F"
+            @warn "Transpose codec dimension order of F is deprecated"
+            perm = ntuple(i -> n - i + 1, n)
+        else
+            throw(ArgumentError("Unknown transpose order string: $_order"))
+        end
+    else
+        perm = Tuple(Int.(_order) .+ 1)
+    end
+    TransposeCodec(perm)
+end
+
 function JSON.lower(c::TransposeCodec)
     Dict("name" => "transpose", "configuration" => Dict("order" => collect(c.order .- 1)))
 end
@@ -506,6 +529,10 @@ end
 GzipV3Codec() = GzipV3Codec(6)
 name(::GzipV3Codec) = "gzip"
 
+register_codec("gzip") do config, ctx
+    GzipV3Codec(get(config, "level", 6))
+end
+
 function JSON.lower(c::GzipV3Codec)
     Dict("name" => "gzip", "configuration" => Dict("level" => c.level))
 end
@@ -528,6 +555,21 @@ struct BloscV3Codec <: V3Codec{:bytes, :bytes}
 end
 BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
 name(::BloscV3Codec) = "blosc"
+
+register_codec("blosc") do config, ctx
+    cname = get(config, "cname", "lz4")
+    clevel = get(config, "clevel", 5)
+    shuffle_val = get(config, "shuffle", "noshuffle")
+    shuffle_int = shuffle_val isa Integer ? shuffle_val :
+                  shuffle_val == "noshuffle"  ? 0 :
+                  shuffle_val == "shuffle"     ? 1 :
+                  shuffle_val == "bitshuffle"  ? 2 :
+                  throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
+    blocksize = get(config, "blocksize", 0)
+    typesize_default = isnothing(ctx) ? 4 : ctx.elsize
+    typesize = get(config, "typesize", typesize_default)
+    BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize)
+end
 
 function JSON.lower(c::BloscV3Codec)
     shuffle_str = c.shuffle == 0 ? "noshuffle" :
@@ -559,6 +601,10 @@ end
 ZstdV3Codec() = ZstdV3Codec(3)
 name(::ZstdV3Codec) = "zstd"
 
+register_codec("zstd") do config, ctx
+    ZstdV3Codec(get(config, "level", 3))
+end
+
 function JSON.lower(c::ZstdV3Codec)
     Dict("name" => "zstd", "configuration" => Dict("level" => c.level))
 end
@@ -576,6 +622,10 @@ end
 struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
 end
 name(::CRC32cV3Codec) = "crc32c"
+
+register_codec("crc32c") do config, ctx
+    CRC32cV3Codec()
+end
 
 function JSON.lower(::CRC32cV3Codec)
     Dict("name" => "crc32c")
