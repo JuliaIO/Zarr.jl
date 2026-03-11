@@ -484,8 +484,64 @@ end
         "chunk_key_encoding":{"name":"v2","configuration":{"separator":"."}},
         "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
     md = Zarr.Metadata(json_v2enc, false)
-    @test md.chunk_encoding.prefix == false
-    @test md.chunk_encoding.sep == '.'
+    @test md.chunk_key_encoding.prefix == false
+    @test md.chunk_key_encoding.sep == '.'
+end
+
+@testset "SuffixChunkKeyEncoding" begin
+    # Parsing: suffix encoding with default base
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},
+        "chunk_key_encoding":{"name":"suffix","configuration":{
+            "suffix":".tiff",
+            "base_encoding":{"name":"default"}
+        }},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md = Zarr.Metadata(json_str, false)
+    @test md.chunk_key_encoding isa Zarr.SuffixChunkKeyEncoding
+    @test md.chunk_key_encoding.suffix == ".tiff"
+    @test md.chunk_key_encoding.base_encoding isa Zarr.ChunkKeyEncoding
+    @test md.chunk_key_encoding.base_encoding.prefix == true   # "default" uses c/ prefix
+    @test md.chunk_key_encoding.base_encoding.sep == '/'
+
+    # citostring appends suffix to base key
+    e = md.chunk_key_encoding
+    @test Zarr.citostring(e, CartesianIndex(1, 1)) == "c/0/0.tiff"
+    @test Zarr.citostring(e, CartesianIndex(2, 1)) == "c/0/1.tiff"
+    @test Zarr.citostring(e, CartesianIndex(1, 2)) == "c/1/0.tiff"
+
+    # Parsing: suffix encoding with v2 base
+    json_v2base = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},
+        "chunk_key_encoding":{"name":"suffix","configuration":{
+            "suffix":".shard.zip",
+            "base_encoding":{"name":"v2"}
+        }},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md2 = Zarr.Metadata(json_v2base, false)
+    @test md2.chunk_key_encoding.suffix == ".shard.zip"
+    @test md2.chunk_key_encoding.base_encoding.prefix == false  # "v2" has no prefix
+    @test Zarr.citostring(md2.chunk_key_encoding, CartesianIndex(1, 1)) == "0.0.shard.zip"
+
+    # Serialization round-trip
+    lowered = JSON.lower(md)
+    cke = lowered["chunk_key_encoding"]
+    @test cke["name"] == "suffix"
+    @test cke["configuration"]["suffix"] == ".tiff"
+    @test cke["configuration"]["base_encoding"]["name"] == "default"
+
+    # ZArray round-trip: chunks are stored with the suffix in their keys
+    store = Zarr.DictStore()
+    cke = Zarr.SuffixChunkKeyEncoding(".tiff", Zarr.ChunkKeyEncoding('/', true))
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((), bytes_codec, ())
+    P = typeof(pipeline)
+    E = typeof(cke)
+    md = Zarr.MetadataV3{Int32,2,P,E}(3, "array", (4,4), (2,2), "int32", pipeline, Int32(0), cke)
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+    z[:,:] = reshape(Int32.(1:16), 4, 4)
+    @test z[:,:] == reshape(Int32.(1:16), 4, 4)
+    @test any(k -> endswith(k, ".tiff"), keys(store.a))
 end
 
 @testset "V3 lower3 extended codecs" begin

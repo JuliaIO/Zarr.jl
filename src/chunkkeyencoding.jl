@@ -26,4 +26,43 @@ const DS = default_sep(DV)
 end
 @inline citostring(e::ChunkKeyEncoding, ::CartesianIndex{0}) = e.prefix ? "c$(e.sep)0" : "0"
 
+"""
+    SuffixChunkKeyEncoding{E<:AbstractChunkKeyEncoding}
+
+Chunk key encoding that appends a user-defined suffix string to the key
+produced by a base chunk key encoding. The primary use case is adding file
+extensions (e.g. `.tiff`, `.shard.zip`) so that individual chunk files are
+directly usable by other software without Zarr-specific tooling.
+
+Per the zarr-extensions `suffix` chunk-key-encoding proposal.
+"""
+struct SuffixChunkKeyEncoding{E<:AbstractChunkKeyEncoding} <: AbstractChunkKeyEncoding
+    suffix::String
+    base_encoding::E
+end
+
+SuffixChunkKeyEncoding(suffix::String; sep::Char='/', prefix::Bool=true) =
+    SuffixChunkKeyEncoding(suffix, ChunkKeyEncoding(sep, prefix))
+
+@inline citostring(e::SuffixChunkKeyEncoding, i::CartesianIndex) =
+    citostring(e.base_encoding, i) * e.suffix
+
+"""Serialize an `AbstractChunkKeyEncoding` to a JSON-compatible dict."""
+function lower_chunk_key_encoding(e::ChunkKeyEncoding)
+    Dict{String,Any}(
+        "name" => e.prefix ? "default" : "v2",
+        "configuration" => Dict{String,Any}("separator" => string(e.sep))
+    )
+end
+
+function lower_chunk_key_encoding(e::SuffixChunkKeyEncoding)
+    Dict{String,Any}(
+        "name" => "suffix",
+        "configuration" => Dict{String,Any}(
+            "suffix" => e.suffix,
+            "base_encoding" => lower_chunk_key_encoding(e.base_encoding)
+        )
+    )
+end
+
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s

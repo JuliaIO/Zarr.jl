@@ -30,7 +30,7 @@ using Dates
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
-            @test z.metadata.chunk_encoding === Zarr.ChunkKeyEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
+            @test z.metadata.chunk_key_encoding === Zarr.ChunkKeyEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')

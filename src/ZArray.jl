@@ -93,7 +93,7 @@ nobytes(z::ZArray{<:String}) = "unknown"
 zinfo(z::ZArray) = zinfo(stdout,z)
 function zinfo(io::IO,z::ZArray)
   ninit = sum(chunkindices(z)) do i
-    store_isinitialized(z.storage, z.path, i, z.metadata.chunk_encoding)
+    store_isinitialized(z.storage, z.path, i, z.metadata.chunk_key_encoding)
   end
   allinfos = [
   "Type" => "ZArray",
@@ -179,7 +179,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
   task = @async begin
-    read_items!($(z.storage), c, $(z.metadata.chunk_encoding), $(z.path), $(blockr))
+    read_items!($(z.storage), c, $(z.metadata.chunk_key_encoding), $(z.path), $(blockr))
   end
   bind(c,task)
 
@@ -215,14 +215,14 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
   readtask = @async begin 
-    read_items!(z.storage, readchannel, z.metadata.chunk_encoding, z.path, blockr)
+    read_items!(z.storage, readchannel, z.metadata.chunk_key_encoding, z.path, blockr)
   end
   bind(readchannel,readtask)
 
   writechannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
 
   writetask = @async begin
-    write_items!(z.storage, writechannel, z.metadata.chunk_encoding, z.path, blockr)
+    write_items!(z.storage, writechannel, z.metadata.chunk_key_encoding, z.path, blockr)
   end
   bind(writechannel,writetask)
   
@@ -362,7 +362,7 @@ function zcreate(::Type{T},storage::AbstractStore,
     # Convert AbstractString to Char
     dimension_separator = only(dimension_separator)
   end
-  chunk_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
+  chunk_key_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
@@ -376,7 +376,7 @@ function zcreate(::Type{T},storage::AbstractStore,
       fill_value=fill_value,
       filters=filters,
       fill_as_missing=fill_as_missing,
-    chunk_encoding=chunk_encoding
+    chunk_key_encoding=chunk_key_encoding
   )
   
   # Extract the element type from the metadata (handles T2 calculation)
@@ -432,7 +432,7 @@ function zzeros(T,dims...;kwargs...)
   p = z.path
   if data_encoded !== nothing
     for i in chunkindices(z)
-      store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_encoding)
+      store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_key_encoding)
     end
   end
   z
@@ -451,7 +451,7 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   z.metadata.shape[] = newsize
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
-    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_encoding)
+    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_key_encoding)
   end
   writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
   nothing
@@ -494,14 +494,14 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
   nothing
 end
 
-function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_encoding)
+function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_key_encoding)
   dimstoshorten = findall(map(<,newsize, oldsize))
   for idim in dimstoshorten
     delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
     allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
     r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
     for cI in CartesianIndices(r)
-      store_deletechunk(s, path, cI, chunk_encoding)
+      store_deletechunk(s, path, cI, chunk_key_encoding)
     end
   end
 end
