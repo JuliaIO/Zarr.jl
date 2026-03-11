@@ -272,7 +272,7 @@ function set_chunk_empty!(idx::ShardIndex, chunk_coords::NTuple{N,Int}) where N
 end
 
 function calculate_chunks_per_shard(shard_shape::NTuple{N,Int}, chunk_shape::NTuple{N,Int}) where N
-    return ntuple(i -> div(shard_shape[i], chunk_shape[i]), N)
+    return ntuple(i -> cld(shard_shape[i], chunk_shape[i]), N)
 end
 
 """Return the Julia array slice ranges for inner chunk `chunk_coords` within a shard."""
@@ -339,7 +339,16 @@ function zencode!(encoded::Vector{UInt8}, data::AbstractArray, c::ShardingCodec{
     for cart_idx in CartesianIndices(chunks_per_shard)
         chunk_coords  = Tuple(cart_idx)
         slice_ranges  = get_chunk_slice_in_shard(chunk_coords, c.chunk_shape, shard_shape)
-        encoded_chunk = pipeline_encode(c.codecs, data[slice_ranges...], nothing)
+        inner_shape   = ntuple(i -> length(slice_ranges[i]), N)
+        # Per spec, partial inner chunks at shard edges must be padded to chunk_shape
+        chunk_data = if inner_shape == c.chunk_shape
+            data[slice_ranges...]
+        else
+            buf = zeros(eltype(data), c.chunk_shape)
+            buf[ntuple(i -> 1:inner_shape[i], N)...] = data[slice_ranges...]
+            buf
+        end
+        encoded_chunk = pipeline_encode(c.codecs, chunk_data, nothing)
 
         if isnothing(encoded_chunk) || isempty(encoded_chunk)
             set_chunk_empty!(index, chunk_coords)

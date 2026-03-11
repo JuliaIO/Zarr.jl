@@ -866,6 +866,57 @@ end
     @test lowered["configuration"]["index_location"] == "end"
 end
 
+@testset "ShardingCodec ragged inner chunks" begin
+    # Outer chunk (shard) size does not evenly divide by inner chunk size.
+    # shard shape (3,), inner chunk shape (2,): 2 inner chunks — full (1:2) + partial (3:3)
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (3,), (3,), "int16", pipeline, Int16(0),
+        Zarr.ChunkEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[10, 20, 30]
+    z[:] = data
+    @test z[:] == data
+
+    # 2D: shard (3,3), inner (2,2) — partial chunks on both axes
+    inner_pipeline2 = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline2 = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding2 = Zarr.Codecs.V3Codecs.ShardingCodec((2,2), inner_pipeline2, index_pipeline2, :end)
+    pipeline2 = Zarr.V3Pipeline((), sharding2, ())
+    md2 = Zarr.MetadataV3{Int32,2,typeof(pipeline2)}(
+        3, "array", (3,3), (3,3), "int32", pipeline2, Int32(0),
+        Zarr.ChunkEncoding('/', true)
+    )
+    store2 = Zarr.DictStore()
+    z2 = Zarr.ZArray(md2, store2, "", Dict(), true)
+
+    data2 = reshape(Int32.(1:9), 3, 3)
+    z2[:,:] = data2
+    @test z2[:,:] == data2
+end
+
 @testset "ShardingCodec ZArray write and read" begin
     # Build a pipeline where ShardingCodec is the array->bytes codec.
     # Shard shape (outer chunk): (4,). Inner chunk shape: (2,).
