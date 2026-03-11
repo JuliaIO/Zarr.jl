@@ -52,14 +52,15 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding} <: A
     pipeline::P
     fill_value::Union{T, Nothing}
     chunk_encoding::E
-    function MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding) where {T2,N,P}
+    function MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding) where {T2,N,P,E}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
-        new{T2,N,P}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_encoding)
+        new{T2,N,P,E}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_encoding)
     end
 end
+MetadataV3{T2,N,P}(args...) where {T2,N,P} = MetadataV3{T2,N,P,ChunkKeyEncoding}(args...)
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
 
 """
@@ -72,8 +73,8 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         order::Char='C',
         endian::Symbol=:little,
         compressor=BloscCompressor(),
-        chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
-    ) where {T2, N}
+        chunk_encoding::E=ChunkKeyEncoding('/', true)
+    ) where {T2, N, E}
     T_base = Base.nonmissingtype(T2)
     array_array_codecs = if order == 'F'
         (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
@@ -93,7 +94,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
     end
     pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
-    return MetadataV3{T2,N,typeof(pipeline)}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding)
+    return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding)
 end
 
 function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
@@ -370,7 +371,7 @@ function lower3(md::MetadataV3{T}) where T
     chunk_key_encoding = Dict{String,Any}(
         "name" => isa(md.chunk_encoding, ChunkKeyEncoding) ? 
             md.chunk_encoding.prefix ? "default" : "v2" :
-            error("Unknown encoding for $(md.chunk_encoding)")
+            error("Unknown encoding for $(md.chunk_encoding)"),
         "configuration" => Dict{String,Any}(
             "separator" => string(md.chunk_encoding.sep)
         )
@@ -449,8 +450,8 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         endian::Symbol=:little,
         filters::F=nothing,
         fill_as_missing = false,
-        chunk_encoding::ChunkEncoding=ChunkEncoding('/', true)
-    ) where {T, N, C, F}
+        chunk_encoding::E=ChunkKeyEncoding('/', true)
+    ) where {T, N, C, F, E}
     return Metadata3(A, chunks;
         node_type=node_type,
         compressor=compressor,
