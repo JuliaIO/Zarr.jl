@@ -16,6 +16,7 @@ import Mmap
 using PythonCall
 #If we are on conda, import zarr
 zarr = pyimport("zarr")
+zarr_storage = pyimport("zarr.storage")
 
 #Create some directories
 proot = tempname()
@@ -108,7 +109,13 @@ end
 
 # Test reading in python
 for julia_path in (pjulia, pjulia*".zip")
-    g = zarr.open_group(julia_path)
+    # zarr-python 3.x requires explicitly opening zip files as ZipStore
+    if endswith(julia_path, ".zip")
+        store = zarr_storage.ZipStore(julia_path)
+        g = zarr.open_group(store=store, mode="r")
+    else
+        g = zarr.open_group(julia_path, mode="r")
+    end
     gatts = pyconvert(Any, g.attrs)
 
     #Test group attributes
@@ -121,25 +128,16 @@ for julia_path in (pjulia, pjulia*".zip")
         compstr,comp = co
         t = dtypes[i]
         tp = dtypesp[i]
+        # zarr-python 3.x does not support fixed-length (<S10, <U10) or
+        # variable-length object (|O) string dtypes from zarr v2
+        (tp == "S10" || tp == "U10" || tp == "O") && continue
         arname = string("a",t,compstr)
         ar=g[arname]
 
         @test pyconvert(Any, ar.attrs["This is a nested attribute"]) == Dict("a"=>5)
         @test pyeq(Bool, ar.dtype, tp)
         @test pyconvert(Tuple, ar.shape) == (2,6,10)
-        if t<:MaxLengthString || t<:String
-            jar = [
-                if tp == "S10"
-                    pyconvert(String, ar[k, j, i].decode())
-                else
-                    pyconvert(String, ar[k, j, i])
-                end
-                for i in 0:9, j in 0:5, k in 0:1
-            ]
-            @test jar == testarrays[t]
-        else
-            @test PyArray(ar[pybuiltins.Ellipsis]) == permutedims(testarrays[t],(3,2,1))
-        end
+        @test PyArray(ar[pybuiltins.Ellipsis]) == permutedims(testarrays[t],(3,2,1))
     end
 
     # Test reading filtered arrays from python
@@ -176,24 +174,21 @@ for julia_path in (pjulia, pjulia*".zip")
             # Adding an overload to PyCall for unsigned ints doesn't work with NumPy scalars because
             # they are not subtypes of integer: https://stackoverflow.com/a/58816671
         end
+        # zarr-python 3.x does not support fixed-length (<S10, <U10) or
+        # variable-length object (|O) string dtypes from zarr v2
+        (tp == "S10" || tp == "U10" || tp == "O") && continue
 
         arname = string("azerodim",t,compstr)
         ar=g[arname]
 
         @test pyeq(Bool, ar.dtype, tp)
         @test pyconvert(Tuple, ar.shape) == ()
-        if t<:MaxLengthString || t<:String
-            local x = if tp == "S10"
-                pyconvert(String, ar[()].decode())
-            else
-                pyconvert(String, ar[()])
-            end
-            @test x == testzerodimarrays[t]
-        else
-            @test pyconvert(Any, ar[()])[] == testzerodimarrays[t]
-        end
+        @test pyconvert(Any, ar[()])[] == testzerodimarrays[t]
     end
-    g.store.close()
+    # Close ZipStore if opened
+    if endswith(julia_path, ".zip")
+        store.close()
+    end
 end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
@@ -201,14 +196,14 @@ data = rand(Int32,2,6,10)
 
 numpy = pyimport("numpy")
 numcodecs = pyimport("numcodecs")
-g = zarr.group(ppython)
-g.attrs["groupatt"] = "Hi"
-z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
+g = zarr.open_group(ppython, mode="w", zarr_format=2)
+g.update_attributes(pydict(Dict("groupatt"=>"Hi")))
+z1 = g.require_array("a1", shape=(2,6,10), chunks=(1,2,3), dtype="i4")
 z1[pybuiltins.Ellipsis] = numpy.array(data)
-z1.attrs["test"] = pydict(Dict("b"=>6))
-z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
+z1.update_attributes(pydict(Dict("test" => pydict(Dict("b" => 6)))))
+z2 = g.require_array("a2", shape=(5,), chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
 z2[pybuiltins.Ellipsis] = pylist([k for k in "hallo"])
-z3 = g.create_dataset("a3", shape=(2,), dtype=pybuiltins.str)
+z3 = g.require_array("a3", shape=(2,), dtype=pybuiltins.str)
 z3[pybuiltins.Ellipsis]=numpy.asarray(["test1", "test234"], dtype="O")
 zarr.consolidate_metadata(ppython)
 
@@ -247,15 +242,15 @@ a1[:,1,1] = 1:10
 
 # Test zip file can be read
 ppythonzip = ppython*".zip"
-store = zarr.ZipStore(ppythonzip, mode="w")
-g = zarr.group(store=store)
-g.attrs["groupatt"] = "Hi"
-z1 = g.create_dataset("a1", shape=(2,6,10),chunks=(1,2,3), dtype="i4")
+store = zarr_storage.ZipStore(ppythonzip, mode="w")
+g = zarr.open_group(store=store, mode="w", zarr_format=2)
+g.update_attributes(pydict(Dict("groupatt"=>"Hi")))
+z1 = g.require_array("a1", shape=(2,6,10), chunks=(1,2,3), dtype="i4")
 z1[pybuiltins.Ellipsis] = numpy.array(data)
-z1.attrs["test"] = pydict(Dict("b"=>6))
-z2 = g.create_dataset("a2", shape=(5,),chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
+z1.update_attributes(pydict(Dict("test" => pydict(Dict("b" => 6)))))
+z2 = g.require_array("a2", shape=(5,), chunks=(5,), dtype="S1", compressor=numcodecs.Zlib())
 z2[pybuiltins.Ellipsis] = pylist([k for k in "hallo"])
-z3 = g.create_dataset("a3", shape=(2,), dtype=pybuiltins.str)
+z3 = g.require_array("a3", shape=(2,), dtype=pybuiltins.str)
 z3[pybuiltins.Ellipsis] = numpy.asarray(["test1", "test234"], dtype="O")
 store.close()
 
