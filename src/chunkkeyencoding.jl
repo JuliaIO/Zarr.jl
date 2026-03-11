@@ -65,4 +65,59 @@ function lower_chunk_key_encoding(e::SuffixChunkKeyEncoding)
     )
 end
 
+"""
+Registry mapping chunk key encoding names to parser functions.
+
+Each parser function takes a configuration `Dict{String,Any}` and returns an
+`AbstractChunkKeyEncoding`. Use `register_chunk_key_encoding` to add new entries.
+"""
+const chunk_key_encoding_parsers = Dict{String, Function}()
+
+"""
+    register_chunk_key_encoding(parser::Function, name::String)
+
+Register a chunk key encoding parser under `name`. The parser must accept a
+`Dict{String,Any}` configuration and return an `AbstractChunkKeyEncoding`.
+
+Supports do-block syntax:
+
+    register_chunk_key_encoding("myenc") do config
+        MyEncoding(config["param"])
+    end
+"""
+function register_chunk_key_encoding(parser::Function, name::String)
+    chunk_key_encoding_parsers[name] = parser
+end
+
+"""
+    parse_chunk_key_encoding(d::AbstractDict) -> AbstractChunkKeyEncoding
+
+Parse a chunk key encoding dict (as found in `zarr.json`) into an
+`AbstractChunkKeyEncoding` by looking up the registered parser for the encoding name.
+"""
+function parse_chunk_key_encoding(d::AbstractDict)::AbstractChunkKeyEncoding
+    name = d["name"]
+    config = get(d, "configuration", Dict{String,Any}())::Dict{String,Any}
+    if haskey(chunk_key_encoding_parsers, name)
+        return chunk_key_encoding_parsers[name](config)
+    else
+        throw(ArgumentError("Unknown chunk_key_encoding of name, $name"))
+    end
+end
+
+# Register built-in encodings
+register_chunk_key_encoding("default") do config
+    ChunkKeyEncoding(only(get(config, "separator", '/')), true)
+end
+
+register_chunk_key_encoding("v2") do config
+    ChunkKeyEncoding(only(get(config, "separator", '.')), false)
+end
+
+register_chunk_key_encoding("suffix") do config
+    suffix_str = config["suffix"]
+    base = parse_chunk_key_encoding(config["base_encoding"])
+    SuffixChunkKeyEncoding(suffix_str, base)
+end
+
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s

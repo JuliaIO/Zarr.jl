@@ -151,22 +151,6 @@ function get_order(md::MetadataV3)
 end
 get_order(md::MetadataV2) = md.order
 
-"""Parse a chunk_key_encoding dict into an `AbstractChunkKeyEncoding` value."""
-function parse_chunk_key_encoding(d::AbstractDict)
-    name = d["name"]
-    config = get(d, "configuration", Dict{String,Any}())
-    if name == "default"
-        return ChunkKeyEncoding(only(get(config, "separator", '/')), true)
-    elseif name == "v2"
-        return ChunkKeyEncoding(only(get(config, "separator", '.')), false)
-    elseif name == "suffix"
-        suffix_str = config["suffix"]
-        base = parse_chunk_key_encoding(config["base_encoding"])
-        return SuffixChunkKeyEncoding(suffix_str, base)
-    else
-        throw(ArgumentError("Unknown chunk_key_encoding of name, $name"))
-    end
-end
 
 
 function Metadata3(d::AbstractDict, fill_as_missing)
@@ -238,9 +222,6 @@ function Metadata3(d::AbstractDict, fill_as_missing)
 
     # Chunk Key Encoding
     chunk_key_encoding = d["chunk_key_encoding"]
-    if chunk_key_encoding["name"] ∉ ("default", "v2", "suffix")
-        throw(ArgumentError("Unknown chunk_key_encoding of name, $(chunk_key_encoding["name"])"))
-    end
 
     # Build V3Pipeline from codec chain
     array_array_codecs = []
