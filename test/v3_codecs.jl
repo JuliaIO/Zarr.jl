@@ -610,8 +610,6 @@ end
     if !isdir(fixture_path)
         @warn "Julia v3 fixtures not found at $fixture_path, skipping"
     else
-        using CondaPkg
-        CondaPkg.add("zarr"; version="3.*")
         using PythonCall
         np   = pyimport("numpy")
         zarr = pyimport("zarr")
