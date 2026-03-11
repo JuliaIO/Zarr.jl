@@ -855,4 +855,31 @@ end
     @test lowered["configuration"]["index_location"] == "end"
 end
 
+@testset "ShardingCodec ZArray write and read" begin
+    # Build a pipeline where ShardingCodec is the array->bytes codec.
+    # Shard shape (outer chunk): (4,). Inner chunk shape: (2,).
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.GzipV3Codec(6),)
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[1, 2, 3, 4]
+    z[:] = data
+    @test z[:] == data
+end
+
 end # V3 Codecs
