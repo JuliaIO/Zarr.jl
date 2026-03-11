@@ -6,7 +6,7 @@
 
 using CondaPkg: CondaPkg, PkgSpec
 CondaPkg.add([
-    PkgSpec("zarr"; version=">=2.13,<3"),
+    PkgSpec("zarr"; version="3.*"),
     PkgSpec("numpy"; version=">=2.3.3,<3")
 ])
 
