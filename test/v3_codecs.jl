@@ -619,36 +619,40 @@ end
         g = zarr.open_group(fixture_path, mode="r")
 
         @testset "1D arrays" begin
-            @test pyconvert(Vector{Int16},   g["1d.contiguous.gzip.i2"][:])  == Int16[1, 2, 3, 4]
-            @test pyconvert(Vector{Int16},   g["1d.contiguous.blosc.i2"][:]) == Int16[1, 2, 3, 4]
-            @test pyconvert(Vector{Int16},   g["1d.contiguous.raw.i2"][:])   == Int16[1, 2, 3, 4]
-            @test pyconvert(Vector{Int32},   g["1d.contiguous.i4"][:])       == Int32[1, 2, 3, 4]
-            @test pyconvert(Vector{UInt8},   g["1d.contiguous.u1"][:])       == UInt8[255, 0, 255, 0]
-            @test pyconvert(Vector{Float16}, g["1d.contiguous.f2.le"][:])    == Float16[-1000.5, 0.0, 1000.5, 0.0]
-            @test pyconvert(Vector{Float32}, g["1d.contiguous.f4.le"][:])    == Float32[-1000.5, 0.0, 1000.5, 0.0]
-            @test pyconvert(Vector{Float64}, g["1d.contiguous.f8"][:])       == Float64[1.5, 2.5, 3.5, 4.5]
-            @test pyconvert(Vector{Bool},    g["1d.contiguous.b1"][:])       == Bool[true, false, true, false]
-            @test pyconvert(Vector{Int16},   g["1d.chunked.i2"][:])          == Int16[1, 2, 3, 4]
-            @test pyconvert(Vector{Int16},   g["1d.chunked.ragged.i2"][:])   == Int16[1, 2, 3, 4, 5]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.gzip.i2"]))  == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.blosc.i2"])) == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.raw.i2"]))   == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int32},   np.array(g["1d.contiguous.i4"]))       == Int32[1, 2, 3, 4]
+            @test pyconvert(Vector{UInt8},   np.array(g["1d.contiguous.u1"]))       == UInt8[255, 0, 255, 0]
+            @test pyconvert(Vector{Float16}, np.array(g["1d.contiguous.f2.le"]))    == Float16[-1000.5, 0.0, 1000.5, 0.0]
+            @test pyconvert(Vector{Float32}, np.array(g["1d.contiguous.f4.le"]))    == Float32[-1000.5, 0.0, 1000.5, 0.0]
+            @test pyconvert(Vector{Float64}, np.array(g["1d.contiguous.f8"]))       == Float64[1.5, 2.5, 3.5, 4.5]
+            @test pyconvert(Vector{Bool},    np.array(g["1d.contiguous.b1"]))       == Bool[true, false, true, false]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.i2"]))          == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.ragged.i2"]))   == Int16[1, 2, 3, 4, 5]
         end
 
         @testset "2D arrays" begin
             # Julia column-major [1 2; 3 4] → Python row-major [[1,3],[2,4]]
-            arr2d = pyconvert(Matrix{Int16}, g["2d.contiguous.i2"][:])
+            arr2d = pyconvert(Matrix{Int16}, np.array(g["2d.contiguous.i2"]))
             @test arr2d == Int16[1 3; 2 4]
 
-            arr2d_chunked = pyconvert(Matrix{Int16}, g["2d.chunked.i2"][:])
+            arr2d_chunked = pyconvert(Matrix{Int16}, np.array(g["2d.chunked.i2"]))
             @test arr2d_chunked == Int16[1 3; 2 4]
         end
 
         @testset "3D arrays" begin
-            # Julia reshape(Int16.(0:26), 3,3,3) column-major → Python arange(27).reshape(3,3,3)
-            arr3d = pyconvert(Array{Int16,3}, g["3d.contiguous.i2"][:])
-            @test arr3d == reshape(Int16.(0:26), 3, 3, 3)
+            # Julia writes reshape(Int16.(0:26), 3,3,3) in column-major order.
+            # Python reads the zarr shape [3,3,3] in C (row-major) order, so
+            # pyconvert maps Python[i,j,k] → Julia[i+1,j+1,k+1], yielding
+            # permutedims(reshape(Int16.(0:26),3,3,3), (3,2,1)).
+            arr3d = pyconvert(Array{Int16,3}, np.array(g["3d.contiguous.i2"]))
+            @test arr3d == permutedims(reshape(Int16.(0:26), 3, 3, 3), (3, 2, 1))
         end
 
         @testset "Group with spaces in name" begin
-            @test pyconvert(Bool, g["my group with spaces"].attrs["description"] == "A group with spaces in the name")
+            desc = pyconvert(String, g["my group with spaces"].attrs["description"])
+            @test desc == "A group with spaces in the name"
         end
     end
 end
