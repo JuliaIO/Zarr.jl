@@ -648,6 +648,17 @@ end
             @test arr3d == permutedims(reshape(Int16.(0:26), 3, 3, 3), (3, 2, 1))
         end
 
+        @testset "Sharded 1D arrays" begin
+            @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.compressed.sharded.i2"])) == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int32},   np.array(g["1d.contiguous.compressed.sharded.i4"])) == Int32[1, 2, 3, 4]
+            @test pyconvert(Vector{UInt8},   np.array(g["1d.contiguous.compressed.sharded.u1"])) == UInt8[255, 0, 255, 0]
+            @test pyconvert(Vector{Float32}, np.array(g["1d.contiguous.compressed.sharded.f4"])) == Float32[-1000.5, 0, 1000.5, 0]
+            @test pyconvert(Vector{Float64}, np.array(g["1d.contiguous.compressed.sharded.f8"])) == Float64[1.5, 2.5, 3.5, 4.5]
+            @test pyconvert(Vector{Bool},    np.array(g["1d.contiguous.compressed.sharded.b1"])) == Bool[true, false, true, false]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.i2"]))    == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.filled.compressed.sharded.i2"])) == Int16[1, 2, 0, 0]
+        end
+
         @testset "Group with spaces in name" begin
             desc = pyconvert(String, g["my group with spaces"].attrs["description"])
             @test desc == "A group with spaces in the name"
