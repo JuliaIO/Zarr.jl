@@ -266,7 +266,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
                      throw(ArgumentError("Unknown endian value: \"$endian_str\""))
             array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
         elseif codec_name == "sharding_indexed"
-            throw(ArgumentError("Zarr.jl currently does not support the sharding_indexed codec"))
+            array_bytes_codec = Codecs.V3Codecs.getCodec(Codecs.V3Codecs.ShardingCodec, codec)
         elseif codec_name == "gzip"
             level = get(config, "level", 6)
             push!(bytes_bytes_codecs, Codecs.V3Codecs.GzipV3Codec(level))
@@ -292,7 +292,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         end
     end
 
-    isnothing(array_bytes_codec) && throw(ArgumentError("V3 codec chain must contain a 'bytes' codec"))
+    isnothing(array_bytes_codec) && throw(ArgumentError("V3 codec chain must contain an array-to-bytes codec such as 'bytes' or 'sharding_indexed'"))
     pipeline = V3Pipeline(Tuple(array_array_codecs), array_bytes_codec, Tuple(bytes_bytes_codecs))
 
     # Type Parameters
@@ -392,6 +392,8 @@ function lower3(md::MetadataV3{T}) where T
             "name" => "bytes",
             "configuration" => Dict{String,Any}("endian" => string(p.array_bytes.endian))
         ))
+    elseif p.array_bytes isa Codecs.V3Codecs.ShardingCodec
+        push!(codecs, JSON.lower(p.array_bytes))
     end
 
     # bytes->bytes codecs

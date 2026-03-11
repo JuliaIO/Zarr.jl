@@ -1,12 +1,3 @@
-"""
-V2Pipeline wraps the existing v2 compressor + filter pair.
-Delegates to zcompress!/zuncompress! with zero behavior change.
-"""
-struct V2Pipeline{C<:Compressor, F} <: AbstractCodecPipeline
-    compressor::C
-    filters::F
-end
-
 function pipeline_encode(p::V2Pipeline, data::AbstractArray, fill_value)
     if fill_value !== nothing && all(isequal(fill_value), data)
         return nothing
@@ -19,18 +10,6 @@ end
 function pipeline_decode!(p::V2Pipeline, output::AbstractArray, compressed::Vector{UInt8})
     zuncompress!(output, compressed, p.compressor, p.filters)
     return output
-end
-
-"""
-V3Pipeline holds a three-phase v3 codec chain:
-- array_array: tuple of array->array codecs (e.g. transpose)
-- array_bytes: single array->bytes codec (e.g. bytes, sharding)
-- bytes_bytes: tuple of bytes->bytes codecs (e.g. gzip, blosc, crc32c)
-"""
-struct V3Pipeline{AA, AB, BB} <: AbstractCodecPipeline
-    array_array::AA
-    array_bytes::AB
-    bytes_bytes::BB
 end
 
 function pipeline_encode(p::V3Pipeline, data::AbstractArray, fill_value)

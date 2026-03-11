@@ -801,9 +801,11 @@ end
             @test z[:] == Float32[-1000.5, 0.0, 1000.5, 0.0]
         end
 
-        @testset "Sharded arrays are rejected" begin
-            # Sharding codec is not yet wired into the read pipeline
-            @test_throws ArgumentError zopen(store; path="1d.contiguous.compressed.sharded.i2")
+        @testset "Sharded 1D array" begin
+            z = zopen(store; path="1d.contiguous.compressed.sharded.i2")
+            @test eltype(z) == Int16
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
         end
 
         @testset "Group with spaces in name" begin
@@ -814,6 +816,43 @@ end
             @test sub.attrs["description"] == "A group with spaces in the name"
         end
     end
+end
+
+@testset "ShardingCodec round-trip" begin
+    # shard shape (4,), inner chunk shape (2,), bytes + gzip inside, bytes + crc32c for index
+    inner_codecs = Zarr.Codecs.V3Codecs.V3Codec[
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        Zarr.Codecs.V3Codecs.GzipV3Codec(6),
+    ]
+    index_codecs = Zarr.Codecs.V3Codecs.V3Codec[
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        Zarr.Codecs.V3Codecs.CRC32cV3Codec(),
+    ]
+    c = Zarr.Codecs.V3Codecs.getCodec(Zarr.Codecs.V3Codecs.ShardingCodec, Dict(
+        "name" => "sharding_indexed",
+        "configuration" => Dict(
+            "chunk_shape"    => [2],
+            "codecs"         => [Dict("name"=>"bytes","configuration"=>Dict("endian"=>"little")),
+                                 Dict("name"=>"gzip","configuration"=>Dict("level"=>6))],
+            "index_codecs"   => [Dict("name"=>"bytes","configuration"=>Dict("endian"=>"little")),
+                                 Dict("name"=>"crc32c")],
+            "index_location" => "end",
+        )
+    ))
+
+    data = Int16[1, 2, 3, 4]
+    encoded = Zarr.Codecs.V3Codecs.codec_encode(c, data)
+    @test encoded isa Vector{UInt8}
+    @test !isempty(encoded)
+
+    decoded = Zarr.Codecs.V3Codecs.codec_decode(c, encoded, Int16, (4,))
+    @test decoded == reshape(data, 4)
+
+    # JSON round-trip
+    lowered = JSON.lower(c)
+    @test lowered["name"] == "sharding_indexed"
+    @test lowered["configuration"]["chunk_shape"] == [2]
+    @test lowered["configuration"]["index_location"] == "end"
 end
 
 end # V3 Codecs
