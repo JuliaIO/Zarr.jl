@@ -206,7 +206,7 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape)
     pipeline = Zarr.V3Pipeline((), sharding, ())
     md = Zarr.MetadataV3{T, N, typeof(pipeline)}(
         3, "array", size(data), outer_chunk_shape, Zarr.typestr3(T), pipeline, zero(T),
-        Zarr.ChunkEncoding('/', true),
+        Zarr.ChunkKeyEncoding('/', true),
     )
     z = Zarr.ZArray(md, store, name, Dict(), true)
     Zarr.writemetadata(Zarr.zarr_format(md), store, name, md)

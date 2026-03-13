@@ -939,7 +939,7 @@ end
     pipeline = Zarr.V3Pipeline((), sharding, ())
     md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
         3, "array", (3,), (3,), "int16", pipeline, Int16(0),
-        Zarr.ChunkEncoding('/', true)
+        Zarr.ChunkKeyEncoding('/', true)
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -963,7 +963,7 @@ end
     pipeline2 = Zarr.V3Pipeline((), sharding2, ())
     md2 = Zarr.MetadataV3{Int32,2,typeof(pipeline2)}(
         3, "array", (3,3), (3,3), "int32", pipeline2, Int32(0),
-        Zarr.ChunkEncoding('/', true)
+        Zarr.ChunkKeyEncoding('/', true)
     )
     store2 = Zarr.DictStore()
     z2 = Zarr.ZArray(md2, store2, "", Dict(), true)
@@ -990,7 +990,7 @@ end
     pipeline = Zarr.V3Pipeline((), sharding, ())
     md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
         3, "array", (4,), (4,), "int16", pipeline, Int16(0),
-        Zarr.ChunkEncoding('/', true)
+        Zarr.ChunkKeyEncoding('/', true)
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
