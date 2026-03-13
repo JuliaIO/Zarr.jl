@@ -12,30 +12,44 @@ using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
 
-"""
-Registry mapping codec names to parser functions.
-
-Each parser function accepts a configuration `Dict{String,Any}` and an optional
-context value, and returns a `V3Codec`. Use `register_codec` to add new entries.
-"""
-const codec_parsers = Dict{String, Function}()
+"""Stores a registered V3 codec parser together with its expected return type."""
+struct CodecEntry
+    return_type::Type{<:V3Codec}
+    parser::Function
+end
 
 """
-    register_codec(parser::Function, name::String)
+Registry mapping codec names to `CodecEntry` values (return type + parser function).
+
+Use `register_codec` to add new entries.
+"""
+const codec_parsers = Dict{String, CodecEntry}()
+
+"""
+    register_codec(parser::Function, name::String[, ::Type{T}])
 
 Register a codec parser under `name`. The parser must accept a
 `Dict{String,Any}` configuration and a context value (or `nothing`),
 and return a `V3Codec`.
+
+The optional trailing `Type{T}` argument narrows the declared return type stored
+in the registry (defaults to `V3Codec`). Specifying it enables a runtime
+assertion in `getCodec` and makes the registry self-documenting.
 
 Supports do-block syntax:
 
     register_codec("mycodec") do config, ctx
         MyCodec(config["param"])
     end
+
+    register_codec("mycodec", MyCodec) do config, ctx
+        MyCodec(config["param"])
+    end
 """
-function register_codec(parser::Function, name::String)
-    codec_parsers[name] = parser
+function register_codec(parser::Function, name::String, ::Type{T}) where {T<:V3Codec}
+    codec_parsers[name] = CodecEntry(T, parser)
 end
+register_codec(parser::Function, name::String) = register_codec(parser, name, V3Codec)
 
 @enum BloscCompressor begin
     lz4
@@ -72,7 +86,7 @@ end
 BytesCodec() = BytesCodec(:little)
 name(::BytesCodec) = "bytes"
 
-register_codec("bytes") do config, ctx
+register_codec("bytes", BytesCodec) do config, ctx
     endian_str = get(config, "endian", "little")
     endian = endian_str == "little" ? :little :
              endian_str == "big"    ? :big    :
@@ -148,7 +162,7 @@ struct ShardingCodec{N, P1<:AbstractCodecPipeline, P2<:AbstractCodecPipeline} <:
 end
 name(::ShardingCodec) = "sharding_indexed"
 
-register_codec("sharding_indexed") do config, ctx
+register_codec("sharding_indexed", ShardingCodec) do config, ctx
     N = length(config["chunk_shape"])
     # Zarr spec stores chunk_shape in C-order (row-major); reverse for Julia column-major
     chunk_shape    = NTuple{N,Int}(reverse(Int.(config["chunk_shape"])))
@@ -230,8 +244,9 @@ function getCodec(d::Dict, ctx=nothing)
     codec_name = d["name"]
     haskey(codec_parsers, codec_name) ||
         throw(ArgumentError("Zarr.jl does not support the $codec_name codec"))
+    entry = codec_parsers[codec_name]
     config = get(d, "configuration", Dict{String,Any}())
-    return codec_parsers[codec_name](config, ctx)
+    return entry.parser(config, ctx)::entry.return_type
 end
 
 """
@@ -457,7 +472,7 @@ struct TransposeCodec{N} <: V3Codec{:array, :array}
 end
 name(::TransposeCodec) = "transpose"
 
-register_codec("transpose") do config, ctx
+register_codec("transpose", TransposeCodec) do config, ctx
     _order = config["order"]
     if _order isa AbstractString
         n = isnothing(ctx) ? error("context with shape required for deprecated string transpose order") : length(ctx.shape)
@@ -529,7 +544,7 @@ end
 GzipV3Codec() = GzipV3Codec(6)
 name(::GzipV3Codec) = "gzip"
 
-register_codec("gzip") do config, ctx
+register_codec("gzip", GzipV3Codec) do config, ctx
     GzipV3Codec(get(config, "level", 6))
 end
 
@@ -556,7 +571,7 @@ end
 BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
 name(::BloscV3Codec) = "blosc"
 
-register_codec("blosc") do config, ctx
+register_codec("blosc", BloscV3Codec) do config, ctx
     cname = get(config, "cname", "lz4")
     clevel = get(config, "clevel", 5)
     shuffle_val = get(config, "shuffle", "noshuffle")
@@ -601,7 +616,7 @@ end
 ZstdV3Codec() = ZstdV3Codec(3)
 name(::ZstdV3Codec) = "zstd"
 
-register_codec("zstd") do config, ctx
+register_codec("zstd", ZstdV3Codec) do config, ctx
     ZstdV3Codec(get(config, "level", 3))
 end
 
@@ -623,7 +638,7 @@ struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
 end
 name(::CRC32cV3Codec) = "crc32c"
 
-register_codec("crc32c") do config, ctx
+register_codec("crc32c", CRC32cV3Codec) do config, ctx
     CRC32cV3Codec()
 end
 
