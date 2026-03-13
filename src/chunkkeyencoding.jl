@@ -65,4 +65,73 @@ function lower_chunk_key_encoding(e::SuffixChunkKeyEncoding)
     )
 end
 
+"""Stores a registered chunk key encoding parser together with its expected return type."""
+struct ChunkKeyEncodingEntry
+    return_type::Type{<:AbstractChunkKeyEncoding}
+    parser::Function
+end
+
+"""
+Registry mapping chunk key encoding names to `ChunkKeyEncodingEntry` values
+(return type + parser function). Use `register_chunk_key_encoding` to add new entries.
+"""
+const chunk_key_encoding_parsers = Dict{String, ChunkKeyEncodingEntry}()
+
+"""
+    register_chunk_key_encoding(parser::Function, name::String[, ::Type{T}])
+
+Register a chunk key encoding parser under `name`. The parser must accept a
+`Dict{String,Any}` configuration and return an `AbstractChunkKeyEncoding`.
+
+The optional trailing `Type{T}` argument narrows the declared return type stored
+in the registry (defaults to `AbstractChunkKeyEncoding`). Specifying it enables
+a runtime assertion in `parse_chunk_key_encoding` and makes the registry
+self-documenting.
+
+Supports do-block syntax:
+
+    register_chunk_key_encoding("myenc") do config
+        MyEncoding(config["param"])
+    end
+
+    register_chunk_key_encoding("myenc", MyEncoding) do config
+        MyEncoding(config["param"])
+    end
+"""
+function register_chunk_key_encoding(parser::Function, name::String, ::Type{T}) where {T<:AbstractChunkKeyEncoding}
+    chunk_key_encoding_parsers[name] = ChunkKeyEncodingEntry(T, parser)
+end
+register_chunk_key_encoding(parser::Function, name::String) =
+    register_chunk_key_encoding(parser, name, AbstractChunkKeyEncoding)
+
+"""
+    parse_chunk_key_encoding(d::AbstractDict) -> AbstractChunkKeyEncoding
+
+Parse a chunk key encoding dict (as found in `zarr.json`) into an
+`AbstractChunkKeyEncoding` by looking up the registered parser for the encoding name.
+"""
+function parse_chunk_key_encoding(d::AbstractDict)::AbstractChunkKeyEncoding
+    name = d["name"]
+    config = get(d, "configuration", Dict{String,Any}())::Dict{String,Any}
+    haskey(chunk_key_encoding_parsers, name) ||
+        throw(ArgumentError("Unknown chunk_key_encoding of name, $name"))
+    entry = chunk_key_encoding_parsers[name]
+    return entry.parser(config)::entry.return_type
+end
+
+# Register built-in encodings
+register_chunk_key_encoding("default", ChunkKeyEncoding) do config
+    ChunkKeyEncoding(only(get(config, "separator", '/')), true)
+end
+
+register_chunk_key_encoding("v2", ChunkKeyEncoding) do config
+    ChunkKeyEncoding(only(get(config, "separator", '.')), false)
+end
+
+register_chunk_key_encoding("suffix", SuffixChunkKeyEncoding) do config
+    suffix_str = config["suffix"]
+    base = parse_chunk_key_encoding(config["base_encoding"])
+    SuffixChunkKeyEncoding(suffix_str, base)
+end
+
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
