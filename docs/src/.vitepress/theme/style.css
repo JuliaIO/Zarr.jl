@@ -1,0 +1,228 @@
+/* Customize default theme styling by overriding CSS variables:
+https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css */
+/* Example */
+/* https://github.com/vuejs/vitepress/blob/main/template/.vitepress/theme/style.css */
+
+.VPHero .clip {
+  white-space: pre;
+  max-width: 600px;
+}
+
+/* Fonts */
+@font-face {
+  font-family: JuliaMono-Regular;
+  src: url("https://cdn.jsdelivr.net/gh/cormullion/juliamono/webfonts/JuliaMono-Regular.woff2");
+}
+
+:root {
+  scroll-behavior: smooth;
+  /* Typography */
+  --vp-font-family-base: "Barlow", "Inter var experimental", "Inter var",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+
+  /* Code Snippet font */
+  --vp-font-family-mono: JuliaMono-Regular, monospace;
+}
+
+.mono-no-substitutions {
+  font-family: "JuliaMono-Regular", monospace;
+  font-feature-settings: "calt" off;
+}
+
+.mono-no-substitutions-alt {
+  font-family: "JuliaMono-Regular", monospace;
+  font-variant-ligatures: none;
+}
+
+pre, code {
+  font-family: "JuliaMono-Regular", monospace;
+  font-feature-settings: "calt" off;
+}
+
+/* ============================================================
+   Colors — Light mode (unchanged)
+   ============================================================ */
+:root {
+  --zarr-pink:    #e34b75;
+  --zarr-magenta: #bb1085;
+  --zarr-salmon:  #e58077;
+
+  --vp-c-brand:       #e34b75;
+  --vp-c-brand-1:     #e34b75;
+  --vp-c-brand-2:     #e58077;
+  --vp-c-brand-3:     #bb1085;
+  --vp-c-brand-light: #e34b75;
+  --vp-c-brand-dark:  #bb1085;
+  --vp-c-brand-dimm:  #2e1a20;
+
+  /* Accent shades */
+  --vp-dark-green:         #7a0a50;
+  --vp-dark-green-dark:    #a01070;
+  --vp-dark-green-light:   #e34b75;
+  --vp-dark-green-lighter: #e87090;
+
+  /* Complementary Colors */
+  --vp-dark-gray:      #1e1e1e;
+  --vp-dark-gray-soft: #2a2a2a;
+  --vp-dark-gray-mute: #242424;
+  --vp-light-gray:     #d1d5db;
+  --vp-tip-bg:         rgb(254, 254, 254);
+
+  /* Text Colors */
+  --vp-dark-text:    #e5e5e5;
+  --vp-dark-subtext: #c1c1c1;
+  --vp-source-text:  #e5e5e5;
+
+  /* Custom tip */
+  --vp-custom-block-tip-border: var(--vp-c-brand-light);
+  --vp-custom-block-tip-bg:     var(--vp-tip-bg);
+}
+
+/* ============================================================
+   Colors — Dark mode
+   Base: rgb(229, 67, 117) — pitched pink, ramp derived from it
+   ============================================================ */
+:root.dark {
+  --zarr-pink:    #e54375;   /* rgb(229, 67, 117) — the requested base   */
+  --zarr-magenta: #c73562;   /* darkened ~15% for hover / secondary       */
+  --zarr-salmon:  #ed6e96;   /* lightened ~15% for soft highlight         */
+
+  --vp-c-brand:       #e54375;
+  --vp-c-brand-1:     #e54375;
+  --vp-c-brand-2:     #ed6e96;
+  --vp-c-brand-3:     #c73562;
+  --vp-c-brand-light: #e54375;
+  --vp-c-brand-dark:  #c73562;
+  --vp-c-brand-dimm:  #2e1a20;
+
+  /* Accent shades */
+  --vp-dark-green:         #7a1a3a;
+  --vp-dark-green-dark:    #a02855;
+  --vp-dark-green-light:   #e54375;
+  --vp-dark-green-lighter: #ed6e96;
+
+  /* Custom tip */
+  --vp-custom-block-tip-border: var(--vp-dark-green-dark);
+  --vp-custom-block-tip-text:   var(--vp-dark-subtext);
+  --vp-custom-block-tip-bg:     var(--vp-dark-gray-mute);
+}
+
+/* ============================================================
+   Component: Button
+   ============================================================ */
+:root {
+  --vp-button-brand-border:       var(--vp-light-gray);
+  --vp-button-brand-bg:           var(--zarr-pink);
+  --vp-button-brand-hover-border: var(--vp-c-bg-alt);
+  --vp-button-brand-hover-bg:     var(--zarr-magenta);
+}
+
+.dark {
+  --vp-c-brand:                   #e54375;
+  --vp-button-brand-border:       var(--vp-dark-green-lighter);
+  --vp-button-brand-bg:           #e54375;   /* rgb(229, 67, 117) explicitly */
+  --vp-button-brand-hover-bg:     var(--zarr-magenta);
+  --vp-c-brand-1:                 var(--vp-dark-green-light);
+  --vp-c-brand-2:                 var(--vp-dark-green-lighter);
+  --vp-c-brand-3:                 var(--zarr-magenta);
+}
+
+/* ============================================================
+   Component: Home Hero
+   ============================================================ */
+:root {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(
+    0deg,
+    #e58077 30%,
+    #bb1085
+  );
+
+  --vp-home-hero-image-background-image: linear-gradient(
+    -145deg,
+    #bb108582 30%,
+    #e3807799 30%,
+    #e34b75e3
+  );
+  --vp-home-hero-image-filter: blur(40px);
+}
+
+:root.dark {
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(
+  120deg,
+  #c73562 15%,       /* deep wine-crimson */
+  #e58077,           /* mid rose — the base brand color */
+  #f0a0b8            /* bright pink-white highlight */
+  );
+  --vp-home-hero-image-background-image: linear-gradient(
+  -45deg,
+  #c73562 30%,
+  #e58077,
+  var(--vp-dark-gray) 30%
+  );
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+/* ============================================================
+   Media queries
+   ============================================================ */
+@media (min-width: 640px) {
+  :root {
+    --vp-home-hero-image-filter: blur(56px);
+  }
+}
+
+@media (min-width: 960px) {
+  :root {
+    --vp-home-hero-image-filter: blur(72px);
+  }
+}
+
+/* ============================================================
+   Component: MathJax
+   ============================================================ */
+.mjx-scroll-wrapper {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+
+mjx-container {
+  display: inline-block;
+  padding: 0.5rem 0;
+  margin: auto 2px -2px;
+  overflow: visible !important;
+  text-align: left;
+}
+
+mjx-container > svg {
+  display: inline-block;
+  height: auto;
+}
+
+mjx-container > svg[data-labels="true"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+mjx-container svg path {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.MathJax_ref {
+  color: var(--vp-c-brand-1);
+}
+
+.MathJax_ref:hover {
+  color: var(--vp-c-brand-2);
+  cursor: pointer;
+}
