@@ -5,3 +5,5 @@ docs/build
 .vscode
 test/CondaPkg.toml
 *.cov
+node_modules
+package-lock.json
