@@ -15,10 +15,10 @@ using AWSS3
 end
 
 @testset "Version and Dimension Separator" begin
-  dot_noprefix = Zarr.ChunkEncoding('.', false)
-  dot_prefix = Zarr.ChunkEncoding('.', true)
-  slash_noprefix = Zarr.ChunkEncoding('/', false)
-  slash_prefix = Zarr.ChunkEncoding('/', true)
+  dot_noprefix = Zarr.ChunkKeyEncoding('.', false)
+  dot_prefix = Zarr.ChunkKeyEncoding('.', true)
+  slash_noprefix = Zarr.ChunkKeyEncoding('/', false)
+  slash_prefix = Zarr.ChunkKeyEncoding('/', true)
     let ci = CartesianIndex()
     @test Zarr.citostring(dot_noprefix, ci) == "0"
     @test Zarr.citostring(dot_prefix, ci) == "c.0"
@@ -44,7 +44,7 @@ Function to test the interface of AbstractStore. Every complete implementation s
 """
 function test_store_common(ds::Zarr.AbstractStore)
   V = Zarr.DV
-  enc = Zarr.ChunkEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
+  enc = Zarr.ChunkKeyEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
 
   @test !Zarr.is_zgroup(V, ds, "")
   ds[".zgroup"]=rand(UInt8,50)
@@ -97,7 +97,7 @@ Function to test the interface of a read only AbstractStore. Every complete impl
 """
 function test_read_only_store_common(converter, closer=Returns(nothing))
   V = Zarr.DV
-  enc = Zarr.ChunkEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
+  enc = Zarr.ChunkKeyEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
   ds = Zarr.DictStore()
   rs = converter(ds)
   @test !Zarr.is_zgroup(V, rs, "")

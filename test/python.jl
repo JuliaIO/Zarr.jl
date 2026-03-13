@@ -4,9 +4,11 @@
 ### when read from the other language 
 ###
 
-using CondaPkg
-CondaPkg.add("zarr"; version="3.*")
-CondaPkg.add("numpy"; version=">=2.3.3,<3")
+using CondaPkg: CondaPkg, PkgSpec
+CondaPkg.add([
+    PkgSpec("zarr"; version="3.*"),
+    PkgSpec("numpy"; version=">=2.3.3,<3")
+])
 
 @testset "Python zarr implementation" begin
 

@@ -79,10 +79,10 @@ Returns the keys of files in the given store.
 function subkeys end 
 
 # Function to construct the full path to a chunk given the base path, Cartesian Index i, and the chunk ecoding
-store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::ChunkEncoding) = s[p, citostring(e, i)]
-store_deletechunk(s::AbstractStore, p, i::CartesianIndex, e::ChunkEncoding) = delete!(s, p, citostring(e, i))
-store_writechunk(s::AbstractStore, v, p, i::CartesianIndex, e::ChunkEncoding) = s[p, citostring(e, i)] = v
-store_isinitialized(s::AbstractStore, p, i::CartesianIndex, e::ChunkEncoding) = isinitialized(s, p, citostring(e, i))
+store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = s[p, citostring(e, i)]
+store_deletechunk(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = delete!(s, p, citostring(e, i))
+store_writechunk(s::AbstractStore, v, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = s[p, citostring(e, i)] = v
+store_isinitialized(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = isinitialized(s, p, citostring(e, i))
 
 
 #Functions to concat path and key 
@@ -225,14 +225,14 @@ channelsize(s) = channelsize(store_read_strategy(s))
 channelsize(::SequentialRead) = 0
 channelsize(c::ConcurrentRead) = c.ntasks
 
-read_items!(s::AbstractStore, c::AbstractChannel, e::ChunkEncoding, p, i) = read_items!(s, c, store_read_strategy(s), e, p, i)
-function read_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e::ChunkEncoding, p, i)
+read_items!(s::AbstractStore, c::AbstractChannel, e::AbstractChunkKeyEncoding, p, i) = read_items!(s, c, store_read_strategy(s), e, p, i)
+function read_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e::AbstractChunkKeyEncoding, p, i)
     for ii in i
     res = store_readchunk(s, p, ii, e)
         put!(c,(ii=>res))
     end
 end
-function read_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e::ChunkEncoding, p, i)
+function read_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e::AbstractChunkKeyEncoding, p, i)
     ntasks = r.ntasks
     #@show ntasks
     asyncmap(i,ntasks = ntasks) do ii
@@ -244,8 +244,8 @@ function read_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e:
     end
 end
 
-write_items!(s::AbstractStore, c::AbstractChannel, e::ChunkEncoding, p, i) = write_items!(s, c, store_read_strategy(s), e, p, i)
-function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e::ChunkEncoding, p, i)
+write_items!(s::AbstractStore, c::AbstractChannel, e::AbstractChunkKeyEncoding, p, i) = write_items!(s, c, store_read_strategy(s), e, p, i)
+function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e::AbstractChunkKeyEncoding, p, i)
   for _ in 1:length(i)
       ii,data = take!(c)
       if data === nothing
@@ -259,7 +259,7 @@ function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e:
   close(c)
 end
 
-function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e::ChunkEncoding, p, i)
+function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e::AbstractChunkKeyEncoding, p, i)
   ntasks = r.ntasks
   asyncmap(i,ntasks = ntasks) do _
       ii,data = take!(c)

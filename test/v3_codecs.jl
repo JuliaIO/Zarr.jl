@@ -70,36 +70,36 @@ end
 
     # No array->array codecs → 'C'
     p = Zarr.V3Pipeline((), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test Zarr.get_order(md) == 'C'
 
     # Single TransposeCodec with identity permutation → 'C'
     tc_c = Zarr.Codecs.V3Codecs.TransposeCodec((1,2,3))
     p = Zarr.V3Pipeline((tc_c,), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test Zarr.get_order(md) == 'C'
 
     # Single TransposeCodec with reverse permutation → 'F'
     tc_f = Zarr.Codecs.V3Codecs.TransposeCodec((3,2,1))
     p = Zarr.V3Pipeline((tc_f,), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test Zarr.get_order(md) == 'F'
 
     # Single TransposeCodec with arbitrary (non-C, non-F) permutation → ArgumentError
     tc_other = Zarr.Codecs.V3Codecs.TransposeCodec((2,1,3))
     p = Zarr.V3Pipeline((tc_other,), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test_throws ArgumentError Zarr.get_order(md)
 
     # Multiple array->array codecs → ArgumentError
     p = Zarr.V3Pipeline((tc_f, tc_f), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test_throws ArgumentError Zarr.get_order(md)
 
     # Unrecognized array->array codec type → ArgumentError
     struct _FakeCodec <: Zarr.Codecs.V3Codecs.V3Codec{:array,:array} end
     p = Zarr.V3Pipeline((_FakeCodec(),), bytes_codec, ())
-    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkEncoding('/',true))
+    md = Zarr.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
     @test_throws ArgumentError Zarr.get_order(md)
 end
 
@@ -195,7 +195,7 @@ end
         bad_pipeline = Zarr.V3Pipeline((), bytes_codec, (bad_blosc,))
         bad_md = Zarr.MetadataV3{Int32,1,typeof(bad_pipeline)}(
             3, "array", (4,), (4,), "int32", bad_pipeline, Int32(0),
-            Zarr.ChunkEncoding('/', true)
+            Zarr.ChunkKeyEncoding('/', true)
         )
         @test_throws ArgumentError JSON.lower(bad_md)
     end
@@ -237,7 +237,7 @@ end
     pipeline = Zarr.V3Pipeline((tc,), bytes_codec, ())
     md = Zarr.MetadataV3{Int32,3,typeof(pipeline)}(
         3, "array", (2,3,4), (2,3,4), "int32", pipeline, Int32(0),
-        Zarr.ChunkEncoding('/', true)
+        Zarr.ChunkKeyEncoding('/', true)
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -264,9 +264,9 @@ end
     crc32c_codec = Zarr.Codecs.V3Codecs.CRC32cV3Codec()
     bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
     pipeline = Zarr.V3Pipeline((), bytes_codec, (crc32c_codec,))
-    md = Zarr.MetadataV3{Int32,1,typeof(pipeline)}(
+    md = Zarr.MetadataV3{Int32,1,typeof(pipeline),Zarr.ChunkKeyEncoding}(
         3, "array", (4,), (4,), "int32", pipeline, Int32(0),
-        Zarr.ChunkEncoding('/', true)
+        Zarr.ChunkKeyEncoding('/', true)
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -484,8 +484,64 @@ end
         "chunk_key_encoding":{"name":"v2","configuration":{"separator":"."}},
         "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
     md = Zarr.Metadata(json_v2enc, false)
-    @test md.chunk_encoding.prefix == false
-    @test md.chunk_encoding.sep == '.'
+    @test md.chunk_key_encoding.prefix == false
+    @test md.chunk_key_encoding.sep == '.'
+end
+
+@testset "SuffixChunkKeyEncoding" begin
+    # Parsing: suffix encoding with default base
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},
+        "chunk_key_encoding":{"name":"suffix","configuration":{
+            "suffix":".tiff",
+            "base_encoding":{"name":"default"}
+        }},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md = Zarr.Metadata(json_str, false)
+    @test md.chunk_key_encoding isa Zarr.SuffixChunkKeyEncoding
+    @test md.chunk_key_encoding.suffix == ".tiff"
+    @test md.chunk_key_encoding.base_encoding isa Zarr.ChunkKeyEncoding
+    @test md.chunk_key_encoding.base_encoding.prefix == true   # "default" uses c/ prefix
+    @test md.chunk_key_encoding.base_encoding.sep == '/'
+
+    # citostring appends suffix to base key
+    e = md.chunk_key_encoding
+    @test Zarr.citostring(e, CartesianIndex(1, 1)) == "c/0/0.tiff"
+    @test Zarr.citostring(e, CartesianIndex(2, 1)) == "c/0/1.tiff"
+    @test Zarr.citostring(e, CartesianIndex(1, 2)) == "c/1/0.tiff"
+
+    # Parsing: suffix encoding with v2 base
+    json_v2base = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[2,2]}},
+        "chunk_key_encoding":{"name":"suffix","configuration":{
+            "suffix":".shard.zip",
+            "base_encoding":{"name":"v2"}
+        }},
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    md2 = Zarr.Metadata(json_v2base, false)
+    @test md2.chunk_key_encoding.suffix == ".shard.zip"
+    @test md2.chunk_key_encoding.base_encoding.prefix == false  # "v2" has no prefix
+    @test Zarr.citostring(md2.chunk_key_encoding, CartesianIndex(1, 1)) == "0.0.shard.zip"
+
+    # Serialization round-trip
+    lowered = JSON.lower(md)
+    cke = lowered["chunk_key_encoding"]
+    @test cke["name"] == "suffix"
+    @test cke["configuration"]["suffix"] == ".tiff"
+    @test cke["configuration"]["base_encoding"]["name"] == "default"
+
+    # ZArray round-trip: chunks are stored with the suffix in their keys
+    store = Zarr.DictStore()
+    cke = Zarr.SuffixChunkKeyEncoding(".tiff", Zarr.ChunkKeyEncoding('/', true))
+    bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    pipeline = Zarr.V3Pipeline((), bytes_codec, ())
+    P = typeof(pipeline)
+    E = typeof(cke)
+    md = Zarr.MetadataV3{Int32,2,P,E}(3, "array", (4,4), (2,2), "int32", pipeline, Int32(0), cke)
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+    z[:,:] = reshape(Int32.(1:16), 4, 4)
+    @test z[:,:] == reshape(Int32.(1:16), 4, 4)
+    @test any(k -> endswith(k, ".tiff"), keys(store.a))
 end
 
 @testset "V3 lower3 extended codecs" begin

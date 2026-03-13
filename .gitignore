@@ -8,3 +8,5 @@ test/CondaPkg.toml
 test/v3_julia/
 test/v3_python/
 test/.minio.sys/
+node_modules
+package-lock.json

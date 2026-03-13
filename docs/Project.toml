@@ -4,5 +4,13 @@ AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 Minio = "4281f0d9-7ae0-406e-9172-b7277c1efa20"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[sources]
+Zarr = {path = ".."}
+
+[compat]
+Documenter = "1"
+DocumenterVitepress = "0.3.2"
