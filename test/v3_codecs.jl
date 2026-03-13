@@ -839,7 +839,7 @@ end
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
         Zarr.Codecs.V3Codecs.CRC32cV3Codec(),
     ]
-    c = Zarr.Codecs.V3Codecs.getCodec(Zarr.Codecs.V3Codecs.ShardingCodec, Dict(
+    c = Zarr.Codecs.V3Codecs.getCodec(Dict(
         "name" => "sharding_indexed",
         "configuration" => Dict(
             "chunk_shape"    => [2],

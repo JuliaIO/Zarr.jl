@@ -225,79 +225,12 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         throw(ArgumentError("Unknown chunk_key_encoding of name, $(chunk_key_encoding["name"])"))
     end
 
-    # Build V3Pipeline from codec chain
-    array_array_codecs = []
-    array_bytes_codec = nothing
-    bytes_bytes_codecs = []
-    order = 'C'  # default
-
-    for codec in d["codecs"]
-        codec_name = codec["name"]
-        config = get(codec, "configuration", Dict{String,Any}())
-        if codec_name == "transpose"
-            _order = config["order"]
-            if _order isa AbstractString
-                n = length(shape)
-                if _order == "C"
-                    @warn "Transpose codec dimension order of C is deprecated"
-                    perm = ntuple(identity, n)
-                elseif _order == "F"
-                    @warn "Transpose codec dimension order of F is deprecated"
-                    perm = ntuple(i -> n - i + 1, n)
-                    order = 'F'
-                else
-                    throw(ArgumentError("Unknown transpose order string: $_order"))
-                end
-            else
-                perm = Tuple(Int.(_order) .+ 1)
-                default_perm = ntuple(identity, length(shape))
-                rev_perm = ntuple(i -> length(shape) - i + 1, length(shape))
-                if perm == default_perm
-                    order = 'C'
-                elseif perm == rev_perm
-                    order = 'F'
-                end
-            end
-            push!(array_array_codecs, Codecs.V3Codecs.TransposeCodec(perm))
-        elseif codec_name == "bytes"
-            endian_str = get(config, "endian", "little")
-            endian = endian_str == "little" ? :little :
-                     endian_str == "big"    ? :big    :
-                     throw(ArgumentError("Unknown endian value: \"$endian_str\""))
-            array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
-        elseif codec_name == "sharding_indexed"
-            array_bytes_codec = Codecs.V3Codecs.getCodec(Codecs.V3Codecs.ShardingCodec, codec)
-        elseif codec_name == "gzip"
-            level = get(config, "level", 6)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.GzipV3Codec(level))
-        elseif codec_name == "blosc"
-            cname = get(config, "cname", "lz4")
-            clevel = get(config, "clevel", 5)
-            shuffle_val = get(config, "shuffle", "noshuffle")
-            shuffle_int = shuffle_val isa Integer ? shuffle_val :
-                          shuffle_val == "noshuffle" ? 0 :
-                          shuffle_val == "shuffle" ? 1 :
-                          shuffle_val == "bitshuffle" ? 2 :
-                          throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
-            blocksize = get(config, "blocksize", 0)
-            typesize = get(config, "typesize", 4)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize))
-        elseif codec_name == "zstd"
-            level = get(config, "level", 3)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.ZstdV3Codec(level))
-        elseif codec_name == "crc32c"
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.CRC32cV3Codec())
-        else
-            throw(ArgumentError("Zarr.jl currently does not support the $codec_name codec"))
-        end
-    end
-
-    isnothing(array_bytes_codec) && throw(ArgumentError("V3 codec chain must contain an array-to-bytes codec such as 'bytes' or 'sharding_indexed'"))
-    pipeline = V3Pipeline(Tuple(array_array_codecs), array_bytes_codec, Tuple(bytes_bytes_codecs))
-
-    # Type Parameters
+    # Type Parameters (computed before codec parsing so elsize is available as context)
     T = typestr3(data_type)
     N = length(shape)
+
+    codec_ctx = (shape = shape, elsize = sizeof(Base.nonmissingtype(T)))
+    pipeline = Codecs.V3Codecs.getCodec(d["codecs"], codec_ctx)
 
     fv = fill_value_decoding(d["fill_value"], T)::T
 
