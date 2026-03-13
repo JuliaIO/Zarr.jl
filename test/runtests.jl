@@ -30,7 +30,7 @@ using Dates
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
-            @test z.metadata.chunk_encoding === Zarr.ChunkEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
+            @test z.metadata.chunk_key_encoding === Zarr.ChunkKeyEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
         @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')
@@ -178,7 +178,7 @@ end
   @test all(ismissing,amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
   # Test that chunk containing only missings is not initialized
-        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkEncoding('/', false), CartesianIndex((1, 5))))
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkKeyEncoding('/', false), CartesianIndex((1, 5))))
   #
   amiss = zcreate(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=false)
   amiss[:,1] = 1:10
@@ -190,7 +190,7 @@ end
   @test all(==(-1),amiss[:,2])
   @test all(i->isequal(i...),zip(amiss[1:3,4],[1,-1,3]))
   # Test that chunk containing only fill values is not initialized
-        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkEncoding('/', false), CartesianIndex((1, 5))))
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkKeyEncoding('/', false), CartesianIndex((1, 5))))
 end
 
 @testset "resize" begin

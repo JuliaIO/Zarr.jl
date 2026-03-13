@@ -100,12 +100,12 @@ value of the ".zarray" key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-abstract type AbstractMetadata{T,N} end
+abstract type AbstractMetadata{T,N,E <: AbstractChunkKeyEncoding} end
 Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
 """Metadata for Zarr version 2 arrays"""
-struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N}
+struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,ChunkKeyEncoding}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
@@ -115,18 +115,17 @@ struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N}
     fill_value::Union{T, Nothing}
     order::Char
     filters::F  # not yet supported
-    chunk_encoding::ChunkEncoding
-    function MetadataV2{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_encoding) where {T2,N,C,F}
+    chunk_key_encoding::ChunkKeyEncoding
+    function MetadataV2{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding) where {T2,N,C,F}
         zarr_format == 2 || throw(ArgumentError("MetadataV2 only functions if zarr_format == 2"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_encoding)
+        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
     end
 end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
-
 
 # Type alias for backward compatibility
 const Metadata = AbstractMetadata
@@ -142,7 +141,7 @@ function Base.:(==)(m1::MetadataV2, m2::MetadataV2)
   m1.fill_value == m2.fill_value &&
   m1.order == m2.order &&
   m1.filters == m2.filters &&
-  m1.chunk_encoding == m2.chunk_encoding
+  m1.chunk_key_encoding == m2.chunk_key_encoding
 end
 
 
@@ -163,7 +162,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         order=order,
         filters=filters,
         fill_as_missing=fill_as_missing,
-        chunk_encoding=ChunkEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
+        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
     )
 end
 
@@ -175,7 +174,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         order::Char='C',
         filters::F=nothing,
         fill_as_missing = false,
-    chunk_encoding=ChunkEncoding('.', false)
+    chunk_key_encoding=ChunkKeyEncoding('.', false)
     ) where {T, N, C, F}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     MetadataV2{T2,N,C,typeof(filters)}(
@@ -188,12 +187,11 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         fill_value,
         order,
         filters,
-        chunk_encoding,
+        chunk_key_encoding,
     )
 end
 
-
-Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict), fill_as_missing)
+Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict{String,Any}), fill_as_missing)
 
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
@@ -239,7 +237,7 @@ function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{2})
         fv,
         first(d["order"]),
         filters,
-        ChunkEncoding(dim_sep, false),
+        ChunkKeyEncoding(dim_sep, false),
     )
 end
 
@@ -256,7 +254,7 @@ function JSON.lower(md::MetadataV2)
         "fill_value" => fill_value_encoding(md.fill_value),
         "order" => md.order,
         "filters" => md.filters,
-        "dimension_separator" => md.chunk_encoding.sep
+        "dimension_separator" => md.chunk_key_encoding.sep
     )
 end
 
