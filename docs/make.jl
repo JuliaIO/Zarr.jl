@@ -1,6 +1,9 @@
 using DocumenterVitepress
 using Documenter, Zarr
 
+cp(joinpath(@__DIR__, "..", "CHANGELOG.md"), joinpath(@__DIR__, "src", "changelog.md"), force = true)
+cp(joinpath(@__DIR__, "..", "CONTRIBUTING.md"), joinpath(@__DIR__, "src", "contributing.md"), force = true)
+
 makedocs(
     modules = [Zarr],
     clean = false,
@@ -14,17 +17,7 @@ makedocs(
     build = "build",
     sitename = "Zarr.jl",
     authors = "Fabian Gans, Martijn Visser",
-    warnonly=[:missing_docs,],
-    pages = [
-        "User Guide" => [
-            "Tutorial" => "tutorial.md",
-            "Storage Backends" => "storage.md",
-            "Accessing cloud data Examples" => "s3examples.md",
-            "Operations on Zarr Arrays" => "operations.md",
-            "Dealing with missing values" => "missings.md",
-            ],
-        "API Reference" => "reference.md",
-    ]
+    warnonly=[:missing_docs, :cross_references],
 )
 
 zarrpath = joinpath(@__DIR__, "data", "example.zarr")

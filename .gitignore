@@ -7,3 +7,5 @@ test/CondaPkg.toml
 *.cov
 node_modules
 package-lock.json
+docs/src/changelog.md
+docs/src/contributing.md
