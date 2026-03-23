@@ -52,4 +52,4 @@ function JSON.lower(z::ZstdCompressor)
     end
 end
 
-Zarr.compressortypes["zstd"] = ZstdCompressor
+# Registration moved to Zarr.__init__

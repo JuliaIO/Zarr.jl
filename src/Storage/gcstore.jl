@@ -130,9 +130,7 @@ function subdirs(s::GCStore, p)
   return dirs
 end
 
-pushfirst!(storageregexlist,r"^https://storage.googleapis.com"=>GCStore)
-pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
-push!(storageregexlist,r"^gs://"=>GCStore)
+# Storage regex registration moved to Zarr.__init__
 
 function storefromstring(::Type{<:GCStore}, url,_)
   uri = URI(url)
