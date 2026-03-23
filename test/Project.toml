@@ -11,7 +11,11 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+ZarrCore = "d6e7b3f4-6eca-4ed7-8aa6-35dc33f59f61"
 
 [sources]
 CondaPkg = {rev = "manifest-check", url = "https://github.com/JamesWrigley/CondaPkg.jl"}
 Zarr = {path = ".."}
+
+[sources.ZarrCore]
+path = "../lib/ZarrCore"
