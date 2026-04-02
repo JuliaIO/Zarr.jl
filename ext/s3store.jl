@@ -2,7 +2,7 @@ function Zarr.S3Store(bucket::String;
     aws = nothing,
   )
   if aws === nothing
-    aws = AWSS3.AWS.global_aws_config()
+    aws = AWSS3.AWS.current_aws_config()
   end
   S3Store(bucket, aws)
 end
@@ -69,7 +69,15 @@ function Zarr.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
-  S3Store(String(bucket),aws=AWSS3.AWS.global_aws_config()),path
+  S3Store(String(bucket),aws=AWSS3.AWS.current_aws_config()),path
 end
 
 Zarr.store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])
+
+function Zarr.zopen(s::S3Path, mode="r"; kwargs...)
+  decomp = split(string(s),"/",keepempty=false)
+  bucket = decomp[2]
+  path = join(decomp[3:end],"/")
+  store = S3Store(bucket, get_config(s))
+  zopen(store, mode; path=path, kwargs...)
+end

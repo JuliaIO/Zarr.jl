@@ -12,13 +12,15 @@ account, you can access the dataset without credentials as follows:
 
 ````@example aws
 using Zarr, AWSS3
-AWSS3.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+cfg = AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2")
 ````
 
 Then we can directly open a zarr group stored on s3
 
 ````@example aws
-z = zopen("s3://mur-sst/zarr-v1")
+z = AWSS3.AWS.with_aws_config(cfg) do
+  zopen("s3://mur-sst/zarr-v1")
+end
 ````
 
 So we see that the store points to a zarr group with a few arrays
@@ -37,6 +39,12 @@ Or some data
 
 ````@example aws
 v[1:1000,1:1000,1]
+````
+It is also possible to use the `AWS3.S3Path` to open the zarr
+
+````@example aws
+s3_path = S3Path("s3://mur-sst/zarr-v1", config=cfg)
+z = zopen(s3_path)
 ````
 
 ## Accessing CMIP6 data on GCS
@@ -140,15 +148,18 @@ Afterwards we create an new bucket where we can store our data:
 ````julia
 using AWSS3
 cfg = MinioConfig("http://localhost:9005")
-AWSS3.global_aws_config(cfg)
-AWSS3.S3.create_bucket("zarrdata")
+AWSS3.AWS.with_aws_config(cfg) do
+  AWSS3.S3.create_bucket("zarrdata")
+end
 ````
 
 Next we create a new zarr group in the just created bucket:
 
 ````julia
 using Zarr
-g = zgroup(S3Store("zarrdata"),"group_1")
+g = AWSS3.AWS.with_aws_config(cfg) do
+  zgroup(S3Store("zarrdata"),"group_1")
+end
 ````
 
 and a new array inside the group and fill it with some data:
