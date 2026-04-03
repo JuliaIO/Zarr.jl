@@ -31,6 +31,9 @@ jobs:
           arch: ${{ matrix.arch }}
           show-versioninfo: true
       - uses: julia-actions/cache@v2
+      - name: Dev ZarrCore local package (Julia < 1.11 lacks [sources] support)
+        if: matrix.version == 'lts'
+        run: julia --project=. -e 'using Pkg; Pkg.develop(path="lib/ZarrCore")'
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:

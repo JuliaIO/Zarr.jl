@@ -67,4 +67,4 @@ end
 JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
     "clevel"=>c.clevel, "shuffle"=>c.shuffle, "blocksize"=>c.blocksize)
 
-Zarr.compressortypes["blosc"] = BloscCompressor
+# Registration moved to Zarr.__init__

@@ -63,42 +63,6 @@ end
 MetadataV3{T2,N,P}(args...) where {T2,N,P} = MetadataV3{T2,N,P,ChunkKeyEncoding}(args...)
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
 
-"""
-Convenience constructor for MetadataV3 that builds the codec pipeline from
-`order` (translated to a TransposeCodec), `endian` (translated to a BytesCodec),
-and `compressor` (translated to bytes->bytes codecs).
-"""
-function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::NTuple{N,Int},
-        dtype::String, fill_value;
-        order::Char='C',
-        endian::Symbol=:little,
-        compressor=BloscCompressor(),
-        chunk_key_encoding::E=ChunkKeyEncoding('/', true)
-    ) where {T2, N, E}
-    T_base = Base.nonmissingtype(T2)
-    array_array_codecs = if order == 'F'
-        (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
-    else
-        ()
-    end
-    array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
-    bytes_bytes_codecs = if compressor isa NoCompressor
-        ()
-    elseif compressor isa BloscCompressor
-        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, sizeof(T_base)),)
-    elseif compressor isa ZlibCompressor
-        # ZlibCompressor uses -1 to mean "default"; zarr v3 gzip spec requires 0-9
-        level = compressor.config.level == -1 ? 6 : compressor.config.level
-        (Codecs.V3Codecs.GzipV3Codec(level),)
-    elseif compressor isa ZstdCompressor
-        (Codecs.V3Codecs.ZstdV3Codec(compressor.config.compressionLevel),)
-    else
-        throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
-    end
-    pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
-    return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
-end
-
 function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.zarr_format == m2.zarr_format &&
   m1.node_type == m2.node_type &&
@@ -153,7 +117,37 @@ function get_order(md::MetadataV3)
 end
 get_order(md::MetadataV2) = md.order
 
+# --- Registry-based codec parsing ---
 
+function parse_v3_codec(codec_name::String, config::Dict, shape_length::Int)
+    if codec_name == "transpose"
+        return _parse_transpose_codec(config, shape_length)
+    end
+    haskey(Codecs.V3Codecs.v3_codec_parsers, codec_name) ||
+        throw(ArgumentError("Zarr.jl currently does not support the $codec_name codec"))
+    return Codecs.V3Codecs.v3_codec_parsers[codec_name](config)
+end
+
+function _parse_transpose_codec(config::Dict, shape_length::Int)
+    _order = config["order"]
+    if _order isa AbstractString
+        n = shape_length
+        if _order == "C"
+            @warn "Transpose codec dimension order of C is deprecated"
+            perm = ntuple(identity, n)
+        elseif _order == "F"
+            @warn "Transpose codec dimension order of F is deprecated"
+            perm = ntuple(i -> n - i + 1, n)
+        else
+            throw(ArgumentError("Unknown transpose order string: $_order"))
+        end
+    else
+        perm = Tuple(Int.(_order) .+ 1)
+    end
+    return Codecs.V3Codecs.TransposeCodec(perm)
+end
+
+# --- Metadata3 from Dict ---
 
 function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, ("zarr_format", "node_type"))
@@ -225,70 +219,22 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     # Chunk Key Encoding
     chunk_key_encoding = d["chunk_key_encoding"]
 
-    # Build V3Pipeline from codec chain
+    # Build V3Pipeline from codec chain using registry-based parsing
     array_array_codecs = []
     array_bytes_codec = nothing
     bytes_bytes_codecs = []
-    order = 'C'  # default
 
     for codec in d["codecs"]
         codec_name = codec["name"]
         config = get(codec, "configuration", Dict{String,Any}())
-        if codec_name == "transpose"
-            _order = config["order"]
-            if _order isa AbstractString
-                n = length(shape)
-                if _order == "C"
-                    @warn "Transpose codec dimension order of C is deprecated"
-                    perm = ntuple(identity, n)
-                elseif _order == "F"
-                    @warn "Transpose codec dimension order of F is deprecated"
-                    perm = ntuple(i -> n - i + 1, n)
-                    order = 'F'
-                else
-                    throw(ArgumentError("Unknown transpose order string: $_order"))
-                end
-            else
-                perm = Tuple(Int.(_order) .+ 1)
-                default_perm = ntuple(identity, length(shape))
-                rev_perm = ntuple(i -> length(shape) - i + 1, length(shape))
-                if perm == default_perm
-                    order = 'C'
-                elseif perm == rev_perm
-                    order = 'F'
-                end
-            end
-            push!(array_array_codecs, Codecs.V3Codecs.TransposeCodec(perm))
-        elseif codec_name == "bytes"
-            endian_str = get(config, "endian", "little")
-            endian = endian_str == "little" ? :little :
-                     endian_str == "big"    ? :big    :
-                     throw(ArgumentError("Unknown endian value: \"$endian_str\""))
-            array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
-        elseif codec_name == "sharding_indexed"
-            throw(ArgumentError("Zarr.jl currently does not support the sharding_indexed codec"))
-        elseif codec_name == "gzip"
-            level = get(config, "level", 6)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.GzipV3Codec(level))
-        elseif codec_name == "blosc"
-            cname = get(config, "cname", "lz4")
-            clevel = get(config, "clevel", 5)
-            shuffle_val = get(config, "shuffle", "noshuffle")
-            shuffle_int = shuffle_val isa Integer ? shuffle_val :
-                          shuffle_val == "noshuffle" ? 0 :
-                          shuffle_val == "shuffle" ? 1 :
-                          shuffle_val == "bitshuffle" ? 2 :
-                          throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
-            blocksize = get(config, "blocksize", 0)
-            typesize = get(config, "typesize", 4)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize))
-        elseif codec_name == "zstd"
-            level = get(config, "level", 3)
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.ZstdV3Codec(level))
-        elseif codec_name == "crc32c"
-            push!(bytes_bytes_codecs, Codecs.V3Codecs.CRC32cV3Codec())
-        else
-            throw(ArgumentError("Zarr.jl currently does not support the $codec_name codec"))
+        parsed = parse_v3_codec(codec_name, config, length(shape))
+        cat = Codecs.V3Codecs.codec_category(parsed)
+        if cat == (:array, :array)
+            push!(array_array_codecs, parsed)
+        elseif cat == (:array, :bytes)
+            array_bytes_codec = parsed
+        elseif cat == (:bytes, :bytes)
+            push!(bytes_bytes_codecs, parsed)
         end
     end
 
@@ -318,14 +264,16 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     )
 end
 
+# --- Metadata3 from Array (takes bytes_bytes_codecs directly) ---
+
 "Construct MetadataV3 based on your data"
 function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         node_type::String="array",
-        compressor=BloscCompressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         endian::Symbol=:little,
-        filters=nothing,
+        compressor=nothing,
+        bytes_bytes_codecs::Tuple=(compressor === nothing ? () : compressor_to_v3_bytes_codecs(compressor)),
         fill_as_missing = false,
         dimension_separator::Char = '/'
     ) where {T, N}
@@ -334,19 +282,63 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     if fill_value === nothing
         fill_value = zero(T)
     end
-    return MetadataV3{T2, N}(
+    T_base = Base.nonmissingtype(T2)
+    array_array_codecs = if order == 'F'
+        (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
+    else
+        ()
+    end
+    array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
+    pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
+    chunk_key_encoding = ChunkKeyEncoding(dimension_separator, true)
+    return MetadataV3{T2, N, typeof(pipeline), typeof(chunk_key_encoding)}(
         3,
         node_type,
         size(A),
         chunks,
         typestr3(eltype(A)),
-        fill_value;
-        order=order,
-        endian=endian,
-        compressor=compressor,
-        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, true)
+        pipeline,
+        fill_value,
+        chunk_key_encoding,
     )
 end
+
+# --- Compressor to V3 bytes codecs dispatch ---
+
+"""
+    compressor_to_v3_bytes_codecs(compressor) -> Tuple
+
+Convert a compressor to a tuple of V3 bytes->bytes codecs.
+Subtypes should add methods for their specific compressor types.
+"""
+compressor_to_v3_bytes_codecs(::NoCompressor) = ()
+compressor_to_v3_bytes_codecs(c) = throw(ArgumentError("Unsupported compressor type for v3: $(typeof(c)). Register a method for compressor_to_v3_bytes_codecs."))
+
+# --- Metadata(A, chunks, ::ZarrFormat{3}) using compressor_to_v3_bytes_codecs ---
+
+function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
+        node_type::String="array",
+        compressor=default_compressor(),
+        fill_value::Union{T, Nothing}=nothing,
+        order::Char='C',
+        endian::Symbol=:little,
+        filters=nothing,
+        fill_as_missing = false,
+        chunk_key_encoding::E=ChunkKeyEncoding('/', true)
+    ) where {T, N, E}
+    bb_codecs = compressor_to_v3_bytes_codecs(compressor)
+    return Metadata3(A, chunks;
+        node_type=node_type,
+        fill_value=fill_value,
+        order=order,
+        endian=endian,
+        bytes_bytes_codecs=bb_codecs,
+        fill_as_missing=fill_as_missing,
+        dimension_separator=chunk_key_encoding.sep
+    )
+end
+
+# --- lower3: serialize MetadataV3 using codec_to_dict dispatch ---
 
 function lower3(md::MetadataV3{T}) where T
     chunk_grid = Dict{String,Any}(
@@ -359,57 +351,21 @@ function lower3(md::MetadataV3{T}) where T
     # chunk_key_encoding
     chunk_key_encoding = lower_chunk_key_encoding(md.chunk_key_encoding)
 
-    # Build codecs from pipeline
+    # Build codecs from pipeline using codec_to_dict dispatch
     codecs = Dict{String,Any}[]
     p = md.pipeline
 
     # array->array codecs
     for codec in p.array_array
-        if codec isa Codecs.V3Codecs.TransposeCodec
-            push!(codecs, Dict{String,Any}(
-                "name" => "transpose",
-                "configuration" => Dict("order" => collect(codec.order .- 1))
-            ))
-        end
+        push!(codecs, Codecs.V3Codecs.codec_to_dict(codec))
     end
 
     # array->bytes codec
-    if p.array_bytes isa Codecs.V3Codecs.BytesCodec
-        push!(codecs, Dict{String,Any}(
-            "name" => "bytes",
-            "configuration" => Dict{String,Any}("endian" => string(p.array_bytes.endian))
-        ))
-    end
+    push!(codecs, Codecs.V3Codecs.codec_to_dict(p.array_bytes))
 
     # bytes->bytes codecs
     for codec in p.bytes_bytes
-        if codec isa Codecs.V3Codecs.GzipV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "gzip",
-                "configuration" => Dict{String,Any}("level" => codec.level)
-            ))
-        elseif codec isa Codecs.V3Codecs.BloscV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "blosc",
-                "configuration" => Dict{String,Any}(
-                    "cname" => codec.cname,
-                    "clevel" => codec.clevel,
-                    "shuffle" => codec.shuffle == 0 ? "noshuffle" :
-                                 codec.shuffle == 1 ? "shuffle" :
-                                 codec.shuffle == 2 ? "bitshuffle" :
-                                 throw(ArgumentError("Unknown shuffle integer: $(codec.shuffle)")),
-                    "blocksize" => codec.blocksize,
-                    "typesize" => codec.typesize
-                )
-            ))
-        elseif codec isa Codecs.V3Codecs.ZstdV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "zstd",
-                "configuration" => Dict{String,Any}("level" => codec.level)
-            ))
-        elseif codec isa Codecs.V3Codecs.CRC32cV3Codec
-            push!(codecs, Dict{String,Any}("name" => "crc32c"))
-        end
+        push!(codecs, Codecs.V3Codecs.codec_to_dict(codec))
     end
 
     Dict{String, Any}(
@@ -421,28 +377,6 @@ function lower3(md::MetadataV3{T}) where T
         "chunk_key_encoding" => chunk_key_encoding,
         "fill_value" => fill_value_encoding(md.fill_value),
         "codecs" => codecs
-    )
-end
-
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
-        node_type::String="array",
-        compressor::C=BloscCompressor(),
-        fill_value::Union{T, Nothing}=nothing,
-        order::Char='C',
-        endian::Symbol=:little,
-        filters::F=nothing,
-        fill_as_missing = false,
-        chunk_key_encoding::E=ChunkKeyEncoding('/', true)
-    ) where {T, N, C, F, E}
-    return Metadata3(A, chunks;
-        node_type=node_type,
-        compressor=compressor,
-        fill_value=fill_value,
-        order=order,
-        endian=endian,
-        filters=filters,
-        fill_as_missing=fill_as_missing,
-        dimension_separator=chunk_key_encoding.sep
     )
 end
 

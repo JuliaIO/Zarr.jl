@@ -3,7 +3,7 @@
 # and Dictionaries are supported
 
 """
-    abstract type AbstractStore 
+    abstract type AbstractStore
 
 This the abstract supertype for all Zarr store implementations.  Currently only regular files ([`DirectoryStore`](@ref))
 and Dictionaries are supported.
@@ -27,20 +27,6 @@ They may optionally implement the following methods:
 abstract type AbstractStore end
 
 # Define the interface
-
-"""
-    S3Store(bucket::String; aws=nothing)
- 
-An S3-backed Zarr store. Available after loading the `ZarrAWSS3Ext` extension.
-"""
-struct S3Store <: AbstractStore
-    bucket::String
-    aws::Any
-end
-
-function S3Store(args...)
-    error("AWSS3 must be loaded to use S3Store. Try `using AWSS3`.")
-end
 
 """
     storagesize(d::AbstractStore, p::AbstractString)
@@ -76,7 +62,7 @@ function subdirs end
 
 Returns the keys of files in the given store.
 """
-function subkeys end 
+function subkeys end
 
 # Function to construct the full path to a chunk given the base path, Cartesian Index i, and the chunk ecoding
 store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = s[p, citostring(e, i)]
@@ -85,7 +71,7 @@ store_writechunk(s::AbstractStore, v, p, i::CartesianIndex, e::AbstractChunkKeyE
 store_isinitialized(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = isinitialized(s, p, citostring(e, i))
 
 
-#Functions to concat path and key 
+#Functions to concat path and key
 Base.getindex(s::AbstractStore, p, i::AbstractString) = s[_concatpath(p, i)]
 Base.delete!(s::AbstractStore, p, i::AbstractString) = delete!(s, _concatpath(p, i))
 Base.haskey(s::AbstractStore, k::AbstractString) = isinitialized(s, k)
@@ -195,7 +181,7 @@ function writemetadata(::ZarrFormat{2}, s::AbstractStore, p, m::AbstractMetadata
   else
     JSON.print(met,m)
   end
-  
+
   s[p,".zarray"] = take!(met)
   m
 end
@@ -280,12 +266,8 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 #Here different storage backends can register regexes that are checked against
 #during auto-check of storage format when doing zopen
 storageregexlist = Pair[]
-push!(storageregexlist, r"^s3://" => S3Store)
 
 #include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
-include("gcstore.jl")
 include("consolidated.jl")
-include("http.jl")
-include("zipstore.jl")

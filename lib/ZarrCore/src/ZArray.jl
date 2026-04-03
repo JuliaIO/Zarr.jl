@@ -6,7 +6,7 @@ using DateTimes64: DateTime64
 using Dates: Day, Millisecond
 
 """
-Number of tasks to use for async reading of chunks. Warning: setting this to very high values can lead to a large memory footprint. 
+Number of tasks to use for async reading of chunks. Warning: setting this to very high values can lead to a large memory footprint.
 """
 const concurrent_io_tasks = Ref(50)
 
@@ -168,7 +168,7 @@ resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
-  
+
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
@@ -177,33 +177,33 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   a = getchunkarray(z)
   # Now loop through the chunks
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
-  
+
   task = @async begin
     read_items!($(z.storage), c, $(z.metadata.chunk_key_encoding), $(z.path), $(blockr))
   end
   bind(c,task)
 
-  try 
+  try
     for i in 1:length(blockr)
-      
+
       bI,chunk_compressed = take!(c)
-      
+
       current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
 
       indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-      
+
       uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
       nothing
     end
   finally
     close(c)
   end
-  
+
   aout
 end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
-  
+
   z.writeable || error("Can not write to read-only ZArray")
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
@@ -213,8 +213,8 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   a = getchunkarray(z)
   # Now loop through the chunks
   readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
-  
-  readtask = @async begin 
+
+  readtask = @async begin
     read_items!(z.storage, readchannel, z.metadata.chunk_key_encoding, z.path, blockr)
   end
   bind(readchannel,readtask)
@@ -225,12 +225,12 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     write_items!(z.storage, writechannel, z.metadata.chunk_key_encoding, z.path, blockr)
   end
   bind(writechannel,writetask)
-  
-  try 
+
+  try
     for i in 1:length(blockr)
-      
+
       bI,chunk_compressed = take!(readchannel)
-      
+
       current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
 
       indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
@@ -244,7 +244,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       else
         a
       end
-      
+
       if chunk_compressed !== nothing
         uncompress_raw!(a,z,chunk_compressed)
       end
@@ -273,7 +273,7 @@ Read the chunk specified by `i` from the Zarray `z` and write its content to `a`
 """
 function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
   if curchunk === nothing
-    if isnothing(z.metadata.fill_value) 
+    if isnothing(z.metadata.fill_value)
       throw(ArgumentError("The array $z got missing chunks and no fill_value"))
     end
     fill!(a, z.metadata.fill_value)
@@ -286,9 +286,9 @@ end
 dotminus(x,y) = x.-y
 
 function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
-  
+
   uncompress_raw!(a,z,chunk_compressed)
-  
+
   if length.(indranges) == size(a)
     aout[dotminus.(indranges, output_base_offsets)...] = ndims(a) == 0 ? a[1] : a
   else
@@ -317,7 +317,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `fill_value=nothing` value to represent missing values
 * `fill_as_missing=false` set to `true` shall fillvalue s be converted to `missing`s
 * `filters`=filters to be applied
-* `compressor=BloscCompressor()` compressor type and properties
+* `compressor=default_compressor()` compressor type and properties
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
@@ -346,8 +346,8 @@ function zcreate(::Type{T},storage::AbstractStore,
   chunks=dims,
   fill_value=nothing,
   fill_as_missing=false,
-  compressor=BloscCompressor(),
-  filters = filterfromtype(T), 
+  compressor=default_compressor(),
+  filters = filterfromtype(T),
   attrs=Dict(),
   writeable=true,
   indent_json=false,
@@ -363,11 +363,11 @@ function zcreate(::Type{T},storage::AbstractStore,
     dimension_separator = only(dimension_separator)
   end
   chunk_key_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
-  
+
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
   C = typeof(compressor)
-  
+
   # Create a dummy array to use with Metadata constructor
   # This allows us to leverage the multiple dispatch in Metadata constructors
   dummy_array = Array{T,N}(undef, dims...)
@@ -378,16 +378,16 @@ function zcreate(::Type{T},storage::AbstractStore,
       fill_as_missing=fill_as_missing,
     chunk_key_encoding=chunk_key_encoding
   )
-  
+
   # Extract the element type from the metadata (handles T2 calculation)
   T2 = eltype(metadata)
-  
+
   isemptysub(storage,path) || error("$storage $path is not empty")
-  
+
   writemetadata(v, storage, path, metadata, indent_json=indent_json)
-  
+
   writeattrs(v, storage, path, attrs, indent_json=indent_json)
-  
+
   ZArray(metadata, storage, path, attrs, writeable)
 end
 

@@ -42,4 +42,4 @@ end
 
 JSON.lower(z::ZlibCompressor) = Dict("id"=>"zlib", "level" => z.config.level)
 
-Zarr.compressortypes["zlib"] = ZlibCompressor
+# Registration moved to Zarr.__init__

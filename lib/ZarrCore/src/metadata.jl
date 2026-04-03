@@ -1,5 +1,5 @@
 import Dates: Date, DateTime
-using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
+using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring
 
 """NumPy array protocol type string (typestr) format
 
@@ -148,7 +148,7 @@ end
 "Construct Metadata based on your data"
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         node_type::String="array",
-        compressor::C=BloscCompressor(),
+        compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters=nothing,
@@ -169,7 +169,7 @@ end
 # V2 constructor
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         node_type::String="array",
-        compressor::C=BloscCompressor(),
+        compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::F=nothing,
@@ -282,12 +282,12 @@ fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
-fill_value_decoding(v::Nothing, ::Type{Zarr.ASCIIChar}) = v
+fill_value_decoding(v::Nothing, ::Type{ZarrCore.ASCIIChar}) = v
 # Sometimes when translating between CF (climate and forecast) convention data
 # and Zarr groups, fill values are left as "negative integers" to encode unsigned
 # integers.  So, we have to convert to the signed type with the same number of bytes
-# as the unsigned integer, then reinterpret as unsigned.  That's how a fill value 
+# as the unsigned integer, then reinterpret as unsigned.  That's how a fill value
 # of -1 can have a realistic meaning with an unsigned dtype.
-# However, we have to apply this correction only if the integer is negative.  
+# However, we have to apply this correction only if the integer is negative.
 # If it's positive, then the value might be out of range of the signed integer type.
 fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = sign(v) < 0 ? reinterpret(T, signed(T)(v)) : T(v)

@@ -49,13 +49,13 @@ ZarrFormat(s::AbstractStore, path) = is_zarr2(s, path) ? ZarrFormat(2) :
 """
     zopen_noerr(AbstractStore, mode = "r"; consolidated = false)
 
-Works like `zopen` with the single difference that no error is thrown when 
-the path or store does not point to a valid zarr array or group, but nothing 
+Works like `zopen` with the single difference that no error is thrown when
+the path or store does not point to a valid zarr array or group, but nothing
 is returned instead.
 """
 function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
-  consolidated = false, 
-  path="", 
+  consolidated = false,
+  path="",
   lru = 0,
   fill_as_missing=false)
 
@@ -99,15 +99,15 @@ Opens a zarr Array or Group at Store `s`. If `consolidated` is set to "true",
 Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
 of large zarr groups. Setting `lru` to a value > 0 means that chunks that have been
-accessed before will be cached and consecutive reads will happen from the cache. 
+accessed before will be cached and consecutive reads will happen from the cache.
 Here, `lru` denotes the number of chunks that remain in memory. The expected zarr version
-can be supplied through `zarr_format` and defaults to `:auto` which tries to detect 
+can be supplied through `zarr_format` and defaults to `:auto` which tries to detect
 if the zarr version is v2 or v3.
 """
-function zopen(s::AbstractStore, mode="r"; 
+function zopen(s::AbstractStore, mode="r";
   zarr_format=:auto,
-  consolidated = false, 
-  path = "", 
+  consolidated = false,
+  path = "",
   lru = 0,
   fill_as_missing = false)
 
@@ -116,7 +116,7 @@ function zopen(s::AbstractStore, mode="r";
   else
     ZarrFormat(zarr_format)
   end
-  # add interfaces to Stores later    
+  # add interfaces to Stores later
   r = zopen_noerr(s, mode, zarr_format; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
   if r === nothing
     throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
@@ -198,9 +198,7 @@ function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs..
   return z
 end
 
-HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
-writezip(io::IO, s::Union{ZArray,ZGroup}; kwargs...) = writezip(io, s.storage, s.path; kwargs...)
-function consolidate_metadata(z::Union{ZArray,ZGroup}) 
+function consolidate_metadata(z::Union{ZArray,ZGroup})
   z.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
   consolidate_metadata(z.storage,z.path)
 end
