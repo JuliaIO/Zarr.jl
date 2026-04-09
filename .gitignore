@@ -10,3 +10,5 @@ test/v3_python/
 test/.minio.sys/
 node_modules
 package-lock.json
+docs/src/changelog.md
+docs/src/contributing.md

@@ -226,3 +226,14 @@ mjx-container svg path {
   color: var(--vp-c-brand-2);
   cursor: pointer;
 }
+
+.vp-doc a {
+  text-decoration: none;
+}
+.vp-doc a:hover {
+  text-decoration: underline;
+}
+
+.highlight-link {
+  color: var(--vp-c-brand-3);
+}

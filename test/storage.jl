@@ -201,9 +201,10 @@ end
     s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
     run(s, wait=false)
     cfg = MinioConfig("http://localhost:9001")
-    AWSS3.global_aws_config(cfg)
-    AWSS3.S3.create_bucket("zarrdata")
-    ds = S3Store("zarrdata")
+    ds = AWSS3.AWS.with_aws_config(cfg) do
+      AWSS3.S3.create_bucket("zarrdata")
+      S3Store("zarrdata")
+    end
     test_store_common(ds)
     @test sprint(show, ds) == "S3 Object Storage"
     kill(s)
@@ -215,8 +216,9 @@ end
 @testset "AWS S3 Storage" begin
   V = Zarr.DV
   @info "Testing AWS S3 storage"
-  AWSS3.AWS.global_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
-  S3, p = Zarr.storefromstring("s3://mur-sst/zarr-v1")
+  S3, p = AWSS3.AWS.with_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2")) do
+    Zarr.storefromstring("s3://mur-sst/zarr-v1")
+  end
   @test Zarr.is_zgroup(V, S3, p)
   @test storagesize(S3, p) == 10551
   S3group = zopen(S3,path=p)
@@ -224,6 +226,14 @@ end
   @test eltype(S3Array) == Int64
   @test storagesize(S3Array) == 72184
   @test S3Array[1:5] == [0, 1, 2, 3, 4]
+
+  # test with S3Path
+  s3_path = S3Path("s3://mur-sst/zarr-v1", config=AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2"))
+  S3group2 = zopen(s3_path)
+  S3Array2 = S3group2["time"]
+  @test eltype(S3Array2) == Int64
+  @test storagesize(S3Array2) == 72184
+  @test S3Array2[1:5] == [0, 1, 2, 3, 4]
 end
 
 @testset "GCS Storage" begin
