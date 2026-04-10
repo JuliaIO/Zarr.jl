@@ -252,6 +252,18 @@ end
   @test z_v3[end] == fv
 end
 
+@testset "MaxLengthString conversion and display" begin
+    s8 = Zarr.MaxLengthString{5,UInt8}("abc")
+    s32 = Zarr.MaxLengthString{5,UInt32}("Snow")
+    sempty = Zarr.MaxLengthString{5,UInt32}("")
+  
+    @test String(s8) == "abc"
+    @test String(s32) == "Snow"
+    @test String(sempty) == ""
+    @test sprint(show, s32) == "\"Snow\""
+    @test sprint(show, sempty) == "\"\""
+end
+
 @testset "ragged arrays" begin
   z = zcreate(Vector{Float64},2,3)
   a, b, c, d = [1.0,2.0,3.0], [4.0,5.0],[2.0],[2.0,3.0]
