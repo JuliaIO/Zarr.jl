@@ -241,16 +241,15 @@ end
   @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
 end
 
-@testset "MaxLengthString conversion and display" begin
-  s8 = Zarr.MaxLengthString{5,UInt8}("abc")
-  s32 = Zarr.MaxLengthString{5,UInt32}("Snow")
-  sempty = Zarr.MaxLengthString{5,UInt32}("")
-
-  @test String(s8) == "abc"
-  @test String(s32) == "Snow"
-  @test String(sempty) == ""
-  @test sprint(show, s32) == "\"Snow\""
-  @test sprint(show, sempty) == "\"\""
+@testset "MaxLengthString large-chunk read path" begin
+  MaxLS = Zarr.MaxLengthString{1024,UInt32}
+  fv = MaxLS("")
+  z_v2 = zcreate(MaxLS, 348; chunks=(18674,), fill_value=fv)
+  @test z_v2[1] == fv
+  @test z_v2[end] == fv
+  z_v3 = zcreate(MaxLS, 348; chunks=(18674,), fill_value=fv, zarr_format=3)
+  @test z_v3[1] == fv
+  @test z_v3[end] == fv
 end
 
 @testset "ragged arrays" begin

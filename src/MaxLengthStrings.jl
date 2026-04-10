@@ -5,13 +5,13 @@
 # Maybe this should be moved to FizedSizeStrings.jl,
 #but until then let's keep it here...
 module MaxLengthStrings
-import Base: iterate, lastindex, getindex, sizeof, length, ncodeunits, codeunit, isvalid, read, write, String, print, show
+import Base: iterate, lastindex, getindex, sizeof, length, ncodeunits, codeunit, isvalid, read, write, zero, String, print, show
 export MaxLengthString
 
 struct MaxLengthString{N,T} <: AbstractString
     data::NTuple{N,T}
     function MaxLengthString{N,T}(itr) where {N,T}
-      new(totuple_appendzero(NTuple{N,T},itr))
+      new(_totuple_iterative(NTuple{N,T}, itr))
     end
 end
 import Base: tuple_type_head, tuple_type_tail
@@ -92,4 +92,19 @@ end
 
 print(io::IO, s::MaxLengthString) = print(io, String(s))
 show(io::IO, s::MaxLengthString) = show(io, String(s))
+
+function _totuple_iterative(::Type{NTuple{N,T}}, itr)::NTuple{N,T} where {N,T}
+  data = Vector{T}(undef, N)
+  fill!(data, zero(T))
+  i = 1
+  for v in itr
+    i <= N || error("String is too long to fit into MaxLengthString")
+    data[i] = convert(T, v)
+    i += 1
+  end
+  return Tuple(data)::NTuple{N,T}
+end
+
+zero(::Type{MaxLengthString{N,T}}) where {N,T} = reinterpret(MaxLengthString{N,T}, ntuple(_ -> zero(T), N))
+
 end
