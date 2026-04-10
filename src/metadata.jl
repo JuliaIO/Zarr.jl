@@ -70,11 +70,8 @@ function typestr(s::AbstractString, filterlist=nothing)
         end
         isempty(typesize) && throw((ArgumentError("$s is not a valid numpy typestr")))
         tc, ts = first(typecode), parse(Int, typesize)
-        if tc == 'U'
-          return MaxLengthString{ts,UInt32}
-        end
-        if tc == 'S' && ts > 1
-          return MaxLengthString{ts,UInt8}
+        if (tc in ('U','S')) && ts > 1
+            return MaxLengthString{ts,tc=='U' ? UInt32 : UInt8}
         end
         if tc == 'M' && ts == 8
             #We have a datetime64 value
