@@ -108,6 +108,7 @@ end
         @test Zarr.typestr(Complex{Float64}) === "<c16"
         @test Zarr.typestr(Float16) === "<f2"
         @test Zarr.typestr(Float64) === "<f8"
+        @test Zarr.typestr("<U1") == Zarr.MaxLengthString{1,UInt32}
         @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
         @test Zarr.typestr(Vector{Int64}) === "|O"
@@ -150,6 +151,7 @@ end
         @test Zarr.fill_value_decoding("-", String) === "-"
         @test Zarr.fill_value_decoding("", Zarr.ASCIIChar) === nothing
         @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
+        @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt32}) === Zarr.MaxLengthString{6,UInt32}("")
         @test Zarr.fill_value_decoding(nothing, Zarr.ASCIIChar) === nothing
     end
 end
@@ -237,6 +239,18 @@ end
   @test a[:] == ["this", "is", "all ", "ascii"]
   @test c[:] == 'A':'D'
   @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
+end
+
+@testset "MaxLengthString conversion and display" begin
+  s8 = Zarr.MaxLengthString{5,UInt8}("abc")
+  s32 = Zarr.MaxLengthString{5,UInt32}("Snow")
+  sempty = Zarr.MaxLengthString{5,UInt32}("")
+
+  @test String(s8) == "abc"
+  @test String(s32) == "Snow"
+  @test String(sempty) == ""
+  @test sprint(show, s32) == "\"Snow\""
+  @test sprint(show, sempty) == "\"\""
 end
 
 @testset "ragged arrays" begin

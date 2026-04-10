@@ -5,7 +5,7 @@
 # Maybe this should be moved to FizedSizeStrings.jl,
 #but until then let's keep it here...
 module MaxLengthStrings
-import Base: iterate, lastindex, getindex, sizeof, length, ncodeunits, codeunit, isvalid, read, write
+import Base: iterate, lastindex, getindex, sizeof, length, ncodeunits, codeunit, isvalid, read, write, String, print, show
 export MaxLengthString
 
 struct MaxLengthString{N,T} <: AbstractString
@@ -42,7 +42,7 @@ function iterate(s::MaxLengthString{N}, i::Int = 1) where N
     return (Char(c), i+1)
 end
 
-lastindex(s::MaxLengthString{N}) where {N} = findlast(!iszero,s.data)
+lastindex(s::MaxLengthString{N}) where {N} = something(findlast(!iszero, s.data), 0)
 
 function getindex(s::MaxLengthString, i::Int)
   checkbounds(s,i)
@@ -51,7 +51,7 @@ end
 
 sizeof(s::MaxLengthString) = sizeof(s.data)
 
-length(s::MaxLengthString) = findlast(!iszero,s.data)
+length(s::MaxLengthString) = something(findlast(!iszero, s.data), 0)
 
 ncodeunits(s::MaxLengthString) = length(s)
 
@@ -71,4 +71,25 @@ end
 function write(io::IO, s::MaxLengthString{N}) where N
     return write(io, Ref(s))
 end
+
+function String(s::MaxLengthString{N,UInt8}) where N
+  n = length(s)
+  data = Vector{UInt8}(undef, n)
+  @inbounds for i in 1:n
+    data[i] = s.data[i]
+  end
+  return String(data)
+end
+
+function String(s::MaxLengthString{N,UInt32}) where N
+  n = length(s)
+  io = IOBuffer()
+  @inbounds for i in 1:n
+    print(io, Char(s.data[i]))
+  end
+  return String(take!(io))
+end
+
+print(io::IO, s::MaxLengthString) = print(io, String(s))
+show(io::IO, s::MaxLengthString) = show(io, String(s))
 end
