@@ -96,6 +96,42 @@ end
     @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
 end
 
+@testset "Groups format inheritance v2" begin
+    store = DirectoryStore(tempname())
+    zv = Zarr.ZarrFormat(2)
+    g = zgroup(store, "rootgroup", zv)
+    sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
+
+    @test Zarr.is_zgroup(zv, store, "rootgroup")
+    @test Zarr.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test sg.attrs["a1"] == 5
+    @test ispath(joinpath(store.folder, "rootgroup", ".zgroup"))
+    @test ispath(joinpath(store.folder, "rootgroup", "subgroup", ".zgroup"))
+
+    a_root = zcreate(Float64, g, "temperature", 2, 3)
+    a_sub = zcreate(Float64, sg, "pressure", 2, 3)
+    @test Zarr.zarr_format(a_root) == zv
+    @test Zarr.zarr_format(a_sub) == zv
+end
+
+@testset "Groups format inheritance v3" begin
+    store = DirectoryStore(tempname())
+    zv = Zarr.ZarrFormat(3)
+    g = zgroup(store, "rootgroup", zv)
+    sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
+
+    @test Zarr.is_zgroup(zv, store, "rootgroup")
+    @test Zarr.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test sg.attrs["a1"] == 5
+    @test ispath(joinpath(store.folder, "rootgroup", "zarr.json"))
+    @test ispath(joinpath(store.folder, "rootgroup", "subgroup", "zarr.json"))
+
+    a_root = zcreate(Float64, g, "temperature", 2, 3)
+    a_sub = zcreate(Float64, sg, "pressure", 2, 3)
+    @test Zarr.zarr_format(a_root) == zv
+    @test Zarr.zarr_format(a_sub) == zv
+end
+
 @testset "Metadata" begin
     @testset "Data type encoding" begin
         @test Zarr.typestr(Bool) === "|b1"

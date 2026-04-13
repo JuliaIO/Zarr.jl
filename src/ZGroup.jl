@@ -5,11 +5,12 @@ struct ZGroup{S<:AbstractStore}
     groups::Dict{String, ZGroup}
     attrs::Dict
     writeable::Bool
+    zarr_format::ZarrFormat
 end
 
 # path can also be a SubString{String}
-ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable) =
-    ZGroup(storage, String(path), arrays, groups, attrs, writeable)
+ZGroup(storage, path::AbstractString, arrays, groups, attrs, writeable, zarr_format) =
+    ZGroup(storage, String(path), arrays, groups, attrs, writeable, zarr_format)
 
 zname(g::ZGroup) = zname(g.path)
 
@@ -37,7 +38,7 @@ function ZGroup(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=fals
   end
   attrs = getattrs(zv, s, path)
   startswith(path,"/") && error("Paths should never start with a leading '/'")
-  ZGroup(s, path, arrays, groups, attrs,mode=="w")
+  ZGroup(s, path, arrays, groups, attrs, mode=="w", zv)
 end
 
 #Function to guess a Zarr format from a store and a path, useful for guessing format when trying to open a group/array
@@ -157,7 +158,7 @@ function zgroup(s::AbstractStore, path::String="", zarr_format=ZarrFormat(2); at
     zv = zarr_format isa ZarrFormat ? zarr_format : ZarrFormat(zarr_format)
     isemptysub(s, path) || error("Store is not empty")
     write_group_metadata(zv, s, path, attrs; indent_json=indent_json)
-    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs, true)
+    ZGroup(s, path, Dict{String,ZArray}(), Dict{String,ZGroup}(), attrs, true, zv)
 end
 
 function write_group_metadata(::ZarrFormat{2}, s::AbstractStore, path, attrs; indent_json::Bool=false)
@@ -184,16 +185,15 @@ zgroup(s::String;kwargs...)=zgroup(storefromstring(s, true)...;kwargs...)
 function zgroup(g::ZGroup, name; attrs=Dict())
     g.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
     subpath = _concatpath(g.path, name)
-    # Detect format from parent
-    zv = is_zarr3(g.storage, g.path) ? ZarrFormat(3) : ZarrFormat(2)
-    g.groups[name] = zgroup(g.storage, subpath, zv; attrs=attrs)
+    g.groups[name] = zgroup(g.storage, subpath, g.zarr_format; attrs=attrs)
 end
 
 "Create a new subarray of the group g"
 function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs...) where T
   g.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
   name = string(name)
-  z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), kwargs...)
+  create_kwargs = haskey(kwargs, :zarr_format) ? kwargs : (; kwargs..., zarr_format=g.zarr_format)
+  z = zcreate(T, g.storage, addargs...; path = _concatpath(g.path,name), create_kwargs...)
   g.arrays[name] = z
   return z
 end
