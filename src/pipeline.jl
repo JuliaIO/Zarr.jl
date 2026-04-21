@@ -7,7 +7,7 @@ function pipeline_encode(p::V2Pipeline, data::AbstractArray, fill_value)
     return dtemp
 end
 
-function pipeline_decode!(p::V2Pipeline, output::AbstractArray, compressed::Vector{UInt8})
+function pipeline_decode!(p::V2Pipeline, output::AbstractArray, compressed::Vector{UInt8}; fill_value=nothing)
     zuncompress!(output, compressed, p.compressor, p.filters)
     return output
 end
