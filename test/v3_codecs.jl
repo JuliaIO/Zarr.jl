@@ -1017,13 +1017,10 @@ end
 
     data = Int16[1, 2, 3, 4]
     z[:] = data
-    @test_broken z[:] == data
+    @test z[:] == data
 end
 
 @testset "ShardingCodec zdecode! fill_value for empty shard" begin
-    # Bug: zdecode! fills empty shards/chunks with zero(T) instead of accepting
-    # a fill_value parameter. After the fix, zdecode! takes an optional fill_value
-    # argument. This test verifies the current code lacks that parameter.
     inner_pipeline = Zarr.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
@@ -1036,14 +1033,14 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
 
-    # Empty shard decodes to all zeros (current wrong behavior for non-zero fill_value)
+    # Empty shard with default fill (zero)
     data = Vector{Int16}(undef, 4)
     Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding)
     @test all(==(Int16(0)), data)
 
-    # After fix: zdecode!(data, UInt8[], sharding, fill_value) should fill with fill_value.
-    # Pre-fix: zdecode! doesn't accept a 4th argument → MethodError → @test_broken
-    @test_broken (Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding, Int16(99)); all(==(Int16(99)), data))
+    # Empty shard with non-zero fill_value
+    Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding, Int16(99))
+    @test all(==(Int16(99)), data)
 end
 
 @testset "ShardingCodec inner blosc typesize from context" begin
@@ -1071,7 +1068,7 @@ end
     sharding = pipeline.array_bytes
     blosc = sharding.codecs.bytes_bytes[1]
     @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
-    @test_broken blosc.typesize == 2
+    @test blosc.typesize == 2
 end
 
 @testset "ShardingCodec multi-shard array" begin
