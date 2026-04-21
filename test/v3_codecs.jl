@@ -992,8 +992,6 @@ end
     @test z[:] == data
 end
 
-<<<<<<< HEAD
-=======
 @testset "ShardingCodec index_location=:start round-trip" begin
     # Bug: zdecode! double-shifts byte offsets for :start index location.
     # zencode! stores absolute offsets (shifted by index_size), but zdecode!
