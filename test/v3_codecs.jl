@@ -1129,4 +1129,23 @@ end
     @test z[3:4] == Int16[99, 99]
 end
 
+@testset "ShardingCodec validate_index_pipeline rejects variable-size codecs" begin
+    # Metadata with a blosc compressor inside index_codecs — must throw ArgumentError
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"sharding_indexed","configuration":{
+                "chunk_shape":[2],
+                "codecs":[{"name":"bytes","configuration":{"endian":"little"}}],
+                "index_codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"noshuffle","blocksize":0}}
+                ],
+                "index_location":"end"
+            }}
+        ]}"""
+    @test_throws ArgumentError Zarr.Metadata(json_str, false)
+end
+
 end # V3 Codecs

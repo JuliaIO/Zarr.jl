@@ -12,6 +12,19 @@ using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
 
+"""
+    is_fixed_size(codec::V3Codec) -> Bool
+
+Return `true` if `codec` always produces output whose byte size is fully
+determined by the input structure (shape and element type), never by the
+input values.  In other words, it performs no variable-length compression.
+
+Fixed-size codecs may be used in the `index_codecs` pipeline of a
+`sharding_indexed` codec.  The default is `false`; codecs opt in by
+defining a method that returns `true`.
+"""
+is_fixed_size(::V3Codec) = false
+
 """Stores a registered V3 codec parser together with its expected return type."""
 struct CodecEntry
     return_type::Type{<:V3Codec}
@@ -85,6 +98,7 @@ struct BytesCodec <: V3Codec{:array, :bytes}
 end
 BytesCodec() = BytesCodec(:little)
 name(::BytesCodec) = "bytes"
+is_fixed_size(::BytesCodec) = true
 
 register_codec("bytes", BytesCodec) do config, ctx
     endian_str = get(config, "endian", "little")
@@ -162,6 +176,37 @@ struct ShardingCodec{N, P1<:AbstractCodecPipeline, P2<:AbstractCodecPipeline} <:
 end
 name(::ShardingCodec) = "sharding_indexed"
 
+"""
+    validate_index_pipeline(p::V3Pipeline)
+
+Verify that every codec in `p` satisfies `is_fixed_size`, i.e. produces output
+whose byte size is determined by input structure alone (shape/element type),
+never by input values.
+
+Variable-size compressors are forbidden because the shard decoder must know the
+exact encoded index size before decoding (to locate the index within the shard
+bytes), and because the `:start` encoder re-encodes after shifting offsets and
+relies on the encoded size being unchanged.
+"""
+function validate_index_pipeline(p::V3Pipeline)
+    for codec in p.array_array
+        is_fixed_size(codec) || throw(ArgumentError(
+            "index_codecs array→array codec '$(name(codec))' ($(typeof(codec))) is not " *
+            "fixed-size. Variable-size codecs would corrupt the shard index."
+        ))
+    end
+    is_fixed_size(p.array_bytes) || throw(ArgumentError(
+        "index_codecs array→bytes codec '$(name(p.array_bytes))' ($(typeof(p.array_bytes))) " *
+        "is not fixed-size. Variable-size codecs would make the encoded index size unpredictable."
+    ))
+    for codec in p.bytes_bytes
+        is_fixed_size(codec) || throw(ArgumentError(
+            "index_codecs bytes→bytes codec '$(name(codec))' ($(typeof(codec))) is not " *
+            "fixed-size. Variable-size compressors would corrupt the shard index."
+        ))
+    end
+end
+
 register_codec("sharding_indexed", ShardingCodec) do config, ctx
     N = length(config["chunk_shape"])
     # Zarr spec stores chunk_shape in C-order (row-major); reverse for Julia column-major
@@ -170,6 +215,7 @@ register_codec("sharding_indexed", ShardingCodec) do config, ctx
     # Index encodes UInt64 offset/nbytes pairs, so use a UInt64-specific context
     index_ctx      = (elsize = sizeof(UInt64),)
     index_pipeline = getCodec(config["index_codecs"], index_ctx)
+    validate_index_pipeline(index_pipeline)
     index_location = Symbol(get(config, "index_location", "end"))
     ShardingCodec(chunk_shape, data_pipeline, index_pipeline, index_location)
 end
@@ -395,6 +441,11 @@ function zencode!(encoded::Vector{UInt8}, data::AbstractArray, c::ShardingCodec{
             end
         end
         encoded_index = encode_shard_index(index, c)
+        # validate_index_pipeline already enforces fixed-size codecs, so this must hold
+        length(encoded_index) == index_size || error(
+            "index_codecs produced different sizes on re-encoding ($(index_size) → " *
+            "$(length(encoded_index))): only fixed-size codecs are permitted"
+        )
     end
 
     if isempty(chunk_buffers)
@@ -478,6 +529,7 @@ struct TransposeCodec{N} <: V3Codec{:array, :array}
     order::NTuple{N, Int}  # permutation (1-based Julia indexing)
 end
 name(::TransposeCodec) = "transpose"
+is_fixed_size(::TransposeCodec) = true
 
 register_codec("transpose", TransposeCodec) do config, ctx
     _order = config["order"]
@@ -644,6 +696,7 @@ end
 struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
 end
 name(::CRC32cV3Codec) = "crc32c"
+is_fixed_size(::CRC32cV3Codec) = true
 
 register_codec("crc32c", CRC32cV3Codec) do config, ctx
     CRC32cV3Codec()
