@@ -166,8 +166,10 @@ register_codec("sharding_indexed", ShardingCodec) do config, ctx
     N = length(config["chunk_shape"])
     # Zarr spec stores chunk_shape in C-order (row-major); reverse for Julia column-major
     chunk_shape    = NTuple{N,Int}(reverse(Int.(config["chunk_shape"])))
-    data_pipeline  = getCodec(config["codecs"])
-    index_pipeline = getCodec(config["index_codecs"])
+    data_pipeline  = getCodec(config["codecs"], ctx)
+    # Index encodes UInt64 offset/nbytes pairs, so use a UInt64-specific context
+    index_ctx      = (elsize = sizeof(UInt64),)
+    index_pipeline = getCodec(config["index_codecs"], index_ctx)
     index_location = Symbol(get(config, "index_location", "end"))
     ShardingCodec(chunk_shape, data_pipeline, index_pipeline, index_location)
 end
@@ -414,28 +416,33 @@ function zencode!(encoded::Vector{UInt8}, data::AbstractArray, c::ShardingCodec{
 end
 
 """
-    zdecode!(data, encoded, c::ShardingCodec)
+    zdecode!(data, encoded, c::ShardingCodec, fill_value=nothing)
 
 Decode sharded bytes into `data` (a full outer chunk / shard).
+`fill_value` is used for empty or missing inner chunks; falls back to `zero(T)` when `nothing`.
 """
-function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{N}) where N
+function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{N}, fill_value=nothing) where N
+    T  = eltype(data)
+    fv = fill_value !== nothing ? fill_value : zero(T)
+
     if isempty(encoded)
-        fill!(data, zero(eltype(data)))
+        fill!(data, fv)
         return data
     end
 
-    T                = eltype(data)
     shard_shape      = size(data)
     chunks_per_shard = calculate_chunks_per_shard(shard_shape, c.chunk_shape)
     index_size       = compute_encoded_index_size(chunks_per_shard, c)
 
     if c.index_location == :start
-        index_bytes       = encoded[1:index_size]
-        chunk_data_offset = index_size
+        index_bytes = encoded[1:index_size]
     else
-        index_bytes       = encoded[end-index_size+1:end]
-        chunk_data_offset = 0
+        index_bytes = encoded[end-index_size+1:end]
     end
+    # Offsets stored in the index are absolute from the start of the shard:
+    # - :end  — chunks occupy bytes [0, current_offset), index follows; offsets are 0-based from shard start.
+    # - :start — encode shifted all offsets by index_size, so they are also absolute from shard start.
+    chunk_data_offset = 0
 
     index = decode_shard_index(index_bytes, chunks_per_shard, c)
 
@@ -445,7 +452,7 @@ function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{
         chunk_slice  = get_chunk_slice(index, chunk_coords)
 
         if chunk_slice === nothing
-            data[array_slice...] .= zero(T)
+            data[array_slice...] .= fv
             continue
         end
 
@@ -505,7 +512,7 @@ function codec_encode(c::BytesCodec, data::AbstractArray)
     end
 end
 
-function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}) where {T, N}
+function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N}
     arr = collect(reinterpret(T, encoded))
     if _needs_bswap(c.endian)
         arr = bswap.(arr)
@@ -519,9 +526,9 @@ function codec_encode(c::ShardingCodec, data::AbstractArray)
     return encoded
 end
 
-function codec_decode(c::ShardingCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}) where {T, N}
+function codec_decode(c::ShardingCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N}
     output = Array{T, N}(undef, shape)
-    zdecode!(output, encoded, c)
+    zdecode!(output, encoded, c, fill_value)
     return output
 end
 
