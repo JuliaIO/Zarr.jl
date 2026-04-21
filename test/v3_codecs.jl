@@ -887,14 +887,6 @@ end
 
 @testset "ShardingCodec round-trip" begin
     # shard shape (4,), inner chunk shape (2,), bytes + gzip inside, bytes + crc32c for index
-    inner_codecs = Zarr.Codecs.V3Codecs.V3Codec[
-        Zarr.Codecs.V3Codecs.BytesCodec(:little),
-        Zarr.Codecs.V3Codecs.GzipV3Codec(6),
-    ]
-    index_codecs = Zarr.Codecs.V3Codecs.V3Codec[
-        Zarr.Codecs.V3Codecs.BytesCodec(:little),
-        Zarr.Codecs.V3Codecs.CRC32cV3Codec(),
-    ]
     c = Zarr.Codecs.V3Codecs.getCodec(Dict(
         "name" => "sharding_indexed",
         "configuration" => Dict(
@@ -998,6 +990,35 @@ end
     data = Int16[1, 2, 3, 4]
     z[:] = data
     @test z[:] == data
+end
+
+@testset "ShardingCodec non-zero fill_value" begin
+    # Shard shape (4,), inner chunk (2,); only write to first inner chunk.
+    # The second inner chunk should read back as fill_value (Int16(99)), not zero.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(99),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    # Write only the first two elements; the shard is written as one outer chunk.
+    # The second inner chunk is never written so it should decode to fill_value.
+    z[1:2] = Int16[10, 20]
+    @test z[1:2] == Int16[10, 20]
+    @test z[3:4] == Int16[99, 99]
 end
 
 end # V3 Codecs
