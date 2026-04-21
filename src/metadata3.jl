@@ -173,7 +173,11 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         # Optionally they can have attributes
         for key in keys(d)
             if key ∉ ("zarr_format", "node_type", "attributes")
-                throw(ArgumentError("Zarr v3 group metadata cannot have a key called $key"))
+            if d[key]["must_understand"] == false
+                @warn "Zarr v3 group metadata has an unrecognized key called $key with must_understand=false; ignoring"
+            else
+                throw(ArgumentError("Zarr v3 group metadata has an unrecognized key called $key with must_understand=true"))
+            end
             end
         end
 
@@ -201,7 +205,12 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, mandatory_keys)
     for key in keys(d)
         if key ∉ mandatory_keys && key ∉ optional_keys
-            throw(ArgumentError("Zarr v3 metadata cannot have a key called $key"))
+            if d[key]["must_understand"] === false
+                @warn "Zarr v3 array metadata has an unrecognized key called $key with must_understand=false; ignoring"
+            else                
+                throw(ArgumentError("Zarr v3 array metadata has an unrecognized key called $key with must_understand=true"))
+            end
+            #throw(ArgumentError("Zarr v3 metadata cannot have a key called $key"))
         end
     end
 
