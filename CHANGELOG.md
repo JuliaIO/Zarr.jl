@@ -1,3 +1,22 @@
 # Changelog
 
 ## Unreleased
+- fixes UI str parsing [#259](https://github.com/JuliaIO/Zarr.jl/pull/259)
+- added zarr_format to ZGroup [#258](https://github.com/JuliaIO/Zarr.jl/pull/258)
+- Add support for S3Path and remove deprecated global_aws_config() [#253](https://github.com/JuliaIO/Zarr.jl/pull/253)
+- (docs) get started [#246](https://github.com/JuliaIO/Zarr.jl/pull/246)
+- update badges [#245](https://github.com/JuliaIO/Zarr.jl/pull/245)
+- setup vitepress [#243](https://github.com/JuliaIO/Zarr.jl/pull/243)
+- Registration system for chunk key encoding [#242](https://github.com/JuliaIO/Zarr.jl/pull/242)
+- test: Consolidate CondaPkg.add calls [#240](https://github.com/JuliaIO/Zarr.jl/pull/240)
+- test: Read Julia-generated v3 fixtures with Python zarr [#239](https://github.com/JuliaIO/Zarr.jl/pull/239)
+- Use CondaPkg.jl#206 for nightly, fix manifest_uuid_path [#238](https://github.com/JuliaIO/Zarr.jl/pull/238)
+- fix docs build [#237](https://github.com/JuliaIO/Zarr.jl/pull/237)
+- consolidate methods [#235](https://github.com/JuliaIO/Zarr.jl/pull/235)
+- Add AbstractChunkKeyEncoding [#234](https://github.com/JuliaIO/Zarr.jl/pull/234)
+- V3 codec pipeline, group creation, and Python interop [#232](https://github.com/JuliaIO/Zarr.jl/pull/232)
+- Add read support for big endian [#230](https://github.com/JuliaIO/Zarr.jl/pull/230)
+- Indent method/type signatures on docstrings [#229](https://github.com/JuliaIO/Zarr.jl/pull/229)
+- Promote header levels in tutorial.md [#228](https://github.com/JuliaIO/Zarr.jl/pull/228)
+- Continue on v3 PR [#226](https://github.com/JuliaIO/Zarr.jl/pull/226)
+- move AWSS3 into extension [#224](https://github.com/JuliaIO/Zarr.jl/pull/224)
