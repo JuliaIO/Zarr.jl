@@ -992,6 +992,116 @@ end
     @test z[:] == data
 end
 
+<<<<<<< HEAD
+=======
+@testset "ShardingCodec index_location=:start round-trip" begin
+    # Bug: zdecode! double-shifts byte offsets for :start index location.
+    # zencode! stores absolute offsets (shifted by index_size), but zdecode!
+    # adds chunk_data_offset=index_size again → reads at 2×index_size + relative.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :start)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[1, 2, 3, 4]
+    z[:] = data
+    @test z[:] == data
+end
+
+@testset "ShardingCodec zdecode! fill_value for empty shard" begin
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+
+    # Empty shard with default fill (zero)
+    data = Vector{Int16}(undef, 4)
+    Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding)
+    @test all(==(Int16(0)), data)
+
+    # Empty shard with non-zero fill_value
+    Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding, Int16(99))
+    @test all(==(Int16(99)), data)
+end
+
+@testset "ShardingCodec inner blosc typesize from context" begin
+    # Bug: sharding_indexed parser drops ctx when parsing inner codecs.
+    # blosc defaults typesize to 4 when ctx is missing, but Int16 has elsize=2.
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"sharding_indexed","configuration":{
+                "chunk_shape":[2],
+                "codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"noshuffle","blocksize":0}}
+                ],
+                "index_codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"crc32c"}
+                ],
+                "index_location":"end"
+            }}
+        ]}"""
+    md = Zarr.Metadata(json_str, false)
+    pipeline = Zarr.get_pipeline(md)
+    sharding = pipeline.array_bytes
+    blosc = sharding.codecs.bytes_bytes[1]
+    @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
+    @test blosc.typesize == 2
+end
+
+@testset "ShardingCodec multi-shard array" begin
+    # Array size (8,) with shard (outer chunk) size (4,) and inner chunk size (2,).
+    # Two shards, each containing 2 inner chunks.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (8,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16.(1:8)
+    z[:] = data
+    @test z[:] == data
+    @test z[1:4] == Int16[1, 2, 3, 4]
+    @test z[5:8] == Int16[5, 6, 7, 8]
+end
+
 @testset "ShardingCodec non-zero fill_value" begin
     # Shard shape (4,), inner chunk (2,); only write to first inner chunk.
     # The second inner chunk should read back as fill_value (Int16(99)), not zero.
