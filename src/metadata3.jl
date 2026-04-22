@@ -292,60 +292,7 @@ function lower3(md::MetadataV3{T}) where T
     # chunk_key_encoding
     chunk_key_encoding = lower_chunk_key_encoding(md.chunk_key_encoding)
 
-    # Build codecs from pipeline
-    codecs = Dict{String,Any}[]
-    p = md.pipeline
-
-    # array->array codecs
-    for codec in p.array_array
-        if codec isa Codecs.V3Codecs.TransposeCodec
-            push!(codecs, Dict{String,Any}(
-                "name" => "transpose",
-                "configuration" => Dict("order" => collect(codec.order .- 1))
-            ))
-        end
-    end
-
-    # array->bytes codec
-    if p.array_bytes isa Codecs.V3Codecs.BytesCodec
-        push!(codecs, Dict{String,Any}(
-            "name" => "bytes",
-            "configuration" => Dict{String,Any}("endian" => string(p.array_bytes.endian))
-        ))
-    elseif p.array_bytes isa Codecs.V3Codecs.ShardingCodec
-        push!(codecs, JSON.lower(p.array_bytes))
-    end
-
-    # bytes->bytes codecs
-    for codec in p.bytes_bytes
-        if codec isa Codecs.V3Codecs.GzipV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "gzip",
-                "configuration" => Dict{String,Any}("level" => codec.level)
-            ))
-        elseif codec isa Codecs.V3Codecs.BloscV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "blosc",
-                "configuration" => Dict{String,Any}(
-                    "cname" => codec.cname,
-                    "clevel" => codec.clevel,
-                    "shuffle" => codec.shuffle == 0 ? "noshuffle" :
-                                 codec.shuffle == 1 ? "shuffle" :
-                                 codec.shuffle == 2 ? "bitshuffle" :
-                                 throw(ArgumentError("Unknown shuffle integer: $(codec.shuffle)")),
-                    "blocksize" => codec.blocksize,
-                    "typesize" => codec.typesize
-                )
-            ))
-        elseif codec isa Codecs.V3Codecs.ZstdV3Codec
-            push!(codecs, Dict{String,Any}(
-                "name" => "zstd",
-                "configuration" => Dict{String,Any}("level" => codec.level)
-            ))
-        elseif codec isa Codecs.V3Codecs.CRC32cV3Codec
-            push!(codecs, Dict{String,Any}("name" => "crc32c"))
-        end
-    end
+    codecs = Codecs.V3Codecs._pipeline_to_codec_list(md.pipeline)
 
     Dict{String, Any}(
         "zarr_format" => Int(md.zarr_format),
