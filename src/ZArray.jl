@@ -154,7 +154,7 @@ function getchunkarray(z::ZArray{>:Missing})
   a = SenMissArray(inner,z.metadata.fill_value)
 end
 _zero(T) = zero(T)
-_zero(T::Type{<:MaxLengthString}) = T("")
+_zero(T::Type{<:MaxLengthString}) = zero(T)
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
 _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)

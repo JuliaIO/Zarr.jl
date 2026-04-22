@@ -43,7 +43,6 @@ const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
     ('b', 1) => Bool,
     ('S', 1) => ASCIIChar,
-    ('U', 1) => Char,
 )
 sizemapf(x::Type{<:Number}) = sizeof(x)
 typecharf(::Type{<:Signed}) = 'i'
@@ -71,8 +70,11 @@ function typestr(s::AbstractString, filterlist=nothing)
         end
         isempty(typesize) && throw((ArgumentError("$s is not a valid numpy typestr")))
         tc, ts = first(typecode), parse(Int, typesize)
-        if (tc in ('U','S')) && ts > 1
-          return MaxLengthString{ts,tc=='U' ? UInt32 : UInt8}
+        if tc == 'U'
+            return MaxLengthString{ts,UInt32}
+        end
+        if tc == 'S' && ts > 1
+            return MaxLengthString{ts,UInt8}
         end
         if tc == 'M' && ts == 8
             #We have a datetime64 value
