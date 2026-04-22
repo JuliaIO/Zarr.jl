@@ -13,6 +13,18 @@
 #   OME-NGFF Challenge datasets (https://github.com/ome/ome2024-ngff-challenge)
 #   - IDR 6001240: 4D UInt16 confocal, single outer chunk, inner (1,1,275,271)
 #   - Flamingo Platynereis H2B: 3D UInt16 light-sheet, shards 512³, inner 128³
+#
+#   FZJ / Forschungszentrum Jülich (https://radosgw.public.os.wwu.de/n4bi-fzj)
+#   - BigBrain 1µm VOI1: 3D UInt8 human brain histology 6000³, z-slice shards,
+#     inner (1024,1024,1); codec sharding_indexed → bytes + blosc(zstd/bitshuffle)
+#
+#   SSBD / RIKEN Systems Science of Biological Dynamics (https://dmss3gw.riken.jp)
+#   - 5D UInt8 fluorescence microscopy, single-shard array [1,1,1,1538,2048],
+#     inner (1024,1538,1,1,1); codec sharding_indexed → bytes + blosc(zstd)
+#
+#   University of Münster (https://radosgw.public.os2.wwu.de/ngff)
+#   - WSI whole-slide image: 5D UInt16, shape [1,3,1,244215,522693],
+#     shards (2048,2048,1,1,1), inner (256,256,1,1,1)
 
 if get(ENV, "ZARR_TEST_REMOTE", "false") != "true"
     @info "Skipping remote HTTP sharded tests (set ZARR_TEST_REMOTE=true to enable)"
@@ -145,5 +157,97 @@ const FLAMINGO_BASE = "https://radosgw.public.os.wwu.de/n4bi-goe"
     end
 
 end # @testset "Remote HTTP sharded arrays (OME-NGFF Challenge)"
+
+const FZJ_BASE      = "https://radosgw.public.os.wwu.de/n4bi-fzj/ome2024-ngff-challenge"
+const SSBD_BASE     = "https://dmss3gw.riken.jp/ssbd/zarr/v0.5"
+const MUENSTER_BASE = "https://radosgw.public.os2.wwu.de/ngff"
+
+@testset "Remote HTTP sharded arrays (FZJ — BigBrain)" begin
+
+    @testset "1micron_reconstructions_VOI1 — 3D UInt8 histology" begin
+        # Shape [z,y,x] = [6000,6000,6000] (isotropic 1µm VOI from human occipital cortex)
+        # Outer shard [1,8192,8192] → one z-slice per shard → Julia (8192,8192,1)
+        # Inner chunk [1,1024,1024] → Julia (1024,1024,1)
+        z = zopen("$FZJ_BASE/1micron_reconstructions_VOI1.zarr/0")
+
+        @test eltype(z) == UInt8
+        @test ndims(z) == 3
+        @test size(z) == (6000, 6000, 6000)
+        @test z.metadata.chunks == (8192, 8192, 1)
+
+        sharding = z.metadata.pipeline.array_bytes
+        @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
+        @test sharding.chunk_shape == (1024, 1024, 1)
+        @test sharding.index_location == :end
+
+        # Read one inner chunk from the first z-slice
+        slice = z[1:1024, 1:1024, 1:1]
+        @test size(slice) == (1024, 1024, 1)
+        @test eltype(slice) == UInt8
+        @test any(!=(0x00), slice)
+    end
+
+    @testset "VOI1 and VOI2 both readable" begin
+        for voi in ("VOI1", "VOI2")
+            z = zopen("$FZJ_BASE/1micron_reconstructions_$voi.zarr/0")
+            @test eltype(z) == UInt8
+            @test ndims(z) == 3
+            @test size(z) == (6000, 6000, 6000)
+            @test z.metadata.pipeline.array_bytes isa Zarr.Codecs.V3Codecs.ShardingCodec
+        end
+    end
+
+end # @testset "Remote HTTP sharded arrays (FZJ — BigBrain)"
+
+@testset "Remote HTTP sharded arrays (SSBD — RIKEN)" begin
+
+    @testset "2b9f8ab8 — 5D UInt8 fluorescence microscopy" begin
+        # Shape [t,c,z,y,x] = [1,1,1,1538,2048] → Julia (2048,1538,1,1,1)
+        # Single shard covers entire array; inner chunk [1,1,1,1538,1024] → Julia (1024,1538,1,1,1)
+        z = zopen("$SSBD_BASE/2b9f8ab8-5e53-434e-bb08-89e54c232ad8.zarr/0")
+
+        @test eltype(z) == UInt8
+        @test ndims(z) == 5
+        @test size(z) == (2048, 1538, 1, 1, 1)
+
+        sharding = z.metadata.pipeline.array_bytes
+        @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
+        @test sharding.chunk_shape == (1024, 1538, 1, 1, 1)
+
+        # Read one inner chunk (first 1024 x-pixels, all y, single t/c/z)
+        slice = z[1:1024, 1:1538, 1:1, 1:1, 1:1]
+        @test size(slice) == (1024, 1538, 1, 1, 1)
+        @test eltype(slice) == UInt8
+        @test any(!=(0x00), slice)
+    end
+
+end # @testset "Remote HTTP sharded arrays (SSBD — RIKEN)"
+
+@testset "Remote HTTP sharded arrays (University of Münster)" begin
+
+    @testset "WSI_resaved — 5D UInt16 whole-slide image" begin
+        # Shape [t,c,z,y,x] = [1,3,1,244215,522693] → Julia (522693,244215,1,3,1)
+        # Outer shard [1,1,1,2048,2048] → Julia (2048,2048,1,1,1)
+        # Inner chunk [1,1,1,256,256] → Julia (256,256,1,1,1)
+        z = zopen("$MUENSTER_BASE/WSI_resaved.zarr/0/0")
+
+        @test eltype(z) == UInt16
+        @test ndims(z) == 5
+        @test size(z) == (522693, 244215, 1, 3, 1)
+        @test z.metadata.chunks == (2048, 2048, 1, 1, 1)
+
+        sharding = z.metadata.pipeline.array_bytes
+        @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
+        @test sharding.chunk_shape == (256, 256, 1, 1, 1)
+        @test sharding.index_location == :end
+
+        # Read one inner chunk from within the first shard
+        slice = z[1:256, 1:256, 1:1, 1:1, 1:1]
+        @test size(slice) == (256, 256, 1, 1, 1)
+        @test eltype(slice) == UInt16
+        @test any(!=(0x0000), slice)
+    end
+
+end # @testset "Remote HTTP sharded arrays (University of Münster)"
 
 end # if ZARR_TEST_REMOTE
