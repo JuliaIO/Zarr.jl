@@ -384,7 +384,7 @@ function decode_shard_index(index_bytes::Vector{UInt8}, chunks_per_shard::NTuple
     return ShardIndex{N}(chunks)
 end
 
-const _encoded_index_size_cache = Dict{Any,Int}()
+const _encoded_index_size_cache = Dict{Tuple{Tuple{Vararg{Int}},AbstractCodecPipeline},Int}()
 const _encoded_index_size_cache_lock = ReentrantLock()
 
 """Compute the encoded byte size of the shard index by encoding an empty index."""
