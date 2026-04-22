@@ -45,10 +45,6 @@ function storefromstring(::Type{<:HTTPStore}, s,_)
         if http_store["", ".zmetadata"] !== nothing
             http_store = ConsolidatedStore(http_store,"")
         end
-        if is_zarray(http_store, "")
-            meta = getmetadata(http_store, "", false)
-            http_store = FormattedStore{meta.zarr_format, meta.dimension_separator}(http_store)
-        end
     catch err
         @warn exception=err "Additional metadata was not available for HTTPStore."
     end

@@ -172,7 +172,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         # Groups only need zarr_format and node_type
         # Optionally they can have attributes
         for key in keys(d)
-            if key ∉ ("zarr_format", "node_type", "attributes")
+            if key ∉ ("zarr_format", "node_type", "attributes", "consolidated_metadata")
                 throw(ArgumentError("Zarr v3 group metadata cannot have a key called $key"))
             end
         end
