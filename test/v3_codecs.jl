@@ -993,9 +993,10 @@ end
 end
 
 @testset "ShardingCodec index_location=:start round-trip" begin
-    # Bug: zdecode! double-shifts byte offsets for :start index location.
-    # zencode! stores absolute offsets (shifted by index_size), but zdecode!
-    # adds chunk_data_offset=index_size again → reads at 2×index_size + relative.
+    # Regression test: previously, zdecode! double-shifted byte offsets for
+    # :start index location. zencode! stored absolute offsets (shifted by
+    # index_size), and zdecode! added chunk_data_offset=index_size again,
+    # reading at 2×index_size + relative.
     inner_pipeline = Zarr.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
@@ -1044,8 +1045,9 @@ end
 end
 
 @testset "ShardingCodec inner blosc typesize from context" begin
-    # Bug: sharding_indexed parser drops ctx when parsing inner codecs.
-    # blosc defaults typesize to 4 when ctx is missing, but Int16 has elsize=2.
+    # Regression test: previously the sharding_indexed parser dropped ctx when
+    # parsing inner codecs, so blosc fell back to typesize=4 instead of using
+    # the Int16 element size (2).
     json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
         "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
         "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
@@ -1123,7 +1125,7 @@ end
     z = Zarr.ZArray(md, store, "", Dict(), true)
 
     # Write only the first two elements; the shard is written as one outer chunk.
-    # The second inner chunk is never written so it should decode to fill_value.
+    # Elements not explicitly written in the remaining region should read back as fill_value.
     z[1:2] = Int16[10, 20]
     @test z[1:2] == Int16[10, 20]
     @test z[3:4] == Int16[99, 99]

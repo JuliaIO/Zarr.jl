@@ -384,9 +384,17 @@ function decode_shard_index(index_bytes::Vector{UInt8}, chunks_per_shard::NTuple
     return ShardIndex{N}(chunks)
 end
 
+const _encoded_index_size_cache = Dict{Any,Int}()
+const _encoded_index_size_cache_lock = ReentrantLock()
+
 """Compute the encoded byte size of the shard index by encoding an empty index."""
 function compute_encoded_index_size(chunks_per_shard::NTuple{N,Int}, c::ShardingCodec) where N
-    return length(encode_shard_index(ShardIndex(chunks_per_shard), c))
+    key = (chunks_per_shard, c.index_codecs)
+    Base.@lock _encoded_index_size_cache_lock begin
+        return get!(_encoded_index_size_cache, key) do
+            length(encode_shard_index(ShardIndex(chunks_per_shard), c))
+        end
+    end
 end
 
 """
