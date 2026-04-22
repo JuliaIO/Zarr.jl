@@ -308,41 +308,81 @@ end
 
 const MAX_UINT64 = typemax(UInt64)
 
-"""Information about a single inner chunk's location within a shard."""
+"""
+    ChunkShardInfo
+
+Information about a chunk's location within a shard.
+"""
 struct ChunkShardInfo
     offset::UInt64
     nbytes::UInt64
 end
 ChunkShardInfo() = ChunkShardInfo(MAX_UINT64, MAX_UINT64)  # sentinel: empty chunk
 
-"""N-dimensional array of `ChunkShardInfo`, one entry per inner chunk in a shard."""
+"""
+    ShardIndex{N}
+
+Internal structure representing the shard index.
+Stores chunk location info for an N-dimensional grid of chunks.
+Empty chunks are marked with `ChunkShardInfo(MAX_UINT64, MAX_UINT64)`.
+"""
 struct ShardIndex{N}
     chunks::Array{ChunkShardInfo, N}
 end
 
+"""
+    ShardIndex(chunks_per_shard::NTuple{N,Int})
+
+Create an empty shard index with all chunks marked as empty.
+"""
 function ShardIndex(chunks_per_shard::NTuple{N,Int}) where N
     return ShardIndex{N}(fill(ChunkShardInfo(), chunks_per_shard))
 end
 
+"""
+    get_chunk_slice(idx::ShardIndex, chunk_coords::NTuple{N,Int})
+
+Get the byte range `(offset, offset+nbytes)` for a chunk, or `nothing` if the chunk is empty.
+"""
 function get_chunk_slice(idx::ShardIndex, chunk_coords::NTuple{N,Int}) where N
     info = idx.chunks[chunk_coords...]
     info.offset == MAX_UINT64 && info.nbytes == MAX_UINT64 && return nothing
     return (Int(info.offset), Int(info.offset + info.nbytes))
 end
 
+"""
+    set_chunk_slice!(idx::ShardIndex, chunk_coords::NTuple{N,Int}, offset::Int, nbytes::Int)
+
+Set the byte range for a chunk in the index.
+"""
 function set_chunk_slice!(idx::ShardIndex, chunk_coords::NTuple{N,Int}, offset::Int, nbytes::Int) where N
     idx.chunks[chunk_coords...] = ChunkShardInfo(UInt64(offset), UInt64(nbytes))
 end
 
+"""
+    set_chunk_empty!(idx::ShardIndex, chunk_coords::NTuple{N,Int})
+
+Mark a chunk as empty in the index.
+"""
 function set_chunk_empty!(idx::ShardIndex, chunk_coords::NTuple{N,Int}) where N
     idx.chunks[chunk_coords...] = ChunkShardInfo()
 end
 
+"""
+    calculate_chunks_per_shard(shard_shape::NTuple{N,Int}, chunk_shape::NTuple{N,Int})
+
+Calculate how many inner chunks fit in each dimension of a shard.
+"""
 function calculate_chunks_per_shard(shard_shape::NTuple{N,Int}, chunk_shape::NTuple{N,Int}) where N
     return ntuple(i -> cld(shard_shape[i], chunk_shape[i]), N)
 end
 
-"""Return the Julia array slice ranges for inner chunk `chunk_coords` within a shard."""
+"""
+    get_chunk_slice_in_shard(chunk_coords::NTuple{N,Int}, chunk_shape::NTuple{N,Int}, shard_shape::NTuple{N,Int})
+
+Get the array slice ranges for an inner chunk within a shard.
+`chunk_coords` are 1-based indices into the grid of inner chunks.
+"""
 function get_chunk_slice_in_shard(chunk_coords::NTuple{N,Int}, chunk_shape::NTuple{N,Int}, shard_shape::NTuple{N,Int}) where N
     return ntuple(N) do i
         start_idx = (chunk_coords[i] - 1) * chunk_shape[i] + 1
@@ -352,9 +392,13 @@ function get_chunk_slice_in_shard(chunk_coords::NTuple{N,Int}, chunk_shape::NTup
 end
 
 """
-Encode the shard index using the codec's index pipeline.
+    encode_shard_index(index::ShardIndex, c::ShardingCodec)
+
+Encode the shard index using `c.index_codecs`.
+
 The index is linearized in column-major order (matching `CartesianIndices` iteration)
-with alternating offset/nbytes values per inner chunk.
+with alternating offset/nbytes values per inner chunk:
+`[chunk_0_offset, chunk_0_nbytes, chunk_1_offset, chunk_1_nbytes, ...]`
 """
 function encode_shard_index(index::ShardIndex{N}, c::ShardingCodec) where N
     n_chunks   = length(index.chunks)
@@ -369,7 +413,14 @@ function encode_shard_index(index::ShardIndex{N}, c::ShardingCodec) where N
     return pipeline_encode(c.index_codecs, index_data, nothing)
 end
 
-"""Decode the shard index from bytes using the codec's index pipeline."""
+"""
+    decode_shard_index(index_bytes::Vector{UInt8}, chunks_per_shard::NTuple{N,Int}, c::ShardingCodec)
+
+Decode the shard index from bytes using `c.index_codecs`.
+
+The bytes encode alternating offset/nbytes pairs in column-major order:
+`[offset0, nbytes0, offset1, nbytes1, ...]`
+"""
 function decode_shard_index(index_bytes::Vector{UInt8}, chunks_per_shard::NTuple{N,Int}, c::ShardingCodec) where N
     n_chunks   = prod(chunks_per_shard)
     index_data = Vector{UInt64}(undef, n_chunks * 2)
@@ -387,7 +438,15 @@ end
 const _encoded_index_size_cache = Dict{Tuple{Tuple{Vararg{Int}},AbstractCodecPipeline},Int}()
 const _encoded_index_size_cache_lock = ReentrantLock()
 
-"""Compute the encoded byte size of the shard index by encoding an empty index."""
+"""
+    compute_encoded_index_size(chunks_per_shard::NTuple{N,Int}, c::ShardingCodec)
+
+Compute the byte size of the encoded shard index.
+
+Per the Zarr v3 spec, the initial index size is `16 * prod(chunks_per_shard)` bytes
+(two `UInt64` values per inner chunk), transformed by each fixed-size index codec.
+Results are cached by `(chunks_per_shard, c.index_codecs)` to avoid repeated encoding.
+"""
 function compute_encoded_index_size(chunks_per_shard::NTuple{N,Int}, c::ShardingCodec) where N
     key = (chunks_per_shard, c.index_codecs)
     Base.@lock _encoded_index_size_cache_lock begin
