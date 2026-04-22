@@ -153,7 +153,8 @@ function get_order(md::MetadataV3)
 end
 get_order(md::MetadataV2) = md.order
 
-
+must_understand(x) = true # The default of must_understand is true
+must_understand(x::Dict) = get(x, "must_understand", true)
 
 function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, ("zarr_format", "node_type"))
@@ -173,7 +174,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         # Optionally they can have attributes
         for key in keys(d)
             if key ∉ ("zarr_format", "node_type", "attributes")
-            if d[key]["must_understand"] == false
+            if !must_understand(d[key])
                 @warn "Zarr v3 group metadata has an unrecognized key called $key with must_understand=false; ignoring"
             else
                 throw(ArgumentError("Zarr v3 group metadata has an unrecognized key called $key with must_understand=true"))

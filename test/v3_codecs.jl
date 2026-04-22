@@ -394,6 +394,9 @@ end
 
     # Extra key in group metadata
     @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"group","bad_key":1}""", false)
+    
+    #Extra dict that is ignored
+    @test_warn "ignoring" Zarr.Metadata("""{"zarr_format":3,"node_type":"group","ignore_dict":{"must_understand":false}}""", false) isa Zarr.Metadata
 
     # Missing required key (shape)
     @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","data_type":"int32",
@@ -406,6 +409,7 @@ end
         "chunk_grid":{"name":"unknown","configuration":{"chunk_shape":[4]}},
         "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
         "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+
 
     # Shape/chunk rank mismatch
     @test_throws ArgumentError Zarr.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
