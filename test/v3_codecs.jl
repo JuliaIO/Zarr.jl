@@ -656,6 +656,14 @@ end
         # Read a chunked 2d array
         z2 = zopen(store; path="2d.chunked.i2")
         @test z2[:, :] == Int16[1 2; 3 4]
+
+        # Sharded with index_location=:start — round-trips through Julia
+        z = zopen(store; path="1d.chunked.compressed.sharded.indexstart.i2")
+        @test z[:] == Int16[10, 20, 30, 40]
+
+        # Sharded with index_codecs = [bytes] only (no crc32c bytes→bytes codec)
+        z = zopen(store; path="1d.chunked.compressed.sharded.noindexcrc.i2")
+        @test z[:] == Int16[7, 14, 21, 28]
     else
         @warn "v3 fixtures not found at $fixture_path, skipping"
     end
@@ -713,6 +721,10 @@ end
             @test pyconvert(Vector{Bool},    np.array(g["1d.contiguous.compressed.sharded.b1"])) == Bool[true, false, true, false]
             @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.i2"]))    == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.filled.compressed.sharded.i2"])) == Int16[1, 2, 0, 0]
+            # Cross-check: zarr-python reads a Julia-written shard with index_location=:start
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.indexstart.i2"])) == Int16[10, 20, 30, 40]
+            # Cross-check: zarr-python reads a Julia-written shard with bytes-only index_codecs
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.noindexcrc.i2"])) == Int16[7, 14, 21, 28]
         end
 
         @testset "Sharded 2D arrays" begin
@@ -882,11 +894,67 @@ end
             @test z[:] == Float32[-1000.5, 0.0, 1000.5, 0.0]
         end
 
-        @testset "Sharded 1D array" begin
+        @testset "Sharded 1D arrays" begin
             z = zopen(store; path="1d.contiguous.compressed.sharded.i2")
             @test eltype(z) == Int16
             @test size(z) == (4,)
             @test z[:] == Int16[1, 2, 3, 4]
+
+            z = zopen(store; path="1d.contiguous.compressed.sharded.i4")
+            @test eltype(z) == Int32
+            @test z[:] == Int32[1, 2, 3, 4]
+
+            z = zopen(store; path="1d.contiguous.compressed.sharded.f8")
+            @test z[:] == Float64[1.5, 2.5, 3.5, 4.5]
+
+            # Chunked-with-sharding: shards=(2,) chunks=(1,) — 2 shards of 2 inner chunks each
+            z = zopen(store; path="1d.chunked.compressed.sharded.i2")
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # Partially-empty shard: elements 3,4 are the fill_value (0)
+            z = zopen(store; path="1d.chunked.filled.compressed.sharded.i2")
+            @test z[:] == Int16[1, 2, 0, 0]
+        end
+
+        @testset "Sharded 2D arrays" begin
+            # Python np.arange(1,5).reshape(2,2) row-major → Julia reshape(1:4, 2, 2) column-major = [1 3; 2 4]
+            z = zopen(store; path="2d.contiguous.compressed.sharded.i2")
+            @test size(z) == (2, 2)
+            @test z[:, :] == Int16[1 3; 2 4]
+
+            # 4x4, chunks=(1,1) shards=(2,2) → 4 shards, each 2x2 of inner chunks.
+            # Python np.arange(16).reshape(4,4)+1 = values 1..16 row-major.
+            z = zopen(store; path="2d.chunked.compressed.sharded.i2")
+            @test size(z) == (4, 4)
+            @test z[:, :] == reshape(Int16.(1:16), 4, 4)
+
+            # "filled" variant uses values 0..15 (with 0 = fill_value in some positions)
+            z = zopen(store; path="2d.chunked.compressed.sharded.filled.i2")
+            @test size(z) == (4, 4)
+            @test z[:, :] == reshape(Int16.(0:15), 4, 4)
+
+            # 3x3 with shards=(2,2) inner=(1,1) — ragged outer shard grid (last shard row/col partial)
+            z = zopen(store; path="2d.chunked.ragged.compressed.sharded.i2")
+            @test size(z) == (3, 3)
+            @test z[:, :] == reshape(Int16.(1:9), 3, 3)
+        end
+
+        @testset "Sharded 3D arrays" begin
+            # 3x3x3 single contiguous shard
+            z = zopen(store; path="3d.contiguous.compressed.sharded.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == reshape(Int16.(0:26), 3, 3, 3)
+
+            # 4x4x4 with shards=(2,2,2) inner=(1,1,1) — 8 shards, each 2x2x2 of inner chunks
+            z = zopen(store; path="3d.chunked.compressed.sharded.i2")
+            @test size(z) == (4, 4, 4)
+            @test z[:, :, :] == reshape(Int16.(0:63), 4, 4, 4)
+
+            # Mixed: Python shards=(3,3,3) chunks=(3,3,1) → single shard, 3 inner chunks stacked on axis 0
+            z = zopen(store; path="3d.chunked.mixed.compressed.sharded.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == reshape(Int16.(0:26), 3, 3, 3)
         end
 
         @testset "Group with spaces in name" begin

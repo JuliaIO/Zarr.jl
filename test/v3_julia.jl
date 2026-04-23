@@ -186,10 +186,13 @@ create_and_fill(store, "3d.chunked.mixed.i2.F", reshape(Int16.(0:26), 3, 3, 3);
 
 ##### Sharded/compressed examples
 
-# Helper: create a ZArray with ShardingCodec (gzip inner, crc32c index) and write data.
+# Helper: create a ZArray with ShardingCodec (gzip inner) and write data.
 # outer_chunk_shape: shard shape in Julia column-major order
 # inner_chunk_shape: inner chunk shape in Julia column-major order
-function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape)
+# index_location: :end (default, most common) or :start
+# index_crc32c: whether to include the CRC32c integrity codec in the shard index
+function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape;
+        index_location::Symbol=:end, index_crc32c::Bool=true)
     T = eltype(data)
     N = ndims(data)
     inner_pipeline = Zarr.V3Pipeline(
@@ -197,12 +200,13 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape)
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
         (Zarr.Codecs.V3Codecs.GzipV3Codec(1),),
     )
+    index_bytes_bytes = index_crc32c ? (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),) : ()
     index_pipeline = Zarr.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
-        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),),
+        index_bytes_bytes,
     )
-    sharding = Zarr.Codecs.V3Codecs.ShardingCodec(inner_chunk_shape, inner_pipeline, index_pipeline, :end)
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec(inner_chunk_shape, inner_pipeline, index_pipeline, index_location)
     pipeline = Zarr.V3Pipeline((), sharding, ())
     md = Zarr.MetadataV3{T, N, typeof(pipeline)}(
         3, "array", size(data), outer_chunk_shape, Zarr.typestr3(T), pipeline, zero(T),
@@ -263,6 +267,17 @@ create_sharded(store, "3d.chunked.compressed.sharded.i2",
 # Python: shards=(3,3,3) chunks=(3,3,1) → Julia: outer=(3,3,3) inner=(1,3,3)
 create_sharded(store, "3d.chunked.mixed.compressed.sharded.i2",
     reshape(Int16.(0:26), 3, 3, 3), (3,3,3), (1,3,3))
+
+# 1d.chunked.compressed.sharded.indexstart.i2  — exercises index_location=:start
+# The :start branch has to re-encode the shard index after shifting chunk offsets,
+# so it needs its own end-to-end fixture (Python-read and round-tripped).
+create_sharded(store, "1d.chunked.compressed.sharded.indexstart.i2",
+    Int16[10, 20, 30, 40], (2,), (1,); index_location=:start)
+
+# 1d.chunked.compressed.sharded.noindexcrc.i2  — index_codecs = [bytes] only (no crc32c)
+# Exercises compute_encoded_index_size on an index pipeline with no bytes→bytes codecs.
+create_sharded(store, "1d.chunked.compressed.sharded.noindexcrc.i2",
+    Int16[7, 14, 21, 28], (2,), (1,); index_crc32c=false)
 
 # Group with spaces in the name
 group_path = "my group with spaces"
