@@ -278,7 +278,7 @@ function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
     end
     fill!(a, z.metadata.fill_value)
   else
-    pipeline_decode!(get_pipeline(z.metadata), a, curchunk)
+    pipeline_decode!(get_pipeline(z.metadata), a, curchunk; fill_value=z.metadata.fill_value)
   end
   a
 end

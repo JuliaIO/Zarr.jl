@@ -346,4 +346,6 @@ include("python.jl")
 
 include("v3_codecs.jl")
 
+include("http_sharded.jl")
+
 end  # @testset "Zarr"

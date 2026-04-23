@@ -3,8 +3,10 @@ docs/build
 *.zarr
 .CondaPkg
 .vscode
-test/CondaPkg.toml
 *.cov
+test/v3_julia/
+test/v3_python/
+test/.minio.sys/
 node_modules
 package-lock.json
 docs/src/changelog.md

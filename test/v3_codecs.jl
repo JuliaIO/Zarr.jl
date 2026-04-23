@@ -656,6 +656,14 @@ end
         # Read a chunked 2d array
         z2 = zopen(store; path="2d.chunked.i2")
         @test z2[:, :] == Int16[1 2; 3 4]
+
+        # Sharded with index_location=:start — round-trips through Julia
+        z = zopen(store; path="1d.chunked.compressed.sharded.indexstart.i2")
+        @test z[:] == Int16[10, 20, 30, 40]
+
+        # Sharded with index_codecs = [bytes] only (no crc32c bytes→bytes codec)
+        z = zopen(store; path="1d.chunked.compressed.sharded.noindexcrc.i2")
+        @test z[:] == Int16[7, 14, 21, 28]
     else
         @warn "v3 fixtures not found at $fixture_path, skipping"
     end
@@ -704,6 +712,35 @@ end
             @test arr3d == permutedims(reshape(Int16.(0:26), 3, 3, 3), (3, 2, 1))
         end
 
+        @testset "Sharded 1D arrays" begin
+            @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.compressed.sharded.i2"])) == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int32},   np.array(g["1d.contiguous.compressed.sharded.i4"])) == Int32[1, 2, 3, 4]
+            @test pyconvert(Vector{UInt8},   np.array(g["1d.contiguous.compressed.sharded.u1"])) == UInt8[255, 0, 255, 0]
+            @test pyconvert(Vector{Float32}, np.array(g["1d.contiguous.compressed.sharded.f4"])) == Float32[-1000.5, 0, 1000.5, 0]
+            @test pyconvert(Vector{Float64}, np.array(g["1d.contiguous.compressed.sharded.f8"])) == Float64[1.5, 2.5, 3.5, 4.5]
+            @test pyconvert(Vector{Bool},    np.array(g["1d.contiguous.compressed.sharded.b1"])) == Bool[true, false, true, false]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.i2"]))    == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.filled.compressed.sharded.i2"])) == Int16[1, 2, 0, 0]
+            # Cross-check: zarr-python reads a Julia-written shard with index_location=:start
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.indexstart.i2"])) == Int16[10, 20, 30, 40]
+            # Cross-check: zarr-python reads a Julia-written shard with bytes-only index_codecs
+            @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.compressed.sharded.noindexcrc.i2"])) == Int16[7, 14, 21, 28]
+        end
+
+        @testset "Sharded 2D arrays" begin
+            # Julia column-major [1 2; 3 4] → Python row-major [[1,3],[2,4]]
+            arr2d_sharded = pyconvert(Matrix{Int16}, np.array(g["2d.contiguous.compressed.sharded.i2"]))
+            @test arr2d_sharded == Int16[1 3; 2 4]
+        end
+
+        @testset "Sharded 3D arrays" begin
+            # Julia writes reshape(Int16.(0:63), 4,4,4) in column-major order.
+            # Python reads the zarr shape [4,4,4] in C (row-major) order, so
+            # pyconvert maps Python[i,j,k] → Julia[i+1,j+1,k+1], yielding
+            # permutedims(reshape(Int16.(0:63),4,4,4), (3,2,1)).
+            arr3d_sharded = pyconvert(Array{Int16,3}, np.array(g["3d.chunked.compressed.sharded.i2"]))
+            @test arr3d_sharded == permutedims(reshape(Int16.(0:63), 4, 4, 4), (3, 2, 1))
+        end
         @testset "Group with spaces in name" begin
             desc = pyconvert(String, g["my group with spaces"].attrs["description"])
             @test desc == "A group with spaces in the name"
@@ -857,9 +894,67 @@ end
             @test z[:] == Float32[-1000.5, 0.0, 1000.5, 0.0]
         end
 
-        @testset "Sharded arrays are rejected" begin
-            # Sharding codec is not yet wired into the read pipeline
-            @test_throws ArgumentError zopen(store; path="1d.contiguous.compressed.sharded.i2")
+        @testset "Sharded 1D arrays" begin
+            z = zopen(store; path="1d.contiguous.compressed.sharded.i2")
+            @test eltype(z) == Int16
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            z = zopen(store; path="1d.contiguous.compressed.sharded.i4")
+            @test eltype(z) == Int32
+            @test z[:] == Int32[1, 2, 3, 4]
+
+            z = zopen(store; path="1d.contiguous.compressed.sharded.f8")
+            @test z[:] == Float64[1.5, 2.5, 3.5, 4.5]
+
+            # Chunked-with-sharding: shards=(2,) chunks=(1,) — 2 shards of 2 inner chunks each
+            z = zopen(store; path="1d.chunked.compressed.sharded.i2")
+            @test size(z) == (4,)
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # Partially-empty shard: elements 3,4 are the fill_value (0)
+            z = zopen(store; path="1d.chunked.filled.compressed.sharded.i2")
+            @test z[:] == Int16[1, 2, 0, 0]
+        end
+
+        @testset "Sharded 2D arrays" begin
+            # Python np.arange(1,5).reshape(2,2) row-major → Julia reshape(1:4, 2, 2) column-major = [1 3; 2 4]
+            z = zopen(store; path="2d.contiguous.compressed.sharded.i2")
+            @test size(z) == (2, 2)
+            @test z[:, :] == Int16[1 3; 2 4]
+
+            # 4x4, chunks=(1,1) shards=(2,2) → 4 shards, each 2x2 of inner chunks.
+            # Python np.arange(16).reshape(4,4)+1 = values 1..16 row-major.
+            z = zopen(store; path="2d.chunked.compressed.sharded.i2")
+            @test size(z) == (4, 4)
+            @test z[:, :] == reshape(Int16.(1:16), 4, 4)
+
+            # "filled" variant uses values 0..15 (with 0 = fill_value in some positions)
+            z = zopen(store; path="2d.chunked.compressed.sharded.filled.i2")
+            @test size(z) == (4, 4)
+            @test z[:, :] == reshape(Int16.(0:15), 4, 4)
+
+            # 3x3 with shards=(2,2) inner=(1,1) — ragged outer shard grid (last shard row/col partial)
+            z = zopen(store; path="2d.chunked.ragged.compressed.sharded.i2")
+            @test size(z) == (3, 3)
+            @test z[:, :] == reshape(Int16.(1:9), 3, 3)
+        end
+
+        @testset "Sharded 3D arrays" begin
+            # 3x3x3 single contiguous shard
+            z = zopen(store; path="3d.contiguous.compressed.sharded.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == reshape(Int16.(0:26), 3, 3, 3)
+
+            # 4x4x4 with shards=(2,2,2) inner=(1,1,1) — 8 shards, each 2x2x2 of inner chunks
+            z = zopen(store; path="3d.chunked.compressed.sharded.i2")
+            @test size(z) == (4, 4, 4)
+            @test z[:, :, :] == reshape(Int16.(0:63), 4, 4, 4)
+
+            # Mixed: Python shards=(3,3,3) chunks=(3,3,1) → single shard, 3 inner chunks stacked on axis 0
+            z = zopen(store; path="3d.chunked.mixed.compressed.sharded.i2")
+            @test size(z) == (3, 3, 3)
+            @test z[:, :, :] == reshape(Int16.(0:26), 3, 3, 3)
         end
 
         @testset "Group with spaces in name" begin
@@ -870,6 +965,271 @@ end
             @test sub.attrs["description"] == "A group with spaces in the name"
         end
     end
+end
+
+@testset "ShardingCodec round-trip" begin
+    # shard shape (4,), inner chunk shape (2,), bytes + gzip inside, bytes + crc32c for index
+    c = Zarr.Codecs.V3Codecs.getCodec(Dict(
+        "name" => "sharding_indexed",
+        "configuration" => Dict(
+            "chunk_shape"    => [2],
+            "codecs"         => [Dict("name"=>"bytes","configuration"=>Dict("endian"=>"little")),
+                                 Dict("name"=>"gzip","configuration"=>Dict("level"=>6))],
+            "index_codecs"   => [Dict("name"=>"bytes","configuration"=>Dict("endian"=>"little")),
+                                 Dict("name"=>"crc32c")],
+            "index_location" => "end",
+        )
+    ))
+
+    data = Int16[1, 2, 3, 4]
+    encoded = Zarr.Codecs.V3Codecs.codec_encode(c, data)
+    @test encoded isa Vector{UInt8}
+    @test !isempty(encoded)
+
+    decoded = Zarr.Codecs.V3Codecs.codec_decode(c, encoded, Int16, (4,))
+    @test decoded == reshape(data, 4)
+
+    # JSON round-trip
+    lowered = JSON.lower(c)
+    @test lowered["name"] == "sharding_indexed"
+    @test lowered["configuration"]["chunk_shape"] == [2]
+    @test lowered["configuration"]["index_location"] == "end"
+end
+
+@testset "ShardingCodec ragged inner chunks" begin
+    # Outer chunk (shard) size does not evenly divide by inner chunk size.
+    # shard shape (3,), inner chunk shape (2,): 2 inner chunks — full (1:2) + partial (3:3)
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (3,), (3,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[10, 20, 30]
+    z[:] = data
+    @test z[:] == data
+
+    # 2D: shard (3,3), inner (2,2) — partial chunks on both axes
+    inner_pipeline2 = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline2 = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding2 = Zarr.Codecs.V3Codecs.ShardingCodec((2,2), inner_pipeline2, index_pipeline2, :end)
+    pipeline2 = Zarr.V3Pipeline((), sharding2, ())
+    md2 = Zarr.MetadataV3{Int32,2,typeof(pipeline2)}(
+        3, "array", (3,3), (3,3), "int32", pipeline2, Int32(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store2 = Zarr.DictStore()
+    z2 = Zarr.ZArray(md2, store2, "", Dict(), true)
+
+    data2 = reshape(Int32.(1:9), 3, 3)
+    z2[:,:] = data2
+    @test z2[:,:] == data2
+end
+
+@testset "ShardingCodec ZArray write and read" begin
+    # Build a pipeline where ShardingCodec is the array->bytes codec.
+    # Shard shape (outer chunk): (4,). Inner chunk shape: (2,).
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.GzipV3Codec(6),)
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[1, 2, 3, 4]
+    z[:] = data
+    @test z[:] == data
+end
+
+@testset "ShardingCodec index_location=:start round-trip" begin
+    # Regression test: previously, zdecode! double-shifted byte offsets for
+    # :start index location. zencode! stored absolute offsets (shifted by
+    # index_size), and zdecode! added chunk_data_offset=index_size again,
+    # reading at 2×index_size + relative.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :start)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16[1, 2, 3, 4]
+    z[:] = data
+    @test z[:] == data
+end
+
+@testset "ShardingCodec zdecode! fill_value for empty shard" begin
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+
+    # Empty shard with default fill (zero)
+    data = Vector{Int16}(undef, 4)
+    Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding)
+    @test all(==(Int16(0)), data)
+
+    # Empty shard with non-zero fill_value
+    Zarr.Codecs.V3Codecs.zdecode!(data, UInt8[], sharding, Int16(99))
+    @test all(==(Int16(99)), data)
+end
+
+@testset "ShardingCodec inner blosc typesize from context" begin
+    # Regression test: previously the sharding_indexed parser dropped ctx when
+    # parsing inner codecs, so blosc fell back to typesize=4 instead of using
+    # the Int16 element size (2).
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"sharding_indexed","configuration":{
+                "chunk_shape":[2],
+                "codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"noshuffle","blocksize":0}}
+                ],
+                "index_codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"crc32c"}
+                ],
+                "index_location":"end"
+            }}
+        ]}"""
+    md = Zarr.Metadata(json_str, false)
+    pipeline = Zarr.get_pipeline(md)
+    sharding = pipeline.array_bytes
+    blosc = sharding.codecs.bytes_bytes[1]
+    @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
+    @test blosc.typesize == 2
+end
+
+@testset "ShardingCodec multi-shard array" begin
+    # Array size (8,) with shard (outer chunk) size (4,) and inner chunk size (2,).
+    # Two shards, each containing 2 inner chunks.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (8,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    data = Int16.(1:8)
+    z[:] = data
+    @test z[:] == data
+    @test z[1:4] == Int16[1, 2, 3, 4]
+    @test z[5:8] == Int16[5, 6, 7, 8]
+end
+
+@testset "ShardingCodec non-zero fill_value" begin
+    # Shard shape (4,), inner chunk (2,); only write to first inner chunk.
+    # The second inner chunk should read back as fill_value (Int16(99)), not zero.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        ()
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),)
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (4,), (4,), "int16", pipeline, Int16(99),
+        Zarr.ChunkKeyEncoding('/', true)
+    )
+    store = Zarr.DictStore()
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+
+    # Write only the first two elements; the shard is written as one outer chunk.
+    # Elements not explicitly written in the remaining region should read back as fill_value.
+    z[1:2] = Int16[10, 20]
+    @test z[1:2] == Int16[10, 20]
+    @test z[3:4] == Int16[99, 99]
+end
+
+@testset "ShardingCodec validate_index_pipeline rejects variable-size codecs" begin
+    # Metadata with a blosc compressor inside index_codecs — must throw ArgumentError
+    json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"sharding_indexed","configuration":{
+                "chunk_shape":[2],
+                "codecs":[{"name":"bytes","configuration":{"endian":"little"}}],
+                "index_codecs":[
+                    {"name":"bytes","configuration":{"endian":"little"}},
+                    {"name":"blosc","configuration":{"cname":"lz4","clevel":5,"shuffle":"noshuffle","blocksize":0}}
+                ],
+                "index_location":"end"
+            }}
+        ]}"""
+    @test_throws ArgumentError Zarr.Metadata(json_str, false)
 end
 
 end # V3 Codecs

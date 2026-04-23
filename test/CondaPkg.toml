@@ -1,0 +1,4 @@
+[deps]
+zarr = "3.*"
+numpy = ">=2.3.3,<3"
+numcodecs = ""
