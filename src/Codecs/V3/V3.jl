@@ -225,10 +225,10 @@ Build a `V3Pipeline` from a flat ordered list of `V3Codec` values.
 The list must contain: zero or more array→array codecs, exactly one array→bytes codec,
 then zero or more bytes→bytes codecs.
 """
-function _codecs_to_v3pipeline(codecs::Vector)
-    aa = []
-    ab = nothing
-    bb = []
+function _codecs_to_v3pipeline(codecs::Vector{<:V3Codec})
+    aa = V3Codec{:array, :array}[]
+    ab::Union{Nothing,V3Codec{:array, :bytes}} = nothing
+    bb = V3Codec{:bytes, :bytes}[]
     for codec in codecs
         if ab === nothing
             if codec isa V3Codec{:array, :array}
@@ -435,7 +435,7 @@ function decode_shard_index(index_bytes::Vector{UInt8}, chunks_per_shard::NTuple
     return ShardIndex{N}(chunks)
 end
 
-const _encoded_index_size_cache = Dict{Tuple{Tuple{Vararg{Int}},AbstractCodecPipeline},Int}()
+const _encoded_index_size_cache = Dict{Tuple{Tuple{Vararg{Int}},V3Pipeline},Int}()
 const _encoded_index_size_cache_lock = ReentrantLock()
 
 """

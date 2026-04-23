@@ -715,6 +715,20 @@ end
             @test pyconvert(Vector{Int16},   np.array(g["1d.chunked.filled.compressed.sharded.i2"])) == Int16[1, 2, 0, 0]
         end
 
+        @testset "Sharded 2D arrays" begin
+            # Julia column-major [1 2; 3 4] → Python row-major [[1,3],[2,4]]
+            arr2d_sharded = pyconvert(Matrix{Int16}, np.array(g["2d.contiguous.compressed.sharded.i2"]))
+            @test arr2d_sharded == Int16[1 3; 2 4]
+        end
+
+        @testset "Sharded 3D arrays" begin
+            # Julia writes reshape(Int16.(0:26), 3,3,3) in column-major order.
+            # Python reads the zarr shape [3,3,3] in C (row-major) order, so
+            # pyconvert maps Python[i,j,k] → Julia[i+1,j+1,k+1], yielding
+            # permutedims(reshape(Int16.(0:26),3,3,3), (3,2,1)).
+            arr3d_sharded = pyconvert(Array{Int16,3}, np.array(g["3d.chunked.compressed.sharded.i2"]))
+            @test arr3d_sharded == permutedims(reshape(Int16.(0:26), 3, 3, 3), (3, 2, 1))
+        end
         @testset "Group with spaces in name" begin
             desc = pyconvert(String, g["my group with spaces"].attrs["description"])
             @test desc == "A group with spaces in the name"
