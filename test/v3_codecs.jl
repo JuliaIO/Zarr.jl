@@ -722,12 +722,12 @@ end
         end
 
         @testset "Sharded 3D arrays" begin
-            # Julia writes reshape(Int16.(0:26), 3,3,3) in column-major order.
-            # Python reads the zarr shape [3,3,3] in C (row-major) order, so
+            # Julia writes reshape(Int16.(0:63), 4,4,4) in column-major order.
+            # Python reads the zarr shape [4,4,4] in C (row-major) order, so
             # pyconvert maps Python[i,j,k] → Julia[i+1,j+1,k+1], yielding
-            # permutedims(reshape(Int16.(0:26),3,3,3), (3,2,1)).
+            # permutedims(reshape(Int16.(0:63),4,4,4), (3,2,1)).
             arr3d_sharded = pyconvert(Array{Int16,3}, np.array(g["3d.chunked.compressed.sharded.i2"]))
-            @test arr3d_sharded == permutedims(reshape(Int16.(0:26), 3, 3, 3), (3, 2, 1))
+            @test arr3d_sharded == permutedims(reshape(Int16.(0:63), 4, 4, 4), (3, 2, 1))
         end
         @testset "Group with spaces in name" begin
             desc = pyconvert(String, g["my group with spaces"].attrs["description"])
