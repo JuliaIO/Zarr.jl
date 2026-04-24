@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.10.0 - 2026-04-24
+
 - Enable `sharding_indexed` codec for Zarr v3 [#241](https://github.com/JuliaIO/Zarr.jl/pull/241)
   - outer chunks (shards) are now split into inner chunks with a byte-range index, enabling efficient partial reads of large arrays
   - Python zarr interoperability tests for sharded arrays using real fixtures generated via PythonCall/zarr-python
