@@ -5,11 +5,11 @@ import ..Codecs: zencode, zdecode, zencode!, zdecode!
 import ...Zarr: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
 import ...Zarr: BloscCompressor as ZarrBloscCompressor
 import ...Zarr: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
-import ...Zarr: enable_threaded_shard_decode
+import ...Zarr: enable_threaded_shard_decode, max_concurrent_inner_decodes
 using CRC32c: CRC32c
 using JSON: JSON
 using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
-using ChunkCodecCore: encode as cc_encode, decode as cc_decode
+using ChunkCodecCore: encode as cc_encode, decode as cc_decode, decode! as cc_decode!
 
 abstract type V3Codec{In,Out} end
 
@@ -735,9 +735,11 @@ function read_shard_partial_with_source!(
     end
 
     # Threaded path: bounded buffer pool so we don't allocate one
-    # full-shard buffer per task. min(nthreads, |work|) buffers is
-    # enough — each task takes one off the channel, decodes, returns it.
-    n_workers = min(Threads.nthreads(), length(work))
+    # full-shard buffer per task. Cap by `max_concurrent_inner_decodes`
+    # (mirrors zarr-python's `async.concurrency = 10`) — each chunk
+    # buffer is ~prod(chunk_shape)*sizeof(T) bytes, so allocating one
+    # per OS thread on a `-t 32` run wastes GBs.
+    n_workers = min(Threads.nthreads(), length(work), max_concurrent_inner_decodes[])
     pool = Channel{Array{T,N}}(n_workers)
     for _ in 1:n_workers
         put!(pool, Array{T,N}(undef, sc.chunk_shape))
@@ -839,6 +841,47 @@ function JSON.lower(c::TransposeCodec)
 end
 
 # codec_encode / codec_decode methods for V3 codecs
+#
+# Each codec also exposes a `codec_decode!(c, output, encoded[; …])` variant
+# that writes into a caller-owned `output` buffer instead of returning a
+# fresh allocation. Used by `pipeline_decode!` on the partial-shard read
+# path to avoid chunk-sized transient allocations on every inner-chunk
+# decode. Generic fallbacks below dispatch on the codec's In/Out tags so
+# any codec that doesn't override gets a working (allocating) default.
+
+# Generic in-place fallbacks. These exist so callers can always write
+# `codec_decode!(c, out, enc)` without worrying about whether the codec
+# was specialized; the fallback just does the allocating decode and
+# copies. Specialized methods follow per-codec.
+function codec_decode!(c::V3Codec{:bytes,:bytes},
+                       output::AbstractVector{UInt8},
+                       encoded::AbstractVector{UInt8})
+    bytes = codec_decode(c, encoded isa Vector{UInt8} ? encoded : collect(encoded))
+    length(bytes) == length(output) ||
+        throw(DimensionMismatch("codec_decode! output sized $(length(output)) " *
+                                "but $(name(c)) returned $(length(bytes)) bytes"))
+    copyto!(output, bytes)
+    return output
+end
+
+function codec_decode!(c::V3Codec{:array,:bytes},
+                       output::AbstractArray{T,N},
+                       encoded::AbstractVector{UInt8};
+                       fill_value=nothing) where {T, N}
+    arr = codec_decode(c, encoded isa Vector{UInt8} ? encoded : collect(encoded),
+                        T, size(output); fill_value)
+    copyto!(output, arr)
+    return output
+end
+
+function codec_decode!(c::V3Codec{:array,:array},
+                       output::AbstractArray,
+                       encoded::AbstractArray)
+    arr = codec_decode(c, encoded)
+    copyto!(output, arr)
+    return output
+end
+
 
 function codec_encode(c::BytesCodec, data::AbstractArray)
     if _needs_bswap(c.endian)
@@ -854,6 +897,30 @@ function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::N
         arr = bswap.(arr)
     end
     return reshape(arr, shape)
+end
+
+# In-place: copy bytes straight into output, skipping the
+# `collect(reinterpret(...))` materialization. For little-endian → little-
+# endian (the common case), this is a single bulk byte copy. For mixed
+# endian we still do the bswap but at least there's no fresh Vector{T}
+# allocation per inner-chunk decode.
+function codec_decode!(c::BytesCodec,
+                       output::AbstractArray{T,N},
+                       encoded::AbstractVector{UInt8};
+                       fill_value=nothing) where {T, N}
+    expected = length(output) * sizeof(T)
+    length(encoded) == expected ||
+        throw(DimensionMismatch("BytesCodec output buffer expects $expected " *
+                                "bytes but encoded length is $(length(encoded))"))
+    out_bytes = reinterpret(UInt8, vec(output))   # zero-copy view
+    copyto!(out_bytes, encoded)
+    if _needs_bswap(c.endian)
+        out_vec = vec(output)
+        @inbounds for i in eachindex(out_vec)
+            out_vec[i] = bswap(out_vec[i])
+        end
+    end
+    return output
 end
 
 function codec_encode(c::ShardingCodec, data::AbstractArray)
@@ -975,6 +1042,20 @@ end
 function codec_decode(c::ZstdV3Codec, encoded::Vector{UInt8})
     comp = ZstdCompressor(level=c.level)
     return collect(zuncompress(encoded, comp, UInt8))
+end
+
+# In-place: decompress directly into the caller's buffer via
+# ChunkCodecCore.decode!. The buffer must already be sized to the
+# decompressed length (callers know it: it's the inner-chunk byte size
+# = prod(chunk_shape) * sizeof(T) for the sharded V3 read path).
+function codec_decode!(c::ZstdV3Codec,
+                       output::AbstractVector{UInt8},
+                       encoded::AbstractVector{UInt8})
+    comp = ZstdCompressor(level=c.level)
+    cc_decode!(comp.config.codec,
+               output isa Vector{UInt8} ? output : @view(output[1:end]),
+               encoded isa Vector{UInt8} ? encoded : collect(encoded))
+    return output
 end
 
 struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}

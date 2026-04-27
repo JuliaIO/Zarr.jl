@@ -40,6 +40,22 @@ higher level).
 """
 const enable_threaded_shard_decode = Ref(true)
 
+"""
+    max_concurrent_inner_decodes[]
+
+Upper bound on the number of inner-chunk decode tasks dispatched in
+parallel by `read_shard_partial_with_source!`. Default `8`, modeled on
+zarr-python's `async.concurrency = 10`. Tasks beyond this queue on
+the buffer-pool channel.
+
+Capping matters because each in-flight task holds a chunk-sized buffer
+(e.g. 187 MB for our 1s archive shape) and `Threads.nthreads()` is
+often much larger than the number of inner chunks per shard. Without
+the cap, a `-t 32` run pre-allocates ~6 GB of decode buffers even when
+the actual work is a handful of chunks.
+"""
+const max_concurrent_inner_decodes = Ref(8)
+
 include("types.jl")
 include("chunkkeyencoding.jl")
 include("metadata.jl")
