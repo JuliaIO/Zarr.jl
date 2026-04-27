@@ -67,6 +67,46 @@ Set the flag to `false` to fall back to the in-memory partial-decode
 path even on stores that support byte-range reads. Useful for A/B
 performance comparisons or to debug a suspected partial-read bug.
 
+## Threading
+
+When Julia is started with more than one thread (`julia -t N`), the
+sharded partial-read path internally dispatches inner-chunk decodes to
+`Threads.@spawn` so a single `arr[a:b, c]` call scales with available
+cores — the same way `zarr-python` parallelizes inner-chunk decodes
+inside one `__getitem__`. User code is unchanged; the threading is
+transparent.
+
+Two layers of parallelism kick in automatically:
+
+1. Within one outer chunk, the inner chunks intersecting the request
+   decode in parallel (bounded by `max_concurrent_inner_decodes[]`).
+2. Across outer chunks (when the request spans more than one), the
+   per-chunk reads dispatch in parallel.
+
+Both fall back to a sequential loop on single-threaded runs or when
+the work list has fewer than two entries.
+
+```@docs
+Zarr.enable_threaded_shard_decode
+Zarr.max_concurrent_inner_decodes
+```
+
+## In-place codec API
+
+The decode pipeline avoids per-inner-chunk transient allocations by
+threading the caller's output buffer through each codec via
+`Zarr.Codecs.V3Codecs.codec_decode!`. For the dominant pipeline shape
+`[BytesCodec, ZstdV3Codec]` (matching system endian), the inner chunk
+decompresses straight into `reinterpret(UInt8, vec(output))` — no
+intermediate `Vector{UInt8}` and no second copy.
+
+`codec_decode!` is dispatched on the codec's `In/Out` tag pair so any
+new codec written for `Zarr.jl` can opt in by adding a specialized
+method. A generic fallback (allocate + `copyto!`) is provided for
+`V3Codec{:bytes,:bytes}`, `V3Codec{:array,:bytes}`, and
+`V3Codec{:array,:array}`, so codecs without a specialization remain
+correct, just less alloc-friendly.
+
 ## Reference
 
 The storage-aware path lives in `Zarr._readblock_sharded_partial!`
