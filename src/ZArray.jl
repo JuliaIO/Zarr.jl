@@ -168,37 +168,141 @@ resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
-  
+
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
-  # Allocate array of the size of a chunks where uncompressed data can be held
-  #bufferdict = IdDict((current_task()=>getchunkarray(z),))
-  a = getchunkarray(z)
-  # Now loop through the chunks
+  chunk_shape = z.metadata.chunks
+
+  # Sharding fast paths.
+  sc = Codecs.V3Codecs.sharding_codec(get_pipeline(z.metadata))
+  use_storage_partial = sc !== nothing &&
+                        enable_partial_shard_storage_reads[] &&
+                        supports_partial_reads(z.storage)
+
+  # When the storage layer can do byte-range reads on a sharded array,
+  # bypass the channel and read only the index + intersecting inner
+  # chunks per shard. Falls back to the in-memory path for full-shard
+  # reads or stores without partial-read support.
+  if use_storage_partial
+    return _readblock_sharded_partial!(aout, z, r, blockr, chunk_shape, sc,
+                                        output_base_offsets)
+  end
+
+  # Lazy-allocate the full-chunk buffer; only needed for the slow path.
+  a = nothing
+
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
-  
+
   task = @async begin
     read_items!($(z.storage), c, $(z.metadata.chunk_key_encoding), $(z.path), $(blockr))
   end
   bind(c,task)
 
-  try 
+  try
     for i in 1:length(blockr)
-      
-      bI,chunk_compressed = take!(c)
-      
-      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
 
-      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-      
-      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
+      bI,chunk_compressed = take!(c)
+
+      current_chunk_offsets = map((s,i)->s*(i-1),chunk_shape,Tuple(bI))
+
+      indranges    = map(boundint,r.indices,chunk_shape,current_chunk_offsets)
+
+      if sc !== nothing && length.(indranges) != chunk_shape
+        Codecs.V3Codecs.read_shard_partial!(
+          aout, Tuple(output_base_offsets), sc, chunk_compressed,
+          chunk_shape,
+          Tuple(current_chunk_offsets), Tuple(indranges),
+          z.metadata.fill_value,
+        )
+      else
+        a === nothing && (a = getchunkarray(z))
+        uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
+      end
       nothing
     end
   finally
     close(c)
   end
-  
+
+  aout
+end
+
+"""
+    _readblock_sharded_partial!(aout, z, r, blockr, chunk_shape, sc, output_base_offsets)
+
+Storage-aware sharded read. For each outer chunk in `blockr`, decide
+whether the request covers the full chunk or just part of it:
+
+- Full chunks fall through to the original full-decode path (one whole
+  shard read + decode) — partial reads don't help when we want the
+  whole thing anyway.
+- Partial chunks fetch just the shard index, decode it, and issue a
+  byte-range read per intersecting inner chunk. The inner chunks not
+  needed are never read from disk.
+
+This is what closes the gap to `zarr-python` for surgical slices of
+sharded archives. Gated by [`enable_partial_shard_storage_reads`](@ref)
+and [`supports_partial_reads`](@ref) so it never runs against a store
+that doesn't actually do byte-range reads.
+"""
+function _readblock_sharded_partial!(aout, z::ZArray, r::CartesianIndices{N},
+                                     blockr::CartesianIndices{N},
+                                     chunk_shape::NTuple{N,Int}, sc,
+                                     output_base_offsets) where {N}
+  obo = Tuple(output_base_offsets)
+  enc = z.metadata.chunk_key_encoding
+  store = z.storage
+  base_path = z.path
+  fv = z.metadata.fill_value
+  a = nothing  # lazy chunk buffer for the full-shard fallback path
+
+  for bI in blockr
+    current_chunk_offsets = map((s,i)->s*(i-1), chunk_shape, Tuple(bI))
+    indranges = map(boundint, r.indices, chunk_shape, current_chunk_offsets)
+    chunk_key = _concatpath(base_path, citostring(enc, bI))
+
+    if length.(indranges) == chunk_shape
+      # Full-chunk read — no partial-storage win possible. Just load
+      # the whole shard and use the existing decode path.
+      chunk_compressed = store[chunk_key]
+      a === nothing && (a = getchunkarray(z))
+      uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed,
+                             current_chunk_offsets, a, indranges)
+      continue
+    end
+
+    # Partial path: index-only read, then per-inner-chunk byte ranges.
+    total_size = getsize(store, chunk_key)
+    if total_size == 0
+      # missing chunk → fill_value over the requested region
+      Codecs.V3Codecs.read_shard_partial!(
+        aout, obo, sc, nothing, chunk_shape,
+        Tuple(current_chunk_offsets), Tuple(indranges), fv,
+      )
+      continue
+    end
+
+    chunks_per_shard = Codecs.V3Codecs.calculate_chunks_per_shard(chunk_shape, sc.chunk_shape)
+    idx_range   = Codecs.V3Codecs._shard_index_byte_range(sc, chunks_per_shard, total_size)
+    index_bytes = read_range(store, chunk_key, idx_range)
+    index_bytes === nothing && error("Shard index read failed for $chunk_key")
+
+    fetch_inner = let store=store, chunk_key=chunk_key
+      function(off::Int, nb::Int)
+        nb == 0 && return UInt8[]
+        bytes = read_range(store, chunk_key, (off + 1):(off + nb))
+        bytes === nothing && error("Inner-chunk byte read failed for $chunk_key at $off:$nb")
+        return bytes
+      end
+    end
+
+    Codecs.V3Codecs.read_shard_partial_with_source!(
+      aout, obo, sc, index_bytes, fetch_inner,
+      chunk_shape, Tuple(current_chunk_offsets), Tuple(indranges), fv,
+    )
+  end
+
   aout
 end
 

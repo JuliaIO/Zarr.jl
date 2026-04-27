@@ -592,6 +592,173 @@ function zdecode!(data::AbstractArray, encoded::Vector{UInt8}, c::ShardingCodec{
     return data
 end
 
+"""
+    sharding_codec(p) -> Union{Nothing, ShardingCodec}
+
+If `p` is a "pure" sharding pipeline — no array→array codecs before
+sharding and no bytes→bytes codecs after — return its inner
+`ShardingCodec`. Otherwise return `nothing`.
+
+Used by `ZArray.readblock!` to dispatch partial reads to a fast path
+that decodes only the inner chunks intersecting the requested slice
+instead of the whole shard. Pre/post codecs would have to be
+reapplied per inner chunk, which is the general path and not yet
+optimized.
+"""
+function sharding_codec(p::V3Pipeline)
+    isempty(p.array_array) || return nothing
+    isempty(p.bytes_bytes) || return nothing
+    return p.array_bytes isa ShardingCodec ? p.array_bytes : nothing
+end
+sharding_codec(_) = nothing
+
+
+"""
+    _shard_index_byte_range(sc, total_size) -> UnitRange{Int}
+
+Byte range, 1-based and inclusive, where the shard index lives inside a
+shard file of size `total_size`.
+"""
+function _shard_index_byte_range(sc::ShardingCodec{N}, chunks_per_shard::NTuple{N,Int}, total_size::Int) where N
+    index_size = compute_encoded_index_size(chunks_per_shard, sc)
+    if sc.index_location == :start
+        return 1:index_size
+    else
+        return (total_size - index_size + 1):total_size
+    end
+end
+
+
+"""
+    read_shard_partial_with_source!(aout, output_base_offsets, sc, index_bytes,
+                                    fetch_inner_chunk_bytes,
+                                    chunk_shape, current_chunk_offsets,
+                                    indranges, fill_value)
+
+Decode just the inner chunks of one outer (sharded) chunk that intersect
+`indranges`, writing each intersection straight into the right slice of
+`aout`. The caller supplies the already-read shard `index_bytes` and a
+closure `fetch_inner_chunk_bytes(offset_from_shard_start, nbytes) ->
+Vector{UInt8}` that returns the raw bytes for an inner chunk. This lets
+the same loop drive both the in-memory case (slice a `chunk_compressed`
+blob) and the byte-range storage case (`seek` + `read` the file).
+
+Coordinate conventions:
+
+- `indranges`             — global 1-based ranges, intersection of the
+                            user request with this outer chunk
+- `current_chunk_offsets` — 0-based global offsets of this outer chunk's
+                            origin
+- `output_base_offsets`   — 0-based global offsets of the user's request
+                            (so `aout` indices = global −
+                            `output_base_offsets`)
+"""
+function read_shard_partial_with_source!(
+    aout::AbstractArray{T,N},
+    output_base_offsets::NTuple{N,Int},
+    sc::ShardingCodec{N},
+    index_bytes::Vector{UInt8},
+    fetch_inner_chunk_bytes::F,
+    chunk_shape::NTuple{N,Int},
+    current_chunk_offsets::NTuple{N,Int},
+    indranges::NTuple{N,UnitRange{Int}},
+    fill_value,
+) where {T, N, F}
+    fv = fill_value === nothing ? zero(T) : T(fill_value)
+
+    local_indranges = ntuple(N) do i
+        lo = first(indranges[i]) - current_chunk_offsets[i]
+        hi = last(indranges[i])  - current_chunk_offsets[i]
+        lo:hi
+    end
+
+    chunks_per_shard = calculate_chunks_per_shard(chunk_shape, sc.chunk_shape)
+    index = decode_shard_index(index_bytes, chunks_per_shard, sc)
+
+    inner_buf = Array{T}(undef, sc.chunk_shape)
+
+    for cart_idx in CartesianIndices(chunks_per_shard)
+        ic_coords      = Tuple(cart_idx)
+        ic_array_slice = get_chunk_slice_in_shard(ic_coords, sc.chunk_shape, chunk_shape)
+        intersection = ntuple(N) do i
+            lo = max(first(ic_array_slice[i]), first(local_indranges[i]))
+            hi = min(last(ic_array_slice[i]),  last(local_indranges[i]))
+            lo:hi
+        end
+        any(isempty, intersection) && continue
+
+        ic_local = ntuple(N) do i
+            lo = first(intersection[i]) - first(ic_array_slice[i]) + 1
+            hi = last(intersection[i])  - first(ic_array_slice[i]) + 1
+            lo:hi
+        end
+        aout_dest = ntuple(N) do i
+            lo = first(intersection[i]) + current_chunk_offsets[i] - output_base_offsets[i]
+            hi = last(intersection[i])  + current_chunk_offsets[i] - output_base_offsets[i]
+            lo:hi
+        end
+
+        chunk_slice = get_chunk_slice(index, ic_coords)
+        if chunk_slice === nothing
+            view(aout, aout_dest...) .= fv
+            continue
+        end
+
+        offset_start, offset_end = chunk_slice
+        encoded_chunk = fetch_inner_chunk_bytes(Int(offset_start), Int(offset_end - offset_start))
+        pipeline_decode!(sc.codecs, inner_buf, encoded_chunk)
+
+        copyto!(view(aout, aout_dest...), view(inner_buf, ic_local...))
+    end
+    return aout
+end
+
+
+"""
+    read_shard_partial!(aout, output_base_offsets, sc, chunk_compressed,
+                        chunk_shape, current_chunk_offsets, indranges,
+                        fill_value)
+
+In-memory variant: caller has already loaded the entire shard into
+`chunk_compressed`. Pulls the index out of that blob and forwards to
+`read_shard_partial_with_source!` with a closure that slices the blob
+for each inner chunk's bytes. `nothing`/empty `chunk_compressed`
+fills the request region with `fill_value` and returns.
+"""
+function read_shard_partial!(
+    aout::AbstractArray{T,N},
+    output_base_offsets::NTuple{N,Int},
+    sc::ShardingCodec{N},
+    chunk_compressed::Union{Vector{UInt8}, Nothing},
+    chunk_shape::NTuple{N,Int},
+    current_chunk_offsets::NTuple{N,Int},
+    indranges::NTuple{N,UnitRange{Int}},
+    fill_value,
+) where {T, N}
+    if chunk_compressed === nothing || isempty(chunk_compressed)
+        fv = fill_value === nothing ? zero(T) : T(fill_value)
+        aout_dest_outer = ntuple(N) do i
+            lo = first(indranges[i]) - output_base_offsets[i]
+            hi = last(indranges[i])  - output_base_offsets[i]
+            lo:hi
+        end
+        view(aout, aout_dest_outer...) .= fv
+        return aout
+    end
+
+    chunks_per_shard = calculate_chunks_per_shard(chunk_shape, sc.chunk_shape)
+    idx_range = _shard_index_byte_range(sc, chunks_per_shard, length(chunk_compressed))
+    index_bytes = chunk_compressed[idx_range]
+
+    fetch = (off::Int, nb::Int) -> chunk_compressed[(off + 1):(off + nb)]
+
+    return read_shard_partial_with_source!(
+        aout, output_base_offsets, sc, index_bytes, fetch,
+        chunk_shape, current_chunk_offsets, indranges, fill_value,
+    )
+end
+
+
 struct TransposeCodec{N} <: V3Codec{:array, :array}
     order::NTuple{N, Int}  # permutation (1-based Julia indexing)
 end
