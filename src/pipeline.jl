@@ -31,31 +31,44 @@ function pipeline_encode(p::V3Pipeline, data::AbstractArray, fill_value)
 end
 
 function pipeline_decode!(p::V3Pipeline, output::AbstractArray, compressed::Vector{UInt8}; fill_value=nothing)
-    # Compute the byte size of the array-bytes step's output — equal to
-    # the (post-array_array) decoded element count × sizeof(eltype). For
-    # the common sharded inner-chunk path this is exactly the inner chunk
-    # in bytes, which lets us route bytes-bytes codecs through a single
-    # reusable buffer and the final array-bytes step straight into
-    # `output` with no intermediate Array{T} allocation.
     intermediate_shape = foldl(
         (sz, codec) -> Codecs.V3Codecs.encoded_shape(codec, sz),
         p.array_array; init=size(output)
     )
     decoded_byte_size = prod(intermediate_shape) * sizeof(eltype(output))
 
-    # Walk the bytes-bytes chain in reverse. The last step's output must
-    # be exactly `decoded_byte_size`; intermediate steps run via the
-    # allocating `codec_decode` (their output sizes vary per codec and
-    # aren't worth pre-sizing for the rare multi-bytes-codec case).
     n_bb = length(p.bytes_bytes)
+    ab   = p.array_bytes
+
+    # Hot path: pipeline is exactly `[BytesCodec, one bytes_bytes codec]`
+    # with matching endian. The bytes-bytes step's output IS the byte
+    # view of `output`'s underlying memory, so we decompress straight
+    # into it — no intermediate Vector{UInt8} allocation, no second
+    # copy from a scratch buffer into the typed array. This is what
+    # this archive (and most well-configured sharded archives) exercise
+    # on every inner-chunk decode.
+    if isempty(p.array_array) && n_bb == 1 && ab isa Codecs.V3Codecs.BytesCodec &&
+       !Codecs.V3Codecs._needs_bswap(ab.endian)
+        bytes_view = reinterpret(UInt8, vec(output))
+        Codecs.V3Codecs.codec_decode!(only(p.bytes_bytes), bytes_view, compressed)
+        return output
+    end
+
+    # Endian-mismatch variant: still avoid the extra buffer by
+    # decoding into the byte view, then byte-swapping in place via the
+    # array_bytes codec's in-place dispatch.
+    if isempty(p.array_array) && n_bb == 1 && ab isa Codecs.V3Codecs.BytesCodec
+        bytes_view = reinterpret(UInt8, vec(output))
+        Codecs.V3Codecs.codec_decode!(only(p.bytes_bytes), bytes_view, compressed)
+        # codec_decode!(::BytesCodec) handles bswap when needed.
+        Codecs.V3Codecs.codec_decode!(ab, output, bytes_view; fill_value)
+        return output
+    end
+
+    # Multi bytes-bytes step (rare): need one chunk-sized scratch buffer
+    # to chain through. Final step writes into the buffer; array_bytes
+    # then writes into output.
     if isempty(p.array_array) && n_bb >= 1
-        # Common case: pipeline ends in [array_bytes] and starts with
-        # one or more bytes-bytes codecs. The first reverse step (= last
-        # forward step) gets the final-sized output buffer; downstream
-        # steps cascade through `codec_decode`. For the dominant case
-        # `[BytesCodec, ZstdCompressor]` (n_bb == 1), this collapses to
-        # one in-place zstd decode + one in-place BytesCodec decode and
-        # zero chunk-sized intermediate allocations.
         bytes_buf = Vector{UInt8}(undef, decoded_byte_size)
         bytes = compressed
         bb = collect(p.bytes_bytes)
@@ -67,22 +80,25 @@ function pipeline_decode!(p::V3Pipeline, output::AbstractArray, compressed::Vect
                 bytes = Codecs.V3Codecs.codec_decode(codec, bytes)
             end
         end
-        Codecs.V3Codecs.codec_decode!(p.array_bytes, output, bytes_buf; fill_value)
+        Codecs.V3Codecs.codec_decode!(ab, output, bytes_buf; fill_value)
         return output
     end
 
-    # Fallback path: array_array codecs present (e.g. transpose) or no
-    # bytes-bytes codecs. Same logic as before, allocating where
-    # necessary.
+    # No bytes-bytes step (uncompressed): array_bytes from the encoded
+    # input directly into `output`.
+    if isempty(p.array_array)
+        Codecs.V3Codecs.codec_decode!(ab, output, compressed; fill_value)
+        return output
+    end
+
+    # Fallback for pipelines with array_array codecs (e.g. transpose).
+    # Allocate as before — these are uncommon enough that further
+    # tuning isn't worth the case-analysis.
     bytes = compressed
     for codec in reverse(collect(p.bytes_bytes))
         bytes = Codecs.V3Codecs.codec_decode(codec, bytes)
     end
-    if isempty(p.array_array)
-        Codecs.V3Codecs.codec_decode!(p.array_bytes, output, bytes; fill_value)
-        return output
-    end
-    arr = Codecs.V3Codecs.codec_decode(p.array_bytes, bytes, eltype(output), intermediate_shape; fill_value)
+    arr = Codecs.V3Codecs.codec_decode(ab, bytes, eltype(output), intermediate_shape; fill_value)
     for codec in reverse(collect(p.array_array))
         arr = Codecs.V3Codecs.codec_decode(codec, arr)
     end
