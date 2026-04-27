@@ -5,6 +5,7 @@ import ..Codecs: zencode, zdecode, zencode!, zdecode!
 import ...Zarr: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
 import ...Zarr: BloscCompressor as ZarrBloscCompressor
 import ...Zarr: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
+import ...Zarr: enable_threaded_shard_decode
 using CRC32c: CRC32c
 using JSON: JSON
 using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
@@ -675,8 +676,14 @@ function read_shard_partial_with_source!(
     chunks_per_shard = calculate_chunks_per_shard(chunk_shape, sc.chunk_shape)
     index = decode_shard_index(index_bytes, chunks_per_shard, sc)
 
-    inner_buf = Array{T}(undef, sc.chunk_shape)
-
+    # Build the work list of intersecting inner chunks up front, then
+    # decode them. Each entry's output region is disjoint by
+    # construction (different ic_coords → non-overlapping aout_dest), so
+    # the decode loop is safe to parallelize when threads are available.
+    Work = Tuple{NTuple{N,UnitRange{Int}},
+                 NTuple{N,UnitRange{Int}},
+                 Union{Nothing,Tuple{Int,Int}}}
+    work = Work[]
     for cart_idx in CartesianIndices(chunks_per_shard)
         ic_coords      = Tuple(cart_idx)
         ic_array_slice = get_chunk_slice_in_shard(ic_coords, sc.chunk_shape, chunk_shape)
@@ -698,17 +705,60 @@ function read_shard_partial_with_source!(
             lo:hi
         end
 
-        chunk_slice = get_chunk_slice(index, ic_coords)
-        if chunk_slice === nothing
-            view(aout, aout_dest...) .= fv
-            continue
+        cs = get_chunk_slice(index, ic_coords)
+        push!(work, (ic_local, aout_dest, cs === nothing ? nothing : (Int(cs[1]), Int(cs[2]))))
+    end
+
+    if isempty(work)
+        return aout
+    end
+
+    # Run sequentially when threading wouldn't help (single thread, one
+    # task, or the user has explicitly turned the knob off).
+    use_threads = Threads.nthreads() > 1 &&
+                  length(work) > 1 &&
+                  enable_threaded_shard_decode[]
+
+    if !use_threads
+        inner_buf = Array{T}(undef, sc.chunk_shape)
+        for (ic_local, aout_dest, cs) in work
+            if cs === nothing
+                view(aout, aout_dest...) .= fv
+            else
+                offset_start, offset_end = cs
+                encoded_chunk = fetch_inner_chunk_bytes(offset_start, offset_end - offset_start)
+                pipeline_decode!(sc.codecs, inner_buf, encoded_chunk)
+                copyto!(view(aout, aout_dest...), view(inner_buf, ic_local...))
+            end
         end
+        return aout
+    end
 
-        offset_start, offset_end = chunk_slice
-        encoded_chunk = fetch_inner_chunk_bytes(Int(offset_start), Int(offset_end - offset_start))
-        pipeline_decode!(sc.codecs, inner_buf, encoded_chunk)
+    # Threaded path: bounded buffer pool so we don't allocate one
+    # full-shard buffer per task. min(nthreads, |work|) buffers is
+    # enough — each task takes one off the channel, decodes, returns it.
+    n_workers = min(Threads.nthreads(), length(work))
+    pool = Channel{Array{T,N}}(n_workers)
+    for _ in 1:n_workers
+        put!(pool, Array{T,N}(undef, sc.chunk_shape))
+    end
 
-        copyto!(view(aout, aout_dest...), view(inner_buf, ic_local...))
+    @sync for (ic_local, aout_dest, cs) in work
+        Threads.@spawn begin
+            if cs === nothing
+                view(aout, aout_dest...) .= fv
+            else
+                offset_start, offset_end = cs
+                buf = take!(pool)
+                try
+                    encoded_chunk = fetch_inner_chunk_bytes(offset_start, offset_end - offset_start)
+                    pipeline_decode!(sc.codecs, buf, encoded_chunk)
+                    copyto!(view(aout, aout_dest...), view(buf, ic_local...))
+                finally
+                    put!(pool, buf)
+                end
+            end
+        end
     end
     return aout
 end

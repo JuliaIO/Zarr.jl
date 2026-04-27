@@ -255,34 +255,60 @@ function _readblock_sharded_partial!(aout, z::ZArray, r::CartesianIndices{N},
   store = z.storage
   base_path = z.path
   fv = z.metadata.fill_value
-  a = nothing  # lazy chunk buffer for the full-shard fallback path
 
+  # Two task lists. Full-chunk reads still go through the legacy
+  # decode path (one big shared chunk buffer); partial reads dispatch
+  # to the storage-partial path. Splitting this way keeps the buffer
+  # for the full-chunk path single-instance.
+  full_tasks    = Tuple{NTuple{N,Int}, NTuple{N,UnitRange{Int}}, String}[]
+  partial_tasks = Tuple{NTuple{N,Int}, NTuple{N,UnitRange{Int}}, String}[]
   for bI in blockr
     current_chunk_offsets = map((s,i)->s*(i-1), chunk_shape, Tuple(bI))
     indranges = map(boundint, r.indices, chunk_shape, current_chunk_offsets)
     chunk_key = _concatpath(base_path, citostring(enc, bI))
-
     if length.(indranges) == chunk_shape
-      # Full-chunk read — no partial-storage win possible. Just load
-      # the whole shard and use the existing decode path.
-      chunk_compressed = store[chunk_key]
-      a === nothing && (a = getchunkarray(z))
-      uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed,
-                             current_chunk_offsets, a, indranges)
-      continue
+      push!(full_tasks, (Tuple(current_chunk_offsets), Tuple(indranges), chunk_key))
+    else
+      push!(partial_tasks, (Tuple(current_chunk_offsets), Tuple(indranges), chunk_key))
     end
+  end
 
-    # Partial path: index-only read, then per-inner-chunk byte ranges.
+  # Full-chunk reads keep the existing serial path with a shared
+  # chunk buffer — these are intrinsically large reads that decompress
+  # the whole shard, so the existing path already saturates one core
+  # per call.
+  if !isempty(full_tasks)
+    a = getchunkarray(z)
+    for (current_chunk_offsets, indranges, chunk_key) in full_tasks
+      chunk_compressed = store[chunk_key]
+      uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed,
+                             collect(current_chunk_offsets), a, collect(indranges))
+    end
+  end
+
+  isempty(partial_tasks) && return aout
+
+  # Run partial reads in parallel across outer chunks. Each task is
+  # one outer chunk: it reads the shard index, then either fills
+  # missing data with fill_value or hands off to
+  # read_shard_partial_with_source! which itself may spawn per-inner-
+  # chunk tasks. Tasks write to disjoint regions of `aout` (different
+  # outer chunks = different time windows by construction), so no
+  # locking needed.
+  use_threads = Threads.nthreads() > 1 &&
+                length(partial_tasks) > 1 &&
+                enable_threaded_shard_decode[]
+
+  do_one = function(task)
+    current_chunk_offsets, indranges, chunk_key = task
     total_size = getsize(store, chunk_key)
     if total_size == 0
-      # missing chunk → fill_value over the requested region
       Codecs.V3Codecs.read_shard_partial!(
         aout, obo, sc, nothing, chunk_shape,
-        Tuple(current_chunk_offsets), Tuple(indranges), fv,
+        current_chunk_offsets, indranges, fv,
       )
-      continue
+      return
     end
-
     chunks_per_shard = Codecs.V3Codecs.calculate_chunks_per_shard(chunk_shape, sc.chunk_shape)
     idx_range   = Codecs.V3Codecs._shard_index_byte_range(sc, chunks_per_shard, total_size)
     index_bytes = read_range(store, chunk_key, idx_range)
@@ -299,8 +325,19 @@ function _readblock_sharded_partial!(aout, z::ZArray, r::CartesianIndices{N},
 
     Codecs.V3Codecs.read_shard_partial_with_source!(
       aout, obo, sc, index_bytes, fetch_inner,
-      chunk_shape, Tuple(current_chunk_offsets), Tuple(indranges), fv,
+      chunk_shape, current_chunk_offsets, indranges, fv,
     )
+    return
+  end
+
+  if use_threads
+    @sync for task in partial_tasks
+      Threads.@spawn do_one(task)
+    end
+  else
+    for task in partial_tasks
+      do_one(task)
+    end
   end
 
   aout
