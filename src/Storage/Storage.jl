@@ -214,6 +214,47 @@ end
 
 
 
+"""
+    supports_partial_reads(::AbstractStore) -> Bool
+
+Whether this store implements efficient byte-range reads via
+[`read_range`](@ref) and [`getsize`](@ref). Defaults to `false`; stores
+override to opt in (e.g. `DirectoryStore`).
+
+The sharding partial-read fast path uses this to skip loading whole
+shard files when only a few inner chunks are needed.
+"""
+supports_partial_reads(::AbstractStore) = false
+
+"""
+    read_range(s::AbstractStore, key::AbstractString, byte_range::UnitRange{Int})
+        -> Union{Vector{UInt8}, Nothing}
+
+Read just `byte_range` (1-based, inclusive) from the value stored under
+`key`. Returns `nothing` if the key doesn't exist. Default implementation
+falls back to `s[key][byte_range]`; stores that opt into
+[`supports_partial_reads`](@ref) should override with a real partial read.
+"""
+function read_range(s::AbstractStore, key::AbstractString, byte_range::UnitRange{Int})
+    bytes = s[key]
+    bytes === nothing && return nothing
+    return bytes[byte_range]
+end
+
+"""
+    getsize(s::AbstractStore, key::AbstractString) -> Int
+
+Size in bytes of the value stored under `key`, or 0 if it doesn't exist.
+Default falls back to `length(s[key])`; partial-read-capable stores
+should override with a cheap size lookup (e.g. `filesize`).
+"""
+function getsize(s::AbstractStore, key::AbstractString)
+    bytes = s[key]
+    bytes === nothing && return 0
+    return length(bytes)
+end
+
+
 ## Handling sequential vs parallel IO
 struct SequentialRead end
 struct ConcurrentRead
