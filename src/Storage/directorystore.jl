@@ -57,3 +57,25 @@ function subkeys(s::DirectoryStore,p)
 end
 Base.delete!(s::DirectoryStore, k::String) = isfile(joinpath(s.folder, k)) && rm(joinpath(s.folder, k))
 
+# Partial-read support. seek+read into a fresh buffer is much cheaper
+# than reading the whole file when the caller only wants a few KB.
+supports_partial_reads(::DirectoryStore) = true
+
+function read_range(d::DirectoryStore, i::AbstractString, byte_range::UnitRange{Int})
+    fname = joinpath(d.folder, i)
+    isfile(fname) || return nothing
+    n = length(byte_range)
+    n == 0 && return UInt8[]
+    buf = Vector{UInt8}(undef, n)
+    open(fname, "r") do io
+        seek(io, first(byte_range) - 1)
+        readbytes!(io, buf, n)
+    end
+    return buf
+end
+
+function getsize(d::DirectoryStore, i::AbstractString)
+    fname = joinpath(d.folder, i)
+    isfile(fname) ? filesize(fname) : 0
+end
+

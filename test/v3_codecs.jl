@@ -1213,6 +1213,312 @@ end
     @test z[3:4] == Int16[99, 99]
 end
 
+@testset "sharding partial-read fast path" begin
+    # Shared helper: build a sharded ZArray with shard shape (4,) and inner
+    # chunks (2,), backed by an arbitrary store. Two outer chunks (shape
+    # (8,) total) so we can exercise cross-outer-chunk slicing too.
+    function _make_sharded_int16(store; fill_value::Int16=Int16(0))
+        inner_pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (),
+        )
+        index_pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),),
+        )
+        sharding = Zarr.Codecs.V3Codecs.ShardingCodec(
+            (2,), inner_pipeline, index_pipeline, :end,
+        )
+        pipeline = Zarr.V3Pipeline((), sharding, ())
+        md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+            3, "array", (8,), (4,), "int16", pipeline, fill_value,
+            Zarr.ChunkKeyEncoding('/', true),
+        )
+        Zarr.ZArray(md, store, "", Dict(), true)
+    end
+
+    @testset "sharding_codec detection" begin
+        # Pure pipeline → returns the inner ShardingCodec.
+        inner = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (),
+        )
+        idx = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),),
+        )
+        sc = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner, idx, :end)
+        pure = Zarr.V3Pipeline((), sc, ())
+        @test Zarr.Codecs.V3Codecs.sharding_codec(pure) === sc
+
+        # Bytes-bytes codec wrapping the sharded chunk → not pure.
+        wrapped = Zarr.V3Pipeline((), sc, (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),))
+        @test Zarr.Codecs.V3Codecs.sharding_codec(wrapped) === nothing
+
+        # Pipeline whose array→bytes codec is plain BytesCodec, not Sharding.
+        plain = Zarr.V3Pipeline((), Zarr.Codecs.V3Codecs.BytesCodec(:little), ())
+        @test Zarr.Codecs.V3Codecs.sharding_codec(plain) === nothing
+
+        # Non-V3Pipeline argument → also nothing.
+        @test Zarr.Codecs.V3Codecs.sharding_codec(nothing) === nothing
+    end
+
+    @testset "in-memory partial path via DictStore" begin
+        # DictStore returns supports_partial_reads=false by default, so
+        # readblock! goes through the in-memory partial-decode path.
+        @test Zarr.supports_partial_reads(Zarr.DictStore()) === false
+
+        store = Zarr.DictStore()
+        z = _make_sharded_int16(store)
+        z[:] = Int16[1, 2, 3, 4, 5, 6, 7, 8]
+
+        # Within a single inner chunk (chunk 1 of outer chunk 1).
+        @test z[1:2] == Int16[1, 2]
+        # Spans two inner chunks of one outer chunk.
+        @test z[2:3] == Int16[2, 3]
+        # Full outer chunk — falls through to the non-partial decode path.
+        @test z[1:4] == Int16[1, 2, 3, 4]
+        # Spans two outer chunks (and several inner chunks).
+        @test z[3:6] == Int16[3, 4, 5, 6]
+        # Tail of the array — last inner chunk of the second outer chunk.
+        @test z[7:8] == Int16[7, 8]
+        # Whole array — both outer chunks, every inner chunk.
+        @test z[:]   == Int16[1, 2, 3, 4, 5, 6, 7, 8]
+    end
+
+    @testset "storage-aware partial path via DirectoryStore" begin
+        @test Zarr.supports_partial_reads(Zarr.DirectoryStore(mktempdir())) === true
+
+        dir = mktempdir()
+        store = Zarr.DirectoryStore(dir)
+        z = _make_sharded_int16(store)
+        z[:] = Int16[10, 20, 30, 40, 50, 60, 70, 80]
+
+        # Same slice patterns as the DictStore test above; results must
+        # be byte-identical regardless of which path serviced them.
+        @test z[1:2] == Int16[10, 20]
+        @test z[2:3] == Int16[20, 30]
+        @test z[1:4] == Int16[10, 20, 30, 40]
+        @test z[3:6] == Int16[30, 40, 50, 60]
+        @test z[7:8] == Int16[70, 80]
+        @test z[:]   == Int16[10, 20, 30, 40, 50, 60, 70, 80]
+    end
+
+    @testset "enable_partial_shard_storage_reads[] toggle" begin
+        # Flipping the flag must preserve correctness — only the path
+        # taken changes.
+        dir = mktempdir()
+        store = Zarr.DirectoryStore(dir)
+        z = _make_sharded_int16(store)
+        z[:] = Int16[1, 2, 3, 4, 5, 6, 7, 8]
+
+        prev = Zarr.enable_partial_shard_storage_reads[]
+        try
+            Zarr.enable_partial_shard_storage_reads[] = true
+            @test z[3:6] == Int16[3, 4, 5, 6]
+
+            Zarr.enable_partial_shard_storage_reads[] = false
+            @test z[3:6] == Int16[3, 4, 5, 6]
+        finally
+            Zarr.enable_partial_shard_storage_reads[] = prev
+        end
+    end
+
+    @testset "fill_value over partial slice of an empty shard" begin
+        # Second outer chunk is never written → its file doesn't exist;
+        # the partial path must populate the requested region with
+        # fill_value.
+        dir = mktempdir()
+        store = Zarr.DirectoryStore(dir)
+        z = _make_sharded_int16(store; fill_value=Int16(-7))
+        z[1:2] = Int16[100, 200]   # writes outer chunk 0 only
+
+        @test z[1:2] == Int16[100, 200]
+        # Partial slice that lives entirely in the un-written outer chunk:
+        @test z[5:6] == Int16[-7, -7]
+        @test z[7:8] == Int16[-7, -7]
+        # Cross-boundary: writeblock! decoded outer chunk 0 from
+        # fill_value first, so the unwritten tail of chunk 0 is also
+        # fill_value (not zero); chunk 1 was never written so its bytes
+        # come straight from fill_value too.
+        @test z[3:6] == Int16[-7, -7, -7, -7]
+    end
+end
+
+@testset "codec_decode! in-place API" begin
+    @testset "BytesCodec little-endian copies straight into output" begin
+        bc = Zarr.Codecs.V3Codecs.BytesCodec(:little)
+        data = Float64[1.5, -2.5, 3.5, -4.5]
+        encoded = collect(reinterpret(UInt8, data))
+        output = Vector{Float64}(undef, length(data))
+        Zarr.Codecs.V3Codecs.codec_decode!(bc, output, encoded)
+        @test output == data
+    end
+
+    @testset "BytesCodec big-endian bswaps in place" begin
+        # On a little-endian host, BytesCodec(:big) needs bswap. Encode
+        # by bswapping the data bytes; the in-place decode must undo it.
+        bc = Zarr.Codecs.V3Codecs.BytesCodec(:big)
+        data = Int32[100, -200, 300, -400]
+        encoded = collect(reinterpret(UInt8, bswap.(data)))
+        output = Vector{Int32}(undef, length(data))
+        Zarr.Codecs.V3Codecs.codec_decode!(bc, output, encoded)
+        @test output == data
+    end
+
+    @testset "BytesCodec rejects size mismatch" begin
+        bc = Zarr.Codecs.V3Codecs.BytesCodec(:little)
+        output = Vector{Float64}(undef, 3)
+        @test_throws DimensionMismatch Zarr.Codecs.V3Codecs.codec_decode!(
+            bc, output, UInt8[0, 0, 0])
+    end
+
+    @testset "ZstdV3Codec round-trip via in-place decode" begin
+        zc = Zarr.Codecs.V3Codecs.ZstdV3Codec(3)
+        raw = collect(0x10:0x4F)   # 64 bytes
+        encoded = Zarr.Codecs.V3Codecs.codec_encode(zc, raw)
+        output = Vector{UInt8}(undef, length(raw))
+        Zarr.Codecs.V3Codecs.codec_decode!(zc, output, encoded)
+        @test output == raw
+    end
+
+    @testset "Generic fallback for bytes→bytes codec without specialization" begin
+        # CRC32cV3Codec doesn't have its own codec_decode! method; the
+        # generic V3Codec{:bytes,:bytes} fallback should still work.
+        cc = Zarr.Codecs.V3Codecs.CRC32cV3Codec()
+        raw = collect(0x01:0x10)
+        encoded = Zarr.Codecs.V3Codecs.codec_encode(cc, raw)
+        output = Vector{UInt8}(undef, length(raw))
+        Zarr.Codecs.V3Codecs.codec_decode!(cc, output, encoded)
+        @test output == raw
+    end
+end
+
+@testset "pipeline_decode! V3 paths" begin
+    @testset "matching-endian fast path: [BytesCodec :little, Zstd]" begin
+        # The hot path. Decompresses zstd directly into reinterpret(UInt8,
+        # vec(output)) — no scratch buffer.
+        pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (Zarr.Codecs.V3Codecs.ZstdV3Codec(3),),
+        )
+        data = Float64[1.0, 2.0, 3.0, 4.0, 5.0]
+        encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+        output = Vector{Float64}(undef, length(data))
+        Zarr.pipeline_decode!(pipeline, output, encoded)
+        @test output == data
+    end
+
+    @testset "endian-mismatch variant: BytesCodec :big triggers in-place bswap" begin
+        pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:big),
+            (Zarr.Codecs.V3Codecs.ZstdV3Codec(3),),
+        )
+        data = Int32[1, 2, 3, 4, 5, 6, 7, 8]
+        encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+        output = Vector{Int32}(undef, length(data))
+        Zarr.pipeline_decode!(pipeline, output, encoded)
+        @test output == data
+    end
+
+    @testset "no bytes-bytes step: BytesCodec only" begin
+        # Uncompressed array; pipeline_decode! routes straight through
+        # codec_decode!(::BytesCodec, ...).
+        pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (),
+        )
+        data = Float64[1.5, 2.5, 3.5, 4.5]
+        encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+        output = Vector{Float64}(undef, length(data))
+        Zarr.pipeline_decode!(pipeline, output, encoded)
+        @test output == data
+    end
+
+    @testset "multi bytes-bytes step uses scratch buffer" begin
+        # Two bytes-bytes codecs forces the scratch-buffer branch (the
+        # zero-buf fast path only fires for a single bytes-bytes codec).
+        pipeline = Zarr.V3Pipeline(
+            (),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (Zarr.Codecs.V3Codecs.ZstdV3Codec(3),
+             Zarr.Codecs.V3Codecs.CRC32cV3Codec()),
+        )
+        data = Float64[10.0, 20.0, 30.0]
+        encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+        output = Vector{Float64}(undef, length(data))
+        Zarr.pipeline_decode!(pipeline, output, encoded)
+        @test output == data
+    end
+
+    @testset "with array_array codec: TransposeCodec falls through to legacy path" begin
+        # TransposeCodec((2,1)) on a (2,3) matrix → encoded shape (3,2).
+        pipeline = Zarr.V3Pipeline(
+            (Zarr.Codecs.V3Codecs.TransposeCodec((2, 1)),),
+            Zarr.Codecs.V3Codecs.BytesCodec(:little),
+            (Zarr.Codecs.V3Codecs.ZstdV3Codec(3),),
+        )
+        data = reshape(Float64.(1:6), 2, 3)
+        encoded = Zarr.pipeline_encode(pipeline, data, nothing)
+        output = Matrix{Float64}(undef, 2, 3)
+        Zarr.pipeline_decode!(pipeline, output, encoded)
+        @test output == data
+    end
+end
+
+@testset "threading flags preserve correctness" begin
+    # Sharded ZArray; flip enable_threaded_shard_decode[] and
+    # max_concurrent_inner_decodes[] across realistic combinations and
+    # confirm reads still match the written data. Catches any divergence
+    # between the threaded and sequential paths.
+    inner_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.ZstdV3Codec(3),),
+    )
+    index_pipeline = Zarr.V3Pipeline(
+        (),
+        Zarr.Codecs.V3Codecs.BytesCodec(:little),
+        (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),),
+    )
+    sharding = Zarr.Codecs.V3Codecs.ShardingCodec(
+        (2,), inner_pipeline, index_pipeline, :end,
+    )
+    pipeline = Zarr.V3Pipeline((), sharding, ())
+    md = Zarr.MetadataV3{Int16,1,typeof(pipeline)}(
+        3, "array", (8,), (4,), "int16", pipeline, Int16(0),
+        Zarr.ChunkKeyEncoding('/', true),
+    )
+
+    dir   = mktempdir()
+    store = Zarr.DirectoryStore(dir)
+    z     = Zarr.ZArray(md, store, "", Dict(), true)
+    z[:]  = Int16[1, 2, 3, 4, 5, 6, 7, 8]
+
+    prev_threaded = Zarr.enable_threaded_shard_decode[]
+    prev_max      = Zarr.max_concurrent_inner_decodes[]
+    try
+        for threaded in (true, false), max_workers in (1, 2, 8)
+            Zarr.enable_threaded_shard_decode[] = threaded
+            Zarr.max_concurrent_inner_decodes[] = max_workers
+            @test z[2:5] == Int16[2, 3, 4, 5]   # cross outer-chunk boundary
+            @test z[1:4] == Int16[1, 2, 3, 4]   # full outer chunk
+            @test z[3:3] == Int16[3]            # single-element slice
+            @test z[:]   == Int16[1, 2, 3, 4, 5, 6, 7, 8]
+        end
+    finally
+        Zarr.enable_threaded_shard_decode[] = prev_threaded
+        Zarr.max_concurrent_inner_decodes[] = prev_max
+    end
+end
+
 @testset "ShardingCodec validate_index_pipeline rejects variable-size codecs" begin
     # Metadata with a blosc compressor inside index_codecs — must throw ArgumentError
     json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",

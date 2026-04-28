@@ -12,6 +12,50 @@ ZarrFormat(v::ZarrFormat) = v
 #Default Zarr Version
 const DV = ZarrFormat(Val(2))
 
+"""
+    enable_partial_shard_storage_reads[]
+
+When `true` (default), the sharded-chunk fast path in
+[`readblock!`](@ref) issues byte-range reads to the storage backend
+instead of loading the whole shard file. Stores opt in via
+[`supports_partial_reads`](@ref); stores that don't are unaffected.
+
+Set to `false` to fall back to the in-memory partial-decode path
+(useful for A/B comparisons or to debug a suspected partial-read bug).
+"""
+const enable_partial_shard_storage_reads = Ref(true)
+
+"""
+    enable_threaded_shard_decode[]
+
+When `true` (default) and Julia is running with more than one thread,
+inner-chunk decompresses in `read_shard_partial_with_source!` are
+dispatched to `Threads.@spawn` so that one shard read scales with
+available cores. Falls back to a sequential loop on single-threaded
+runs or when the work list has fewer than two entries.
+
+Set to `false` to force the sequential path even with `-t > 1`
+(useful for debugging or for callers that already parallelize at a
+higher level).
+"""
+const enable_threaded_shard_decode = Ref(true)
+
+"""
+    max_concurrent_inner_decodes[]
+
+Upper bound on the number of inner-chunk decode tasks dispatched in
+parallel by `read_shard_partial_with_source!`. Default `8`, modeled on
+zarr-python's `async.concurrency = 10`. Tasks beyond this queue on
+the buffer-pool channel.
+
+Capping matters because each in-flight task holds a chunk-sized buffer
+(e.g. 187 MB for our 1s archive shape) and `Threads.nthreads()` is
+often much larger than the number of inner chunks per shard. Without
+the cap, a `-t 32` run pre-allocates ~6 GB of decode buffers even when
+the actual work is a handful of chunks.
+"""
+const max_concurrent_inner_decodes = Ref(8)
+
 include("types.jl")
 include("chunkkeyencoding.jl")
 include("metadata.jl")

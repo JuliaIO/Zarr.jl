@@ -190,6 +190,48 @@ end
   @test sort(collect(keys(ds.a)))==[".zgroup","bar/.zarray", "bar/.zattrs", "bar/0.0.0"]
 end
 
+@testset "Partial-read storage interface" begin
+  # The sharding fast path needs three optional methods on AbstractStore.
+  # Stores opt in via supports_partial_reads(); the other two come with
+  # safe defaults that fall back to a full read + slice. DirectoryStore
+  # overrides them with real seek/read implementations.
+
+  @testset "defaults on AbstractStore" begin
+    # DictStore inherits all defaults — supports_partial_reads is false,
+    # read_range/getsize go through getindex.
+    ds = Zarr.DictStore()
+    ds["payload"] = collect(0x00:0x07)
+
+    @test Zarr.supports_partial_reads(ds) === false
+    @test Zarr.getsize(ds, "payload") == 8
+    @test Zarr.read_range(ds, "payload", 1:8) == collect(0x00:0x07)
+    @test Zarr.read_range(ds, "payload", 3:5) == [0x02, 0x03, 0x04]
+    @test Zarr.read_range(ds, "payload", 8:8) == [0x07]
+    # Missing key — read_range returns nothing, getsize returns 0.
+    @test Zarr.read_range(ds, "absent", 1:3) === nothing
+    @test Zarr.getsize(ds, "absent") == 0
+  end
+
+  @testset "DirectoryStore overrides" begin
+    dir = mktempdir()
+    s = Zarr.DirectoryStore(dir)
+    payload = collect(0x10:0x1F)
+    s["blob"] = payload
+
+    @test Zarr.supports_partial_reads(s) === true
+    @test Zarr.getsize(s, "blob") == length(payload)
+    @test Zarr.getsize(s, "missing") == 0
+
+    # Spot-check the partial reads against the in-memory slice.
+    @test Zarr.read_range(s, "blob", 1:length(payload)) == payload
+    @test Zarr.read_range(s, "blob", 5:10) == payload[5:10]
+    @test Zarr.read_range(s, "blob", 1:1) == [payload[1]]
+    @test Zarr.read_range(s, "blob", length(payload):length(payload)) ==
+          [payload[end]]
+    @test Zarr.read_range(s, "missing", 1:3) === nothing
+  end
+end
+
 
 @testset "Minio S3 storage" begin
   @info "Testing Minio S3 storage"
