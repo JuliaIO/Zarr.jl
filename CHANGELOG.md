@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Internal threading and in-place codec API for sharded reads [#265](https://github.com/JuliaIO/Zarr.jl/pull/265)
+  - inner-chunk decodes within one shard and outer-chunk reads across one request now dispatch to `Threads.@spawn` when Julia is started with `-t > 1` — single `arr[a:b, c]` calls scale with available cores, transparent to user code
+  - new `Zarr.enable_threaded_shard_decode[]` `Ref{Bool}` flag (default `true`); set `false` to force the sequential decode path
+  - new `Zarr.max_concurrent_inner_decodes[]` `Ref{Int}` flag (default `8`, modeled on zarr-python's `async.concurrency = 10`) caps the buffer pool size independently of `Threads.nthreads()`
+  - new `Codecs.V3Codecs.codec_decode!(c, output, encoded; …)` API that writes into a caller-owned buffer; specialized for `BytesCodec` (zero-copy reinterpret + bulk byte copy) and `ZstdV3Codec` (`ChunkCodecCore.decode!` straight into the caller's buffer); generic fallbacks dispatched on the codec's `In/Out` tag pair
+  - V3 `pipeline_decode!` rewritten to thread the caller's output array through the decode chain — for the dominant `[BytesCodec, ZstdV3Codec]` shape it decodes zstd directly into `reinterpret(UInt8, vec(output))`, eliminating per-inner-chunk transient allocations
 - Fast partial-read path for the `sharding_indexed` codec [#264](https://github.com/JuliaIO/Zarr.jl/pull/264)
   - in-memory partial decode in `Codecs.V3Codecs.read_shard_partial!` and `read_shard_partial_with_source!` — only inner chunks intersecting the requested slice are decompressed; the rest are skipped
   - storage-aware partial reads via three new optional `AbstractStore` methods (`supports_partial_reads`, `read_range`, `getsize`) — stores opt in to byte-range reads; safe defaults preserve correctness for backends that don't
