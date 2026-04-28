@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fast partial-read path for the `sharding_indexed` codec [#264](https://github.com/JuliaIO/Zarr.jl/pull/264)
+  - in-memory partial decode in `Codecs.V3Codecs.read_shard_partial!` and `read_shard_partial_with_source!` — only inner chunks intersecting the requested slice are decompressed; the rest are skipped
+  - storage-aware partial reads via three new optional `AbstractStore` methods (`supports_partial_reads`, `read_range`, `getsize`) — stores opt in to byte-range reads; safe defaults preserve correctness for backends that don't
+  - `DirectoryStore` opts in (using `seek` + `readbytes!` and `filesize`); other backends inherit the defaults
+  - new `Zarr.enable_partial_shard_storage_reads[]` `Ref{Bool}` flag (default `true`); flip to `false` to fall back to the in-memory partial-decode path for A/B comparisons
+  - applies only when the codec pipeline is "pure" sharding (no array→array codecs before, no bytes→bytes codecs after); compound pipelines run on the existing path unchanged
+
 ## v0.10.0 - 2026-04-24
 
 - Enable `sharding_indexed` codec for Zarr v3 [#241](https://github.com/JuliaIO/Zarr.jl/pull/241)
