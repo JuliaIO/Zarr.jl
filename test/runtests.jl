@@ -260,6 +260,7 @@ end
     mktempdir() do dir
         # Tens of TB if zcreate were materializing dummy storage.
         r = @timed zcreate(UInt8, 10674, 10653, 9327; path = joinpath(dir, "big.zarr"))
+        @test r.bytes < 1e9
         @test size(r.value) == (10674, 10653, 9327)
         @test eltype(r.value) == UInt8
         GC.gc()
