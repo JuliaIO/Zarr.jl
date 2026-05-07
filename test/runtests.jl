@@ -256,6 +256,15 @@ end
   @test_throws ArgumentError resize!(a,(-1,2))
 end
 
+@testset "zcreate does not allocate dense storage" begin
+    # Tens of TB if zcreate were materializing dummy storage.
+    z = zcreate(UInt8, 10674, 10653, 9327;
+                path = mktempdir() * "/big.zarr",
+                chunks = (256, 256, 256))
+    @test size(z) == (10674, 10653, 9327)
+    @test eltype(z) == UInt8
+end
+
 @testset "concatenate" begin
     a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
     ca = cat(a, a, dims=3)
