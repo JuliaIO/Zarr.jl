@@ -343,7 +343,7 @@ struct ShapeOnlyArray{T,N} <: AbstractArray{T,N}
     sz::Dims{N}
 end
 Base.size(a::ShapeOnlyArray) = a.sz
-Base.getindex(::ShapeOnlyArray, ::Vararg{Int}) =
+Base.getindex(::ShapeOnlyArray, ::Vararg{Any}) =
     error("ShapeOnlyArray carries no data")
 
 function zcreate(::Type{T},storage::AbstractStore,
