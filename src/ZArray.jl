@@ -342,8 +342,6 @@ end
 struct ShapeOnlyArray{T,N} <: AbstractArray{T,N}
     sz::Dims{N}
 end
-ShapeOnlyArray{T,N}(sz::NTuple{N,<:Integer}) where {T,N} =
-    ShapeOnlyArray{T,N}(ntuple(i -> Int(sz[i]), N))
 Base.size(a::ShapeOnlyArray) = a.sz
 Base.getindex(::ShapeOnlyArray, ::Vararg{Int}) =
     error("ShapeOnlyArray carries no data")
