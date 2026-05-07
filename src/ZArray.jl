@@ -340,7 +340,7 @@ function zcreate(::Type{T}, dims::Integer...;
 end
 
 struct ShapeOnlyArray{T,N} <: AbstractArray{T,N}
-    sz::NTuple{N,Int}
+    sz::Dims{N}
 end
 ShapeOnlyArray{T,N}(sz::NTuple{N,<:Integer}) where {T,N} =
     ShapeOnlyArray{T,N}(ntuple(i -> Int(sz[i]), N))
