@@ -257,12 +257,13 @@ end
 end
 
 @testset "zcreate does not allocate dense storage" begin
-    # Tens of TB if zcreate were materializing dummy storage.
-    z = zcreate(UInt8, 10674, 10653, 9327;
-                path = mktempdir() * "/big.zarr",
-                chunks = (256, 256, 256))
-    @test size(z) == (10674, 10653, 9327)
-    @test eltype(z) == UInt8
+    mktempdir() do dir
+        # Tens of TB if zcreate were materializing dummy storage.
+        r = @timed zcreate(UInt8, 10674, 10653, 9327; path = joinpath(dir, "big.zarr"))
+        @test size(r.value) == (10674, 10653, 9327)
+        @test eltype(r.value) == UInt8
+        GC.gc()
+    end
 end
 
 @testset "concatenate" begin
