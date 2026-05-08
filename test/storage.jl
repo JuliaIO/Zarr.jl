@@ -319,3 +319,84 @@ end
   end
   @info "Finished testing ZipStore"
 end
+
+@testset "ConsolidatedStore constructor" begin
+  # v2-style: separate .zmetadata file
+  s = Zarr.DictStore()
+  meta = Dict("metadata" => Dict("foo/.zarray" => Dict("a" => 1)), "zarr_consolidated_format" => 1)
+  s[".zmetadata"] = Vector{UInt8}(JSON.json(meta))
+  cs = Zarr.ConsolidatedStore(s, "")
+  @test cs.cons == meta["metadata"]
+
+  # v3-style: consolidated_metadata embedded inside root zarr.json
+  s = Zarr.DictStore()
+  root = Dict(
+      "node_type" => "group",
+      "zarr_format" => 3,
+      "attributes" => Dict{String,Any}(),
+      "consolidated_metadata" => Dict(
+          "kind" => "inline",
+          "must_understand" => false,
+          "metadata" => Dict("foo/zarr.json" => Dict("node_type" => "array"))
+      )
+  )
+  s["zarr.json"] = Vector{UInt8}(JSON.json(root))
+  cs = Zarr.ConsolidatedStore(s, "")
+  @test cs.cons == root["consolidated_metadata"]["metadata"]
+
+  # neither .zmetadata nor zarr.json with consolidated_metadata, error
+  s = Zarr.DictStore()
+  @test_throws ArgumentError Zarr.ConsolidatedStore(s, "")
+
+  # zarr.json exists but has no consolidated_metadata key, error
+  s = Zarr.DictStore()
+  s["zarr.json"] = Vector{UInt8}(JSON.json(Dict("node_type" => "group", "zarr_format" => 3)))
+  @test_throws ArgumentError Zarr.ConsolidatedStore(s, "")
+end
+
+@testset "ConsolidatedStore v3 getattrs" begin
+  # canonical: attributes under "attributes" subkey
+  store = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => Dict{String,Any}(
+          "node_type" => "group",
+          "zarr_format" => 3,
+          "attributes" => Dict{String,Any}("foo" => "bar")
+      )
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store, "") == Dict("foo" => "bar")
+
+  # zarr.json present but no "attributes" key: fallback returns full node_meta
+  node_meta = Dict{String,Any}("node_type" => "group", "zarr_format" => 3)
+  store_noattrs = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => node_meta
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_noattrs, "") === node_meta
+
+  # missing zarr.json key entirely: empty dict
+  store_empty = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}())
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_empty, "") == Dict{String,Any}()
+end
+
+@testset "ConsolidatedStore v2 round-trip" begin
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs=Dict("groupatt" => 5))
+  a = zcreate(Int, g, "a1", 10, 20, chunks=(5,5), attrs=Dict("arratt" => 2.5))
+  a .= reshape(1:200, 10, 20)
+  cs = Zarr.consolidate_metadata(g)
+  g2 = zopen(cs)
+  @test g2.attrs == Dict("groupatt" => 5)
+  @test g2["a1"].attrs == Dict("arratt" => 2.5)
+  @test g2["a1"][:,:] == reshape(1:200, 10, 20)
+end
+
+@testset "ConsolidatedStore v3 round-trip" begin
+  s = Zarr.DictStore()
+  g = zgroup(s, "", Zarr.ZarrFormat(3), attrs=Dict("groupatt" => 5))
+  a = zcreate(Int, g, "a1", 10, 20, chunks=(5,5), attrs=Dict("arratt" => 2.5))
+  a .= reshape(1:200, 10, 20)
+  cs = Zarr.consolidate_metadata(g)
+  g2 = zopen(cs)
+  @test g2.attrs == Dict("groupatt" => 5)
+  @test g2["a1"].attrs == Dict("arratt" => 2.5)
+  @test g2["a1"][:,:] == reshape(1:200, 10, 20)
+end

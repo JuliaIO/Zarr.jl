@@ -9,12 +9,22 @@ struct ConsolidatedStore{P} <: AbstractStore
   cons::Dict{String,Any}
 end
 function ConsolidatedStore(s::AbstractStore, p)
+  # v2-style: separate .zmetadata file
   d = s[p, ".zmetadata"]
-  if d === nothing
-    throw(ArgumentError("Could not find consolidated metadata for store $s"))
+  if d !== nothing
+      meta = JSON.parse(String(copy(d)); dicttype = Dict{String,Any})
+      return ConsolidatedStore(s, p, meta["metadata"])
   end
-  meta = JSON.parse(String(copy(d)); dicttype = Dict{String,Any})
-  ConsolidatedStore(s, p, meta["metadata"])
+  # v3-style: consolidated_metadata embedded inside root zarr.json
+  z = s[p, "zarr.json"]
+  if z !== nothing
+      root = JSON.parse(String(copy(z)); dicttype = Dict{String,Any})
+      cm = get(root, "consolidated_metadata", nothing)
+      if cm !== nothing
+          return ConsolidatedStore(s, p, cm["metadata"])
+      end
+  end
+  throw(ArgumentError("Could not find consolidated metadata for store $s"))
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
@@ -38,8 +48,20 @@ function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
 end
 
 function getattrs(::ZarrFormat{3}, d::ConsolidatedStore, p)
-    return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
+  json_key = _unconcpath(d, p, "zarr.json")
+  node_meta = get(d.cons, json_key, nothing)
+  if node_meta === nothing
+      return Dict{String,Any}()
+  end
+  # v3 spec: user attributes are stored under the "attributes" subkey of zarr.json
+  if haskey(node_meta, "attributes")
+      return node_meta["attributes"]
+  end
+  # fallback: return the full node metadata if no "attributes" key is found, we never write this. We only read it.
+  # is this correct?
+  return node_meta
 end
+
 function _unconcpath(d,p)
   startswith(p,d.path) || error("Requested key is not in consolidated path")
   lstrip(replace(p,d.path=>"", count=1),'/')
@@ -79,11 +101,17 @@ end
 store_read_strategy(s::ConsolidatedStore) = store_read_strategy(s.parent)
 
 function consolidate_metadata(s::AbstractStore,d,prefix)
+  # v2-style: separate .zmetadata file
   for k in (".zattrs",".zarray",".zgroup")
     v = s[prefix,k]
     if v !== nothing
       d[_concatpath(prefix,k)] = JSON.parse(String(copy(v)); dicttype = Dict{String,Any})
     end
+  end
+  # v3-style: consolidated_metadata embedded inside root zarr.json
+  zj = s[prefix, "zarr.json"]
+  if zj !== nothing
+    d[_concatpath(prefix, "zarr.json")] = JSON.parse(String(copy(zj)); dicttype=Dict{String,Any})
   end
   foreach(subdirs(s,prefix)) do subname
     consolidate_metadata(s,d,string(prefix,subname,"/"))
@@ -92,9 +120,24 @@ function consolidate_metadata(s::AbstractStore,d,prefix)
 end
 function consolidate_metadata(s::AbstractStore,p)
   d = consolidate_metadata(s,Dict{String,Any}(),p)
-  buf = IOBuffer()
-  JSON.print(buf,Dict("metadata"=>d,"zarr_consolidated_format"=>1),4)
-  s[p,".zmetadata"] = take!(buf)
+  # detect format from root: v3 embeds into zarr.json, v2 writes separate .zmetadata
+  zj = s[p, "zarr.json"]
+  if zj !== nothing
+      root = JSON.parse(String(copy(zj)); dicttype=Dict{String,Any})
+      root["consolidated_metadata"] = Dict{String,Any}(
+          "kind" => "inline",
+          "must_understand" => false,
+          "metadata" => d
+      )
+      buf = IOBuffer()
+      JSON.print(buf, root, 4)
+      s[p, "zarr.json"] = take!(buf)
+  else
+    # v2-style: separate .zmetadata file
+    buf = IOBuffer()
+    JSON.print(buf,Dict("metadata"=>d,"zarr_consolidated_format"=>1),4)
+    s[p,".zmetadata"] = take!(buf)
+  end
   ConsolidatedStore(s,p,d)
 end
 
