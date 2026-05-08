@@ -255,6 +255,25 @@ end
   @test a[12:13,:]==vcat(singlerow', singlerow')
   @test_throws ArgumentError resize!(a,(-1,2))
 end
+@testset "ShapeOnlyArray" begin
+    A = ShapeOnlyArray{Float64,3}((3,4,5))
+    @test size(A) == (3,4,5)
+    @test eltype(A) == Float64
+    @test_throws ErrorException A[1]
+    @test_throws ErrorException A[1,1,1]
+    @test_throws ErrorException A[-1]
+    
+    B = ShapeOnlyArray{Int8,1}((3,))
+    @test size(B) == (3,)
+    @test eltype(B) == Int8
+    for i in 0:4
+        @test_throws ErrorException B[i]
+    end
+    
+    C = ShapeOnlyArray{Bool,2}((0x2,UInt16(4095)))
+    @test size(C) === (2,4095)
+    @test eltype(C) == Bool
+end
 
 @testset "zcreate does not allocate dense storage" begin
     mktempdir() do dir
