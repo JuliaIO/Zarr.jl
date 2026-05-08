@@ -258,7 +258,7 @@ end
 
 @testset "zcreate does not allocate dense storage" begin
     mktempdir() do dir
-        # Tens of TB if zcreate were materializing dummy storage.
+        # About 1 TB if zcreate were materializing dummy storage.
         r = @timed zcreate(UInt8, 10674, 10653, 9327; path = joinpath(dir, "big.zarr"))
         @test r.bytes < 1e9
         @test size(r.value) == (10674, 10653, 9327)
