@@ -341,6 +341,7 @@ end
 
 struct ShapeOnlyArray{T,N} <: AbstractArray{T,N}
     sz::Dims{N}
+    ShapeOnlyArray{T,N}(dims::Dims{N}) where {T,N} = new{T,N}(dims)
 end
 Base.size(a::ShapeOnlyArray) = a.sz
 Base.getindex(::ShapeOnlyArray, ::Vararg{Any}) =
