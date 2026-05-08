@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
+
 ## v0.10.0 - 2026-04-24
 
 - Enable `sharding_indexed` codec for Zarr v3 [#241](https://github.com/JuliaIO/Zarr.jl/pull/241)
