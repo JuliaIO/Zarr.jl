@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Fixed `getattrs`, `ConsolidatedStore` and `consolidate_metadata` for v3 stores [#270](https://github.com/JuliaIO/Zarr.jl/pull/270)
 
 ## v0.10.0 - 2026-04-24
 
