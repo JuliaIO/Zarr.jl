@@ -339,6 +339,13 @@ function zcreate(::Type{T}, dims::Integer...;
   zcreate(T, store, dims...; zarr_format, dimension_separator, kwargs...)
 end
 
+struct ShapeOnlyArray{T,N} <: AbstractArray{T,N}
+    sz::Dims{N}
+end
+Base.size(a::ShapeOnlyArray) = a.sz
+Base.getindex(::ShapeOnlyArray, ::Vararg{Any}) =
+    error("ShapeOnlyArray carries no data")
+
 function zcreate(::Type{T},storage::AbstractStore,
   dims...;
   path = "",
@@ -370,7 +377,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   
   # Create a dummy array to use with Metadata constructor
   # This allows us to leverage the multiple dispatch in Metadata constructors
-  dummy_array = Array{T,N}(undef, dims...)
+  dummy_array = ShapeOnlyArray{T,N}(dims)
   metadata = Metadata(dummy_array, chunks, v;
       compressor=compressor,
       fill_value=fill_value,

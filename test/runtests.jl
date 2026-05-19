@@ -256,6 +256,37 @@ end
   @test_throws ArgumentError resize!(a,(-1,2))
 end
 
+@testset "ShapeOnlyArray" begin
+    A = Zarr.ShapeOnlyArray{Float64,3}((3,4,5))
+    @test size(A) == (3,4,5)
+    @test eltype(A) == Float64
+    @test_throws ErrorException A[1]
+    @test_throws ErrorException A[1,1,1]
+    @test_throws ErrorException A[-1]
+    
+    B = Zarr.ShapeOnlyArray{Int8,1}((3,))
+    @test size(B) == (3,)
+    @test eltype(B) == Int8
+    for i in 0:4
+        @test_throws ErrorException B[i]
+    end
+    
+    C = Zarr.ShapeOnlyArray{Bool,2}((0x2,UInt16(4095)))
+    @test size(C) === (2,4095)
+    @test eltype(C) == Bool
+end
+
+@testset "zcreate does not allocate dense storage" begin
+    mktempdir() do dir
+        # About 1 TB if zcreate were materializing dummy storage.
+        r = @timed zcreate(UInt8, 10674, 10653, 9327; path = joinpath(dir, "big.zarr"))
+        @test r.bytes < 1e9
+        @test size(r.value) == (10674, 10653, 9327)
+        @test eltype(r.value) == UInt8
+        GC.gc()
+    end
+end
+
 @testset "concatenate" begin
     a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
     ca = cat(a, a, dims=3)

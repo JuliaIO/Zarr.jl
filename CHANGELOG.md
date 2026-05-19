@@ -3,6 +3,9 @@
 ## Unreleased
 - Fixed `getattrs`, `ConsolidatedStore` and `consolidate_metadata` for v3 stores [#270](https://github.com/JuliaIO/Zarr.jl/pull/270)
 
+- Fix CondaPkg branch in CI, use release version instead [#273](https://github.com/JuliaIO/Zarr.jl/pull/273)
+- Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
+
 ## v0.10.0 - 2026-04-24
 
 - Enable `sharding_indexed` codec for Zarr v3 [#241](https://github.com/JuliaIO/Zarr.jl/pull/241)
