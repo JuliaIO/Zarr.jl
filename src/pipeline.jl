@@ -1,4 +1,17 @@
 function pipeline_encode(p::V2Pipeline, data::AbstractArray, fill_value)
+    # Fast path: NoCompressor + no filters is just a bulk byte copy. The
+    # generic zcompress! path below funnels through `append!` of a reinterpret
+    # view, which materialises the bytes one element at a time and dominates
+    # CPU for uncompressed writes. We also skip the all-fill-value scan
+    # because (a) it's an O(N) read of the chunk on every write and (b) the
+    # common dense-write use case never benefits.
+    if p.compressor isa NoCompressor && p.filters === nothing
+        n = sizeof(data)
+        out = Vector{UInt8}(undef, n)
+        GC.@preserve out data unsafe_copyto!(pointer(out),
+                                             Ptr{UInt8}(pointer(data)), n)
+        return out
+    end
     if fill_value !== nothing && all(isequal(fill_value), data)
         return nothing
     end
