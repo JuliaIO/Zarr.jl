@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
+- Fix CondaPkg branch in CI
 
 ## v0.10.0 - 2026-04-24
 
