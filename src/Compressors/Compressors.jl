@@ -79,6 +79,22 @@ function zcompress(a, ::NoCompressor)
   _reinterpret(UInt8,a)
 end
 
+# Fast path: NoCompressor decode is a bulk byte copy. The generic
+# `zuncompress!` fallback at the top of this file ends up at
+# `copyto!(::Array{T}, ::ReinterpretArray)`, which walks element by
+# element at ~17 GB/s on Apple silicon vs. ~85 GB/s for `unsafe_copyto!`.
+# Mirror image of the encode-side bulk copy inside `zcompress!`.
+function zuncompress!(data::Array{T}, compressed::Vector{UInt8}, ::NoCompressor) where {T}
+    isbitstype(T) || return copyto!(data, _reinterpret(T, compressed))
+    n = sizeof(data)
+    n == length(compressed) || throw(DimensionMismatch(
+        "Encoded byte length $(length(compressed)) does not match output byte size $n"
+    ))
+    GC.@preserve data compressed unsafe_copyto!(Ptr{UInt8}(pointer(data)),
+                                                pointer(compressed), n)
+    return data
+end
+
 JSON.lower(::NoCompressor) = nothing
 
 compressortypes[nothing] = NoCompressor
