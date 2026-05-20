@@ -40,7 +40,7 @@ end
 function getattrs(::ZarrFormat{3}, d::ConsolidatedStore, p)
     json_key = _unconcpath(d, p, "zarr.json")
     node_meta = get(d.cons, json_key, nothing)
-    node_meta === nothing && return Dict{String, Any}()
+    isnothing(node_meta) && return Dict{String, Any}()
     return get(node_meta, "attributes", Dict{String, Any}())
 end
 function _unconcpath(d,p)
