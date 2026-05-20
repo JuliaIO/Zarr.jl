@@ -178,6 +178,17 @@ maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
 resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 
+# Returns the chunk index when the call qualifies for the single-chunk fast
+# path: a plain `Array{T,N}` matching the chunk shape, `Missing <: T` false,
+# and only one chunk touched. `size(arr) == chunks` with `length(blockr) == 1`
+# implies the slice aligns with that chunk's full range, so no extra
+# coverage check is needed.
+function singlechunk_fastpath(arr, z::ZArray{T,N}, blockr::CartesianIndices{N}) where {T,N}
+  arr isa Array{T,N} && !(Missing <: T) &&
+    size(arr) == z.metadata.chunks && length(blockr) == 1 || return nothing
+  return first(blockr)
+end
+
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
@@ -186,17 +197,11 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
   # Fast path: single-chunk full-read decodes directly into `aout`, skipping the readtask channel and scratch buffer.
-  T = eltype(z)
-  if length(blockr) == 1 && aout isa Array && !(Missing <: T) &&
-     eltype(aout) === T && size(aout) == z.metadata.chunks
-    bI = first(blockr)
-    current_chunk_offsets = map((s,i)->s*(i-1), z.metadata.chunks, Tuple(bI))
-    indranges = map(boundint, r.indices, z.metadata.chunks, current_chunk_offsets)
-    if length.(indranges) == z.metadata.chunks
-      chunk_compressed = store_readchunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
-      uncompress_raw!(aout, z, chunk_compressed)
-      return aout
-    end
+  bI = singlechunk_fastpath(aout, z, blockr)
+  if bI !== nothing
+    chunk_compressed = store_readchunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+    uncompress_raw!(aout, z, chunk_compressed)
+    return aout
   end
   # Allocate the chunk-shaped scratch buffer. Reads always either fill it
   # from a decode (which writes every element) or fall through to the
@@ -237,23 +242,17 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
   # Fast path: single-chunk full-overwrite skips the readtask/writetask channels and the scratch buffer.
-  T = eltype(z)
-  if length(blockr) == 1 && ain isa Array && !(Missing <: T) &&
-     eltype(ain) === T && size(ain) == z.metadata.chunks
-    bI = first(blockr)
-    current_chunk_offsets = map((s,i)->s*(i-1), z.metadata.chunks, Tuple(bI))
-    indranges = map(boundint, r.indices, z.metadata.chunks, current_chunk_offsets)
-    if length.(indranges) == z.metadata.chunks
-      data_encoded = compress_raw(ain, z)
-      if isnothing(data_encoded)
-        if store_isinitialized(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
-          store_deletechunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
-        end
-      else
-        store_writechunk(z.storage, data_encoded, z.path, bI, z.metadata.chunk_key_encoding)
+  bI = singlechunk_fastpath(ain, z, blockr)
+  if bI !== nothing
+    data_encoded = compress_raw(ain, z)
+    if isnothing(data_encoded)
+      if store_isinitialized(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+        store_deletechunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
       end
-      return ain
+    else
+      store_writechunk(z.storage, data_encoded, z.path, bI, z.metadata.chunk_key_encoding)
     end
+    return ain
   end
   # If `fill_value === nothing`, the legacy behaviour is that un-written
   # cells in a partial-write to a new chunk default to zero (via the
