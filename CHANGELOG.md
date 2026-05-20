@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- V2 NoCompressor writes: replace `append!` over the reinterpret view with bulk `resize!` + `copyto!` in the generic `zcompress!` fallback [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
+- V2 NoCompressor reads: add bulk-copy `zuncompress!` method dispatched on `::NoCompressor` to bypass `copyto!(::Array, ::ReinterpretArray)`'s element-by-element walk [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
+- V2 read+write chunk allocation: add `getchunkarray_undef` and skip the dead zero-fill of the chunk-shaped scratch buffer on full-overwrite paths [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
 - Fix CondaPkg branch in CI, use release version instead [#273](https://github.com/JuliaIO/Zarr.jl/pull/273)
 - Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
 
