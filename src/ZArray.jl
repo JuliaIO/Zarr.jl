@@ -181,10 +181,23 @@ resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
-  
+
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
+  # Fast path: single-chunk full-read decodes directly into `aout`, skipping the readtask channel and scratch buffer.
+  T = eltype(z)
+  if length(blockr) == 1 && aout isa Array && !(Missing <: T) &&
+     eltype(aout) === T && size(aout) == z.metadata.chunks
+    bI = first(blockr)
+    current_chunk_offsets = map((s,i)->s*(i-1), z.metadata.chunks, Tuple(bI))
+    indranges = map(boundint, r.indices, z.metadata.chunks, current_chunk_offsets)
+    if length.(indranges) == z.metadata.chunks
+      chunk_compressed = store_readchunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+      uncompress_raw!(aout, z, chunk_compressed)
+      return aout
+    end
+  end
   # Allocate the chunk-shaped scratch buffer. Reads always either fill it
   # from a decode (which writes every element) or fall through to the
   # fill-value path (which calls `fill!` itself), so we don't need to
