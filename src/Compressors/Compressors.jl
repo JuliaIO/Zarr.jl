@@ -29,13 +29,7 @@ getCompressor(::Nothing) = NoCompressor()
 zcompress!(compressed,data,c,::Nothing) = zcompress!(compressed,data,c)
 zuncompress!(data,compressed,c,::Nothing) = zuncompress!(data,compressed,c)
 
-# Fallback definition of mutating form of compress and uncompress.
-# `zcompress(data, c)` may return either a freshly-allocated `Vector{UInt8}`
-# (real compressors) or a lazy `reinterpret` view (`NoCompressor`). For the
-# view case, the old `empty!` + `append!` path walked the view element by
-# element through `_growend!` / `push!`, materialising bytes one at a time;
-# `resize!` + `copyto!` issues a single bulk copy (SIMD / memcpy under the
-# hood) instead.
+# Bulk `resize!` + `copyto!` (not `append!`): avoids elementwise growth over `NoCompressor`'s view.
 function zcompress!(compressed, data, c)
     src = zcompress(data, c)
     resize!(compressed, length(src))
@@ -79,11 +73,7 @@ function zcompress(a, ::NoCompressor)
   _reinterpret(UInt8,a)
 end
 
-# Fast path: NoCompressor decode is a bulk byte copy. The generic
-# `zuncompress!` fallback at the top of this file ends up at
-# `copyto!(::Array{T}, ::ReinterpretArray)`, which walks element by
-# element at ~17 GB/s on Apple silicon vs. ~85 GB/s for `unsafe_copyto!`.
-# Mirror image of the encode-side bulk copy inside `zcompress!`.
+# Fast path: bulk `unsafe_copyto!` avoids the elementwise `ReinterpretArray` copy of the fallback.
 function zuncompress!(data::Array{T}, compressed::Vector{UInt8}, ::NoCompressor) where {T}
     isbitstype(T) || return copyto!(data, _reinterpret(T, compressed))
     n = sizeof(data)
