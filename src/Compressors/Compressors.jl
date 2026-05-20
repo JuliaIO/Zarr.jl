@@ -29,10 +29,17 @@ getCompressor(::Nothing) = NoCompressor()
 zcompress!(compressed,data,c,::Nothing) = zcompress!(compressed,data,c)
 zuncompress!(data,compressed,c,::Nothing) = zuncompress!(data,compressed,c)
 
-# Fallback definition of mutating form of compress and uncompress
-function zcompress!(compressed, data, c) 
-    empty!(compressed)
-    append!(compressed,zcompress(data, c))
+# Fallback definition of mutating form of compress and uncompress.
+# `zcompress(data, c)` may return either a freshly-allocated `Vector{UInt8}`
+# (real compressors) or a lazy `reinterpret` view (`NoCompressor`). For the
+# view case, the old `empty!` + `append!` path walked the view element by
+# element through `_growend!` / `push!`, materialising bytes one at a time;
+# `resize!` + `copyto!` issues a single bulk copy (SIMD / memcpy under the
+# hood) instead.
+function zcompress!(compressed, data, c)
+    src = zcompress(data, c)
+    resize!(compressed, length(src))
+    copyto!(compressed, src)
 end
 zuncompress!(data, compressed, c) = copyto!(data, zuncompress(compressed, c, eltype(data)))
 
