@@ -2,11 +2,13 @@
 
 ## Unreleased
 
-- V2 reads: add `readblock!` fast path for single-chunk full-reads that bypasses the readtask channel and the chunk-shaped scratch buffer, decoding straight into the output array [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
-- V2 writes: add `writeblock!` fast path for single-chunk full-overwrites that bypasses the readtask/writetask channels and the chunk-shaped scratch buffer, encoding straight from the input array into the store [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
-- V2 NoCompressor writes: replace `append!` over the reinterpret view with bulk `resize!` + `copyto!` in the generic `zcompress!` fallback [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
-- V2 NoCompressor reads: add bulk-copy `zuncompress!` method dispatched on `::NoCompressor` to bypass `copyto!(::Array, ::ReinterpretArray)`'s element-by-element walk [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
-- V2 read+write chunk allocation: add `getchunkarray_undef` and skip the dead zero-fill of the chunk-shaped scratch buffer on full-overwrite paths [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
+- V2 performance improvements [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
+  - `readblock!` fast path for single-chunk full-reads that bypasses the readtask channel and the chunk-shaped scratch buffer, decoding straight into the output array
+  - `writeblock!` fast path for single-chunk full-overwrites that bypasses the readtask/writetask channels and the chunk-shaped scratch buffer, encoding straight from the input array into the store
+  - Zero-copy chunk write for `NoCompressor` + no filters: the single-chunk fastpath hands a `reinterpret(UInt8, ain)` view straight to the store, skipping the chunk-sized `Vector{UInt8}` allocation + memcpy
+  - `NoCompressor` writes: replace `append!` over the reinterpret view with bulk `resize!` + `copyto!` in the generic `zcompress!` fallback
+  - `NoCompressor` reads: bulk-copy `zuncompress!` method dispatched on `::NoCompressor` bypasses `copyto!(::Array, ::ReinterpretArray)`'s element-by-element walk
+  - `getchunkarray_undef` skips the dead zero-fill of the chunk-shaped scratch buffer on full-overwrite paths
 - Fix CondaPkg branch in CI, use release version instead [#273](https://github.com/JuliaIO/Zarr.jl/pull/273)
 - Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
 
