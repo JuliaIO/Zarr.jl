@@ -189,6 +189,47 @@ function singlechunk_fastpath(arr, z::ZArray{T,N}, blockr::CartesianIndices{N}) 
   return first(blockr)
 end
 
+# Single-chunk full-overwrite write. Encodes `ain` and pushes the chunk to
+# the store. Split out of `writeblock!` so we can specialize on metadata
+# type below.
+function write_singlechunk_fastpath!(z::ZArray, ain::Array, bI::CartesianIndex)
+  data_encoded = compress_raw(ain, z)
+  if data_encoded === nothing
+    if store_isinitialized(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+      store_deletechunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+    end
+  else
+    store_writechunk(z.storage, data_encoded, z.path, bI, z.metadata.chunk_key_encoding)
+  end
+  return nothing
+end
+
+# Zero-copy write for V2 with no compressor and no filters: the on-disk
+# bytes are exactly `ain`'s in-memory representation (Zarr V2 default
+# little-endian matches Julia on little-endian hosts — i.e. all currently
+# supported platforms), so pass a `reinterpret(UInt8, ain)` view straight
+# to the store and skip the chunk-sized `Vector{UInt8}` allocation +
+# memcpy that the generic pipeline performs.
+#
+# Safe to hand out a view (not an owned copy) because the singlechunk
+# fastpath guarantees `ain` is the caller's input array, not the shared
+# scratch buffer the multi-chunk path reuses across iterations.
+function write_singlechunk_fastpath!(
+  z::ZArray{T,N,<:AbstractStore,<:MetadataV2{T,N,NoCompressor,Nothing}},
+  ain::Array{T,N}, bI::CartesianIndex,
+) where {T,N}
+  fv = z.metadata.fill_value
+  if fv !== nothing && all(isequal(fv), ain)
+    if store_isinitialized(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+      store_deletechunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
+    end
+    return nothing
+  end
+  store_writechunk(z.storage, _reinterpret(UInt8, ain),
+                   z.path, bI, z.metadata.chunk_key_encoding)
+  return nothing
+end
+
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
@@ -244,14 +285,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # Fast path: single-chunk full-overwrite skips the readtask/writetask channels and the scratch buffer.
   bI = singlechunk_fastpath(ain, z, blockr)
   if bI !== nothing
-    data_encoded = compress_raw(ain, z)
-    if isnothing(data_encoded)
-      if store_isinitialized(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
-        store_deletechunk(z.storage, z.path, bI, z.metadata.chunk_key_encoding)
-      end
-    else
-      store_writechunk(z.storage, data_encoded, z.path, bI, z.metadata.chunk_key_encoding)
-    end
+    write_singlechunk_fastpath!(z, ain, bI)
     return ain
   end
   # If `fill_value === nothing`, the legacy behaviour is that un-written
