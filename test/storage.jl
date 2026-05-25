@@ -1,6 +1,6 @@
-# @testset "Zarr error" begin
-#   @test_throws ErrorException S3Store("test")
-# end
+@testset "Zarr error" begin
+  @test_throws ErrorException S3Store("test")
+end
 
 using AWSS3
 
@@ -207,6 +207,22 @@ end
     end
     test_store_common(ds)
     @test sprint(show, ds) == "S3 Object Storage"
+    
+    @testset "Pagination" begin
+      @info "Testing pagination with Minio S3 storage"
+      AWSS3.AWS.with_aws_config(cfg) do
+        AWSS3.S3.create_bucket("zarrpagination")
+      end
+      ds_page = AWSS3.AWS.with_aws_config(cfg) do
+        S3Store("zarrpagination")
+      end
+      for i in 1:1100
+        ds_page["dir$(lpad(i,4,'0'))/.zgroup"] = rand(UInt8, 10)
+      end
+      dirs = Zarr.subdirs(ds_page, "")
+      @test length(dirs) == 1100
+    end
+
     kill(s)
   else
     @warn "Skipping Minio Tests, because the package was not built correctly"
