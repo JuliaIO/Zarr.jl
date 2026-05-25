@@ -47,7 +47,7 @@ end
 
 function Zarr.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
-  s3_list_objects(s.aws, s.bucket, prefix; delimiter="/")
+  collect(s3_list_objects(s.aws, s.bucket, prefix; delimiter="/"))
 end
 function Zarr.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
