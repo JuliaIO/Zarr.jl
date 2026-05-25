@@ -47,20 +47,40 @@ end
 
 function Zarr.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
-  collect(s3_list_objects(s.aws, s.bucket, prefix; delimiter="/"))
+  s3_list_objects_delim(s.aws, s.bucket, prefix)
+end
+function s3_list_objects_delim(aws, bucket, prefix, delimiter="/")
+    params = Dict("prefix" => prefix, "delimiter" => delimiter)
+    result = Dict{String,Any}("CommonPrefixes" => [], "Contents" => [])
+    while true
+      resp = parse(AWSS3.S3.list_objects_v2(bucket, params; aws_config=aws))
+      
+      if haskey(resp, "CommonPrefixes")
+        cp_ = isa(resp["CommonPrefixes"], Vector) ? resp["CommonPrefixes"] : [resp["CommonPrefixes"]]
+        append!(result["CommonPrefixes"], cp_)
+      end
+      if haskey(resp, "Contents")
+        ct_ = isa(resp["Contents"], Vector) ? resp["Contents"] : [resp["Contents"]]
+        append!(result["Contents"], ct_)
+      end
+      if get(resp, "IsTruncated", "false") == "true"
+        params["continuation-token"] = resp["NextContinuationToken"]
+      else
+        break
+      end
+    end
+    result
 end
 function Zarr.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
-  dirs = filter(e -> haskey(e, "Prefix"), s3_resp)
-  isempty(dirs) && return String[]
-  allstrings(dirs, "Prefix")
+  !haskey(s3_resp,"CommonPrefixes") && return String[]
+  allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
 function Zarr.subkeys(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
-  files = filter(e -> haskey(e, "Key"), s3_resp)
-  isempty(files) && return String[]
-  r = allstrings(files, "Key")
-  map(i -> splitdir(i)[2], r)
+  !haskey(s3_resp,"Contents") && return String[]
+  r = allstrings(s3_resp["Contents"],"Key")
+  map(i->splitdir(i)[2],r)
 end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
