@@ -47,18 +47,20 @@ end
 
 function Zarr.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
-  AWSS3.S3.list_objects_v2(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
+  s3_list_objects(s.aws, s.bucket, prefix; delimiter="/")
 end
 function Zarr.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
-  !haskey(s3_resp,"CommonPrefixes") && return String[]
-  allstrings(s3_resp["CommonPrefixes"],"Prefix")
+  dirs = filter(e -> haskey(e, "Prefix"), s3_resp)
+  isempty(dirs) && return String[]
+  allstrings(dirs, "Prefix")
 end
 function Zarr.subkeys(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
-  !haskey(s3_resp,"Contents") && return String[]
-  r = allstrings(s3_resp["Contents"],"Key")
-  map(i->splitdir(i)[2],r)
+  files = filter(e -> haskey(e, "Key"), s3_resp)
+  isempty(files) && return String[]
+  r = allstrings(files, "Key")
+  map(i -> splitdir(i)[2], r)
 end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
