@@ -29,10 +29,11 @@ getCompressor(::Nothing) = NoCompressor()
 zcompress!(compressed,data,c,::Nothing) = zcompress!(compressed,data,c)
 zuncompress!(data,compressed,c,::Nothing) = zuncompress!(data,compressed,c)
 
-# Fallback definition of mutating form of compress and uncompress
-function zcompress!(compressed, data, c) 
-    empty!(compressed)
-    append!(compressed,zcompress(data, c))
+# Bulk `resize!` + `copyto!` (not `append!`): avoids elementwise growth over `NoCompressor`'s view.
+function zcompress!(compressed, data, c)
+    src = zcompress(data, c)
+    resize!(compressed, length(src))
+    copyto!(compressed, src)
 end
 zuncompress!(data, compressed, c) = copyto!(data, zuncompress(compressed, c, eltype(data)))
 
@@ -70,6 +71,18 @@ end
 
 function zcompress(a, ::NoCompressor)
   _reinterpret(UInt8,a)
+end
+
+# Fast path: bulk `unsafe_copyto!` avoids the elementwise `ReinterpretArray` copy of the fallback.
+function zuncompress!(data::Array{T}, compressed::Vector{UInt8}, ::NoCompressor) where {T}
+    isbitstype(T) || return copyto!(data, _reinterpret(T, compressed))
+    n = sizeof(data)
+    n == length(compressed) || throw(DimensionMismatch(
+        "Encoded byte length $(length(compressed)) does not match output byte size $n"
+    ))
+    GC.@preserve data compressed unsafe_copyto!(Ptr{UInt8}(pointer(data)),
+                                                pointer(compressed), n)
+    return data
 end
 
 JSON.lower(::NoCompressor) = nothing

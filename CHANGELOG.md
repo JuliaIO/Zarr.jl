@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- V2 performance improvements [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
+  - `readblock!` fast path for single-chunk full-reads that bypasses the readtask channel and the chunk-shaped scratch buffer, decoding straight into the output array
+  - `writeblock!` fast path for single-chunk full-overwrites that bypasses the readtask/writetask channels and the chunk-shaped scratch buffer, encoding straight from the input array into the store
+  - Zero-copy chunk write for `NoCompressor` + no filters: the single-chunk fastpath hands a `reinterpret(UInt8, ain)` view straight to the store, skipping the chunk-sized `Vector{UInt8}` allocation + memcpy
+  - `NoCompressor` writes: replace `append!` over the reinterpret view with bulk `resize!` + `copyto!` in the generic `zcompress!` fallback
+  - `NoCompressor` reads: bulk-copy `zuncompress!` method dispatched on `::NoCompressor` bypasses `copyto!(::Array, ::ReinterpretArray)`'s element-by-element walk
+  - `getchunkarray_undef` skips the dead zero-fill of the chunk-shaped scratch buffer on full-overwrite paths
 - Added manual pagination in order to go beyond the default 1k [#282](https://github.com/JuliaIO/Zarr.jl/pull/282)
 - Added `wait` to writetask in `writeblock!` [#281](https://github.com/JuliaIO/Zarr.jl/pull/281)
 - Fix getattrs for v3 [#277](https://github.com/JuliaIO/Zarr.jl/pull/277)

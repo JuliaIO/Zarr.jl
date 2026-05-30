@@ -83,6 +83,93 @@ using Dates
             GC.gc()
         end
     end
+
+    @testset "NoCompressor single-chunk zero-copy fastpath" begin
+        # The V2+NoCompressor+no-filters specialization of
+        # `write_singlechunk_fastpath!` hands a `reinterpret(UInt8, ain)` view
+        # straight to the store instead of allocating a chunk-sized
+        # `Vector{UInt8}` and memcpy'ing into it. The on-disk bytes must
+        # still match the array's bit pattern exactly.
+
+        # Dispatch: the specialized method is selected for V2 + NoCompressor + no filters.
+        mktempdir(@__DIR__) do dir
+            z3 = zcreate(Float32, 4, 4, 2; path=joinpath(dir, "disp"),
+                         chunks=(4, 4, 2), compressor=Zarr.NoCompressor())
+            ain = rand(Float32, 4, 4, 2)
+            m = which(Zarr.write_singlechunk_fastpath!, (typeof(z3), typeof(ain), CartesianIndex{3}))
+            @test occursin("MetadataV2", string(m.sig))
+            @test occursin("NoCompressor", string(m.sig))
+            GC.gc()
+        end
+
+        # Round-trip across rank 0, 1, 3, 4 and a mix of bitstypes.
+        mktempdir(@__DIR__) do dir
+            for (T, shape) in ((Float32, (8, 8, 4)),
+                               (Int64,   (5, 3)),
+                               (UInt16,  (16,)),
+                               (ComplexF32, (4, 4)),
+                               (Float64, ()))
+                name = "rt_$(T)_$(length(shape))d"
+                # Match chunks to full shape so writes hit the single-chunk fastpath.
+                chunks = shape == () ? () : shape
+                z = zcreate(T, shape...; path=joinpath(dir, name),
+                            chunks=chunks, compressor=Zarr.NoCompressor())
+                # Drive `ain` through a controlled byte pattern so round-trip
+                # failure can't be masked by zero-init.
+                ain = T === ComplexF32 ?
+                    reshape(ComplexF32[ComplexF32(i, -i) for i in 1:prod(shape == () ? (1,) : shape)],
+                            shape == () ? () : shape) :
+                    reshape(T[T(i) for i in 1:prod(shape == () ? (1,) : shape)],
+                            shape == () ? () : shape)
+                if shape == ()
+                    z[] = ain[]
+                else
+                    z[(Colon() for _ in shape)...] = ain
+                end
+                # On-disk chunk file equals reinterpret(UInt8, ain).
+                chunk_path = shape == () ? joinpath(dir, name, "0") :
+                             joinpath(dir, name, join(fill("0", length(shape)), "."))
+                @test isfile(chunk_path)
+                on_disk = read(chunk_path)
+                expected = Vector{UInt8}(undef, sizeof(ain))
+                GC.@preserve ain expected unsafe_copyto!(pointer(expected),
+                    Ptr{UInt8}(pointer(ain)), sizeof(ain))
+                @test on_disk == expected
+                # Reads round-trip via the regular Zarr.jl path.
+                @test Array(zopen(joinpath(dir, name))) == ain
+                GC.gc()
+            end
+        end
+
+        # All-fill-value chunks are elided (no on-disk file written) — same
+        # semantics as the generic V2 pipeline_encode.
+        mktempdir(@__DIR__) do dir
+            z = zcreate(Float32, 4, 4; path=joinpath(dir, "elide"),
+                        chunks=(4, 4), compressor=Zarr.NoCompressor(),
+                        fill_value=Float32(7))
+            z[:, :] = fill(Float32(7), 4, 4)
+            @test !ispath(joinpath(dir, "elide", "0.0"))
+            # Overwriting an existing chunk with all-fill removes the file.
+            z[:, :] = rand(Float32, 4, 4)
+            @test ispath(joinpath(dir, "elide", "0.0"))
+            z[:, :] = fill(Float32(7), 4, 4)
+            @test !ispath(joinpath(dir, "elide", "0.0"))
+            GC.gc()
+        end
+
+        # The store must fully consume the reinterpret view before returning:
+        # mutating `ain` after the write must not affect on-disk content.
+        mktempdir(@__DIR__) do dir
+            z = zcreate(Float32, 8, 8; path=joinpath(dir, "alias"),
+                        chunks=(8, 8), compressor=Zarr.NoCompressor())
+            ain = rand(Float32, 8, 8)
+            snapshot = copy(ain)
+            z[:, :] = ain
+            fill!(ain, Float32(NaN))                  # clobber after the write returns
+            @test zopen(joinpath(dir, "alias"))[:, :] == snapshot
+            GC.gc()
+        end
+    end
 end
 
 @testset "Groups" begin
