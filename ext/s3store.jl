@@ -47,7 +47,29 @@ end
 
 function Zarr.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
-  AWSS3.S3.list_objects_v2(s.bucket, Dict("prefix"=>prefix, "delimiter" => "/"), aws_config = s.aws)
+  s3_list_objects_delim(s.aws, s.bucket, prefix)
+end
+function s3_list_objects_delim(aws, bucket, prefix, delimiter="/")
+    params = Dict("prefix" => prefix, "delimiter" => delimiter)
+    result = Dict{String,Any}("CommonPrefixes" => [], "Contents" => [])
+    while true
+      resp = parse(AWSS3.S3.list_objects_v2(bucket, params; aws_config=aws))
+      
+      if haskey(resp, "CommonPrefixes")
+        cp_ = isa(resp["CommonPrefixes"], Vector) ? resp["CommonPrefixes"] : [resp["CommonPrefixes"]]
+        append!(result["CommonPrefixes"], cp_)
+      end
+      if haskey(resp, "Contents")
+        ct_ = isa(resp["Contents"], Vector) ? resp["Contents"] : [resp["Contents"]]
+        append!(result["Contents"], ct_)
+      end
+      if get(resp, "IsTruncated", "false") == "true"
+        params["continuation-token"] = resp["NextContinuationToken"]
+      else
+        break
+      end
+    end
+    result
 end
 function Zarr.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)

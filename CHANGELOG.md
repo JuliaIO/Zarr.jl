@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added manual pagination in order to go beyond the default 1k [#282](https://github.com/JuliaIO/Zarr.jl/pull/282)
 - Added `wait` to writetask in `writeblock!` [#281](https://github.com/JuliaIO/Zarr.jl/pull/281)
 - Fix getattrs for v3 [#277](https://github.com/JuliaIO/Zarr.jl/pull/277)
 - Add `CachingStore`, a store that caches reads from a remote store in a local cache store [#231](https://github.com/JuliaIO/Zarr.jl/pull/231)
