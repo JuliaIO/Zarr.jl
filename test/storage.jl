@@ -320,7 +320,7 @@ end
   @info "Finished testing ZipStore"
 end
 
-@testset "Caching HTTP Storage" begin
+@testset "Caching Storage" begin
   # Create source data
   s = Zarr.DictStore()
   g = zgroup(s, attrs = Dict("groupatt"=>5))
@@ -336,7 +336,7 @@ end
 
   # Create caching store with temp cache directory
   cache_dir = mktempdir()
-  caching_store = Zarr.CachingHTTPStore("http://$ip:$port", cache_dir)
+  caching_store = Zarr.CachingStore("http://$ip:$port", cache_dir)
 
   # Wrap in ConsolidatedStore (like HTTPStore requires)
   consolidated = Zarr.ConsolidatedStore(caching_store, "")
@@ -351,13 +351,13 @@ end
   @test isfile(joinpath(cache_dir, ".zmetadata"))
 
   # Test show method
-  @test sprint(show, caching_store) == "Caching HTTP Storage"
+  @test sprint(show, caching_store) == "Caching Storage"
 
   # Stop server
   close(server)
 
   # Verify we can still read from cache after server is down
-  caching_store2 = Zarr.CachingHTTPStore("http://$ip:$port", cache_dir)
+  caching_store2 = Zarr.CachingStore("http://$ip:$port", cache_dir)
   consolidated2 = Zarr.ConsolidatedStore(caching_store2, "")
   g3 = zopen(consolidated2)
   @test g3.attrs == Dict("groupatt"=>5)
