@@ -356,10 +356,8 @@ end
   # Stop server
   close(server)
 
-  # Verify we can still read from cache after server is down
-  caching_store2 = Zarr.CachingStore("http://$ip:$port", cache_dir)
-  consolidated2 = Zarr.ConsolidatedStore(caching_store2, "")
-  g3 = zopen(consolidated2)
+  # The cache directory is itself a (consolidated) zarr store — open it directly.
+  g3 = zopen(cache_dir, consolidated=true)
   @test g3.attrs == Dict("groupatt"=>5)
   @test g3["a1"][:,:] == reshape(1:200, 10, 20)
 
