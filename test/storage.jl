@@ -335,3 +335,70 @@ end
   end
   @info "Finished testing ZipStore"
 end
+
+@testset "ConsolidatedStore v3 getattrs" begin
+  # canonical: attributes under "attributes" subkey
+  store = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => Dict{String,Any}(
+          "node_type" => "group",
+          "zarr_format" => 3,
+          "attributes" => Dict{String,Any}("foo" => "bar")
+      )
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store, "") == Dict("foo" => "bar")
+
+  # zarr.json present but no "attributes" key: fallback return Dict{String,Any}()
+  node_meta = Dict{String,Any}("node_type" => "group", "zarr_format" => 3)
+  store_noattrs = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => node_meta
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_noattrs, "") == Dict{String,Any}()
+
+  # missing zarr.json key entirely: empty dict
+  store_empty = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}())
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_empty, "") == Dict{String,Any}()
+end
+@testset "Caching Storage" begin
+  # Create source data
+  s = Zarr.DictStore()
+  g = zgroup(s, attrs = Dict("groupatt"=>5))
+  a = zcreate(Int, g, "a1", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5))
+  a .= reshape(1:200, 10, 20)
+
+  # Start HTTP server
+  using Zarr.HTTP, Sockets
+  server = Sockets.listen(0)
+  ip, port = getsockname(server)
+  @async HTTP.serve(g, ip, port, server=server)
+  sleep(0.5)  # wait for server to start
+
+  # Create caching store with temp cache directory
+  cache_dir = mktempdir()
+  caching_store = Zarr.CachingStore("http://$ip:$port", cache_dir)
+
+  # Wrap in ConsolidatedStore (like HTTPStore requires)
+  consolidated = Zarr.ConsolidatedStore(caching_store, "")
+
+  # Open and read data
+  g2 = zopen(consolidated)
+  @test g2.attrs == Dict("groupatt"=>5)
+  @test g2["a1"].attrs == Dict("arratt"=>2.5)
+  @test g2["a1"][:,:] == reshape(1:200, 10, 20)
+
+  # Verify data is cached locally
+  @test isfile(joinpath(cache_dir, ".zmetadata"))
+
+  # Test show method
+  @test sprint(show, caching_store) == "Caching Storage"
+
+  # Stop server
+  close(server)
+
+  # The cache directory is itself a (consolidated) zarr store — open it directly.
+  g3 = zopen(cache_dir, consolidated=true)
+  @test g3.attrs == Dict("groupatt"=>5)
+  @test g3["a1"][:,:] == reshape(1:200, 10, 20)
+
+  # Cleanup
+  rm(cache_dir, recursive=true)
+end

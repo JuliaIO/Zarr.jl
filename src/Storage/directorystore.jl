@@ -27,11 +27,18 @@ function Base.getindex(d::DirectoryStore, i::String)
 end
 
 function Base.setindex!(d::DirectoryStore,v,i::String)
-  fname=d.folder * "/" * i
+  fname = joinpath(d.folder, i)
   folder = dirname(fname)
   isdir(folder) || mkpath(folder)
-  write(fname,v)
-  v
+  tmp = tempname(folder)
+  try
+    write(tmp, v)
+    mv(tmp, fname, force=true)  # atomic on POSIX
+    return v
+  catch
+    rm(tmp, force=true)
+    rethrow()
+  end
 end
 
 
