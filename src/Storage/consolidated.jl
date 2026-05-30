@@ -38,7 +38,10 @@ function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
 end
 
 function getattrs(::ZarrFormat{3}, d::ConsolidatedStore, p)
-    return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
+    json_key = _unconcpath(d, p, "zarr.json")
+    node_meta = get(d.cons, json_key, nothing)
+    isnothing(node_meta) && return Dict{String, Any}()
+    return get(node_meta, "attributes", Dict{String, Any}())
 end
 function _unconcpath(d,p)
   startswith(p,d.path) || error("Requested key is not in consolidated path")
@@ -77,6 +80,7 @@ function Base.delete!(d::ConsolidatedStore,i::String)
 end
 
 store_read_strategy(s::ConsolidatedStore) = store_read_strategy(s.parent)
+has_configurable_missing_chunks(s::ConsolidatedStore) = has_configurable_missing_chunks(s.parent)
 
 function consolidate_metadata(s::AbstractStore,d,prefix)
   for k in (".zattrs",".zarray",".zgroup")
