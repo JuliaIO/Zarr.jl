@@ -320,6 +320,28 @@ end
   @info "Finished testing ZipStore"
 end
 
+@testset "ConsolidatedStore v3 getattrs" begin
+  # canonical: attributes under "attributes" subkey
+  store = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => Dict{String,Any}(
+          "node_type" => "group",
+          "zarr_format" => 3,
+          "attributes" => Dict{String,Any}("foo" => "bar")
+      )
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store, "") == Dict("foo" => "bar")
+
+  # zarr.json present but no "attributes" key: fallback return Dict{String,Any}()
+  node_meta = Dict{String,Any}("node_type" => "group", "zarr_format" => 3)
+  store_noattrs = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
+      "zarr.json" => node_meta
+  ))
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_noattrs, "") == Dict{String,Any}()
+
+  # missing zarr.json key entirely: empty dict
+  store_empty = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}())
+  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_empty, "") == Dict{String,Any}()
+end
 @testset "Caching Storage" begin
   # Create source data
   s = Zarr.DictStore()
