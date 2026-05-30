@@ -160,6 +160,19 @@ _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
 getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 
+# Same as `getchunkarray` but skips the zero/fill_value-fill. Use only
+# when the caller guarantees the buffer will be fully overwritten before
+# any read (e.g. decode-into or full-chunk-write paths).
+#
+# Falls back to the standard `getchunkarray` for `>:Missing` element
+# types: the codec pipeline requires the underlying buffer to be the
+# `isbits` inner of a `SenMissArray`, not an `Array{Union{Missing,T}}`
+# directly (Blosc and friends reject non-isbits eltypes).
+function getchunkarray_undef(z::ZArray{T}) where {T}
+    Missing <: T && return getchunkarray(z)
+    return Array{T}(undef, z.metadata.chunks)
+end
+
 maybeinner(a::Array) = a
 maybeinner(a::SenMissArray) = a.x
 resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
@@ -168,13 +181,15 @@ resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # Function to read or write from a zarr array. Could be refactored
 # using type system to get rid of the `if readmode` statements.
 function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
-  
+
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
-  # Allocate array of the size of a chunks where uncompressed data can be held
-  #bufferdict = IdDict((current_task()=>getchunkarray(z),))
-  a = getchunkarray(z)
+  # Allocate the chunk-shaped scratch buffer. Reads always either fill it
+  # from a decode (which writes every element) or fall through to the
+  # fill-value path (which calls `fill!` itself), so we don't need to
+  # pre-zero it.
+  a = getchunkarray_undef(z)
   # Now loop through the chunks
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
@@ -208,9 +223,13 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
-  # Allocate array of the size of a chunks where uncompressed data can be held
-  #bufferdict = IdDict((current_task()=>getchunkarray(z),))
-  a = getchunkarray(z)
+  # If `fill_value === nothing`, the legacy behaviour is that un-written
+  # cells in a partial-write to a new chunk default to zero (via the
+  # zero-fill of `getchunkarray`). We preserve that by using the
+  # zero-filled buffer when `fill_value` is `nothing`; in the common case
+  # (writer specifies `fill_value`, full-chunk writes), `resetbuffer!`
+  # handles initialisation explicitly and we save the dead memset.
+  a = z.metadata.fill_value === nothing ? getchunkarray(z) : getchunkarray_undef(z)
   # Now loop through the chunks
   readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
