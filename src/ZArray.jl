@@ -257,6 +257,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   finally
     close(readchannel)
     close(writechannel)
+    wait(writetask)
   end
   ain
 end
