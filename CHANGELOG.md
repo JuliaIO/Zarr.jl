@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Bump HTTP compat to 2 [#284](https://github.com/JuliaIO/Zarr.jl/pull/284)
 - V2 performance improvements [#280](https://github.com/JuliaIO/Zarr.jl/pull/280)
   - `readblock!` fast path for single-chunk full-reads that bypasses the readtask channel and the chunk-shaped scratch buffer, decoding straight into the output array
   - `writeblock!` fast path for single-chunk full-overwrites that bypasses the readtask/writetask channels and the chunk-shaped scratch buffer, encoding straight from the input array into the store
