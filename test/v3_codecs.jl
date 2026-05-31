@@ -219,6 +219,85 @@ end
     @test decoded == data
 end
 
+@testset "numcodecs. prefix stripping in getCodec" begin
+
+    # Parsing a codec dict with "numcodecs.blosc" must succeed and produce a BloscV3Codec.
+    @testset "numcodecs.blosc parses as BloscV3Codec" begin
+        codec = Zarr.Codecs.V3Codecs.getCodec(Dict(
+            "name" => "numcodecs.blosc",
+            "configuration" => Dict("cname" => "lz4", "clevel" => 5,
+                "shuffle" => "noshuffle", "blocksize" => 0, "typesize" => 4)
+        ))
+        @test codec isa Zarr.Codecs.V3Codecs.BloscV3Codec
+        @test codec.cname == "lz4"
+    end
+
+    # Other numcodecs-prefixed names should also be stripped correctly.
+    @testset "numcodecs.zstd parses as ZstdV3Codec" begin
+        codec = Zarr.Codecs.V3Codecs.getCodec(Dict(
+            "name" => "numcodecs.zstd",
+            "configuration" => Dict("level" => 3)
+        ))
+        @test codec isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+    end
+
+    @testset "numcodecs.gzip parses as GzipV3Codec" begin
+        codec = Zarr.Codecs.V3Codecs.getCodec(Dict(
+            "name" => "numcodecs.gzip",
+            "configuration" => Dict("level" => 6)
+        ))
+        @test codec isa Zarr.Codecs.V3Codecs.GzipV3Codec
+    end
+
+    # A full Metadata parse of a zarr.json using "numcodecs.blosc" must not throw.
+    @testset "Metadata parse with numcodecs.blosc does not throw" begin
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"numcodecs.blosc","configuration":{"cname":"lz4","clevel":5,
+                    "shuffle":"noshuffle","blocksize":0,"typesize":2}}
+            ]}"""
+        md = @test_nowarn Zarr.Metadata(json_str, false)
+        pipeline = Zarr.get_pipeline(md)
+        @test pipeline.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.BloscV3Codec
+    end
+
+    # Round-trip: Python-style zarr.json → Metadata → encode/decode data correctly.
+    @testset "numcodecs.blosc round-trip encode/decode" begin
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"numcodecs.blosc","configuration":{"cname":"lz4","clevel":5,
+                    "shuffle":"noshuffle","blocksize":0,"typesize":2}}
+            ]}"""
+        md = Zarr.Metadata(json_str, false)
+        store = Zarr.DictStore()
+        z = Zarr.ZArray(md, store, "", Dict(), true)
+        data = Int16[1, 2, 3, 4]
+        z[:] = data
+        @test z[:] == data
+    end
+
+    # is_zarray must return true (not warn/skip) for a store whose zarr.json uses numcodecs.blosc.
+    @testset "is_zarray does not skip numcodecs.blosc arrays" begin
+        store = Zarr.DictStore()
+        json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int16",
+            "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+            "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+            "fill_value":0,"codecs":[
+                {"name":"bytes","configuration":{"endian":"little"}},
+                {"name":"numcodecs.blosc","configuration":{"cname":"lz4","clevel":5,
+                    "shuffle":"noshuffle","blocksize":0,"typesize":2}}
+            ]}"""
+        store["zarr.json"] = Vector{UInt8}(json_str)
+        @test_nowarn @test Zarr.is_zarray(Zarr.ZarrFormat(Val(3)), store, "") == true
+    end
+end
+
 @testset "BytesCodec endian validation" begin
     # Valid endian values are accepted
     @test Zarr.Codecs.V3Codecs.BytesCodec(:little).endian == :little
