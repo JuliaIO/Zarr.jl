@@ -290,6 +290,7 @@ registry. `ctx` is an optional context value (e.g. a NamedTuple with `shape` and
 """
 function getCodec(d::Dict, ctx=nothing)
     codec_name = d["name"]
+    codec_name = replace(codec_name, r"^numcodecs\." => "")
     haskey(codec_parsers, codec_name) ||
         throw(ArgumentError("Zarr.jl does not support the $codec_name codec"))
     entry = codec_parsers[codec_name]
