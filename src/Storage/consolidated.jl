@@ -26,7 +26,14 @@ function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
 end
 
 function ConsolidatedStore(s::AbstractStore, p)
-  ConsolidatedStore(s, p, ZarrFormat(s, p))
+  d = s[p, ".zmetadata"]
+  if !isnothing(d)
+    return ConsolidatedStore(s, p, ZarrFormat(Val(2)))
+  end
+  z = s[p, "zarr.json"]
+  if !isnothing(z)
+    return ConsolidatedStore(s, p, ZarrFormat(Val(3)))
+  end
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
