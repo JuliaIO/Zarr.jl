@@ -60,7 +60,7 @@ function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
   lru = 0,
   fill_as_missing=false)
 
-  consolidated && isinitialized(s, ".zmetadata") && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  consolidated && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
   if lru !== 0
     error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
   end
