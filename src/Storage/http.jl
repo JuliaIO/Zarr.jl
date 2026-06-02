@@ -13,7 +13,7 @@ python package. In case you experience performance issues, one can try to use
 struct HTTPStore <: AbstractStore
     url::String
     allowed_codes::Set{Int}
-    HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
+    HTTPStore(url, allowed_codes = Set((404, 403,))) = new(url, allowed_codes)
 end
 
 function Base.getindex(s::HTTPStore, k::String)
@@ -40,7 +40,7 @@ end
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 function storefromstring(::Type{<:HTTPStore}, s,_)
-    http_store = HTTPStore(s, Set((404, 403)))
+    http_store = HTTPStore(s)
     try
         cs = ConsolidatedStore(http_store, "")
         return cs, ""
