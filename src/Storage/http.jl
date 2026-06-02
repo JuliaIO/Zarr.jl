@@ -40,11 +40,10 @@ end
 push!(storageregexlist,r"^https://"=>HTTPStore)
 push!(storageregexlist,r"^http://"=>HTTPStore)
 function storefromstring(::Type{<:HTTPStore}, s,_)
-    http_store = HTTPStore(s)
+    http_store = HTTPStore(s, Set((404, 403)))
     try
-        if http_store["", ".zmetadata"] !== nothing
-            http_store = ConsolidatedStore(http_store,"")
-        end
+        cs = ConsolidatedStore(http_store, "")
+        return cs, ""
     catch err
         @warn exception=err "Additional metadata was not available for HTTPStore."
     end
