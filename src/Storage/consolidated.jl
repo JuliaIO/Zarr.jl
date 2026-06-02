@@ -8,32 +8,47 @@ struct ConsolidatedStore{P} <: AbstractStore
   path::String
   cons::Dict{String,Any}
 end
+
+"""
+  _detect_zarr_format(s, p)
+
+Detects the zarr format version used in the store `s` at path `p` by checking for the presence of `.zmetadata` (for v2) and `zarr.json` (for v3). Returns a `ZarrFormat` instance indicating the detected version, or `nothing` if neither format is detected.
+"""
+function _detect_zarr_format(s, p)
+  has_v3 = !isnothing(s[p, "zarr.json"])
+  has_v2 = !isnothing(s[p, ".zmetadata"])
+  if has_v3
+    return ZarrFormat(Val(3))
+  elseif has_v2
+    return ZarrFormat(Val(2))
+  else
+    return nothing
+  end
+end
+
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
   d = s[p, ".zmetadata"]
-  if d === nothing
-    throw(ArgumentError("Could not find consolidated metadata for store $s"))
-  end
-  meta = JSON.parse(String(copy(d)); dicttype = Dict{String,Any})
-  ConsolidatedStore(s, p, meta["metadata"])
+  isnothing(d) && throw(ArgumentError("Missing .zmetadata at $p"))
+  root = JSON.parse(String(copy(d)); dicttype=Dict{String,Any})
+  metadata = get(root, "metadata", nothing)
+  isnothing(metadata) && throw(ArgumentError("Invalid .zmetadata: missing metadata field"))
+  return ConsolidatedStore(s, p, metadata)
 end
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
   z = s[p, "zarr.json"]
-  isnothing(z) && throw(ArgumentError("Could not find zarr.json for store $s"))
-  root = JSON.parse(String(copy(z)); dicttype = Dict{String,Any})
+  isnothing(z) && throw(ArgumentError("Missing zarr.json at $p"))
+  root = JSON.parse(String(copy(z)); dicttype=Dict{String,Any})
   cm = get(root, "consolidated_metadata", nothing)
-  isnothing(cm) && throw(ArgumentError("Could not find consolidated metadata for store $s"))
-  ConsolidatedStore(s, p, cm["metadata"])
+  isnothing(cm) && throw(ArgumentError("Missing consolidated_metadata in zarr.json"))
+  metadata = get(cm, "metadata", nothing)
+  isnothing(metadata) && throw(ArgumentError("Missing metadata in consolidated_metadata"))
+  return ConsolidatedStore(s, p, metadata)
 end
 
 function ConsolidatedStore(s::AbstractStore, p)
-  d = s[p, ".zmetadata"]
-  if !isnothing(d)
-    return ConsolidatedStore(s, p, ZarrFormat(Val(2)))
-  end
-  z = s[p, "zarr.json"]
-  if !isnothing(z)
-    return ConsolidatedStore(s, p, ZarrFormat(Val(3)))
-  end
+  z_fmt = _detect_zarr_format(s, p)
+  isnothing(z_fmt) && throw(ArgumentError("Could not find consolidated metadata for store $s at path $p"))
+  return ConsolidatedStore(s, p, z_fmt)
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
