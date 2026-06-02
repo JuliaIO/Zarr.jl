@@ -15,15 +15,9 @@ end
 Detects the zarr format version used in the store `s` at path `p` by checking for the presence of `.zmetadata` (for v2) and `zarr.json` (for v3). Returns a `ZarrFormat` instance indicating the detected version, or `nothing` if neither format is detected.
 """
 function _detect_zarr_format(s, p)
-  has_v3 = !isnothing(s[p, "zarr.json"])
-  has_v2 = !isnothing(s[p, ".zmetadata"])
-  if has_v3
-    return ZarrFormat(Val(3))
-  elseif has_v2
-    return ZarrFormat(Val(2))
-  else
-    return nothing
-  end
+  !isnothing(s[p, "zarr.json"]) && return ZarrFormat(Val(3))
+  !isnothing(s[p, ".zmetadata"]) && return ZarrFormat(Val(2))
+  return nothing
 end
 
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
