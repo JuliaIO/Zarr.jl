@@ -13,7 +13,7 @@ python package. In case you experience performance issues, one can try to use
 struct HTTPStore <: AbstractStore
     url::String
     allowed_codes::Set{Int}
-    HTTPStore(url, allowed_codes = Set((404, 403,))) = new(url, allowed_codes)
+    HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
 end
 
 function Base.getindex(s::HTTPStore, k::String)
@@ -83,7 +83,7 @@ function zarr_req_handler(s::AbstractStore, p, notfound = 404)
     r = s[p,k]
     try
       if r ===  nothing
-        return HTTP.Response(notfound, "Error: Key $k not found")
+        return HTTP.Response(404, "Error: Key $k not found") # always 404 for missing keys
       else
         return HTTP.Response(200, r)
       end
