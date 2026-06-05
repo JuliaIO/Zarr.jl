@@ -9,17 +9,6 @@ struct ConsolidatedStore{P} <: AbstractStore
   cons::Dict{String,Any}
 end
 
-"""
-  _detect_zarr_format(s, p)
-
-Detects the zarr format version used in the store `s` at path `p` by checking for the presence of `.zmetadata` (for v2) and `zarr.json` (for v3). Returns a `ZarrFormat` instance indicating the detected version, or `nothing` if neither format is detected.
-"""
-function _detect_zarr_format(s, p)
-  !isnothing(s[p, "zarr.json"]) && return ZarrFormat(Val(3))
-  !isnothing(s[p, ".zmetadata"]) && return ZarrFormat(Val(2))
-  return nothing
-end
-
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
   d = s[p, ".zmetadata"]
   isnothing(d) && throw(ArgumentError("Missing .zmetadata at $p"))
@@ -40,7 +29,7 @@ function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
 end
 
 function ConsolidatedStore(s::AbstractStore, p)
-  z_fmt = _detect_zarr_format(s, p)
+  z_fmt = ZarrFormat(s, p)
   isnothing(z_fmt) && throw(ArgumentError("Could not find consolidated metadata for store $s at path $p"))
   return ConsolidatedStore(s, p, z_fmt)
 end
