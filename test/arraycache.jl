@@ -32,7 +32,7 @@
 
     # Now test if we can open the cache store from an existing path
     g3 = zarrcache(base_array, cache_dir)
-    @test g3["a1"].cache.a.storage.folder == joinpath(cache_dir,"a1")
+    @test g3["a1"].cache.a.storage.folder == cache_dir * "/a1"
     @test g3["a1"][1:5,6:10] == a[1:5,6:10]
     @test g_disk["a1"][1:5,6:10] == a[1:5,6:10]
     # Stop server
