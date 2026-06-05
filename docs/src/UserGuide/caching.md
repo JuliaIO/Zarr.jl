@@ -2,7 +2,7 @@
 
 ## In-memory caching
 
-Quite often one has to deal with remote data that is very slow to access. Some applications like interactive vizualisation
+Quite often one has to deal with remote data that is very slow to access. Some applications like interactive visualisation
 depend on repeated access to slow data sources, where local caching can drastically improve the performance. 
 For local in-memory lru caching we can use the `cache` method provided by DiskArrays.jl. Let's first create a large array to cache:
 
