@@ -23,6 +23,7 @@ include("Filters/Filters.jl")
 include("ZArray.jl")
 include("pipeline.jl")
 include("ZGroup.jl")
+include("caching.jl")
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
   zinfo, DirectoryStore, S3Store, GCStore, zgroup
