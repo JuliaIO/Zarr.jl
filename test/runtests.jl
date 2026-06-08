@@ -466,4 +466,6 @@ include("v3_codecs.jl")
 
 include("http_sharded.jl")
 
+    include("arraycache.jl")
+
 end  # @testset "Zarr"

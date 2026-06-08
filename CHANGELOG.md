@@ -17,6 +17,7 @@
 - Add `CachingStore`, a store that caches reads from a remote store in a local cache store [#231](https://github.com/JuliaIO/Zarr.jl/pull/231)
 - Fix CondaPkg branch in CI, use release version instead [#273](https://github.com/JuliaIO/Zarr.jl/pull/273)
 - Fix creation of on-disk arrays that do not fit in memory [#269](https://github.com/JuliaIO/Zarr.jl/pull/269)
+- Add another consistent caching approach through `zarrcache` [#299](https://github.com/JuliaIO/Zarr.jl/pull/293)
 
 ## v0.10.0 - 2026-04-24
 

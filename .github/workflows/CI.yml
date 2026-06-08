@@ -25,17 +25,17 @@ jobs:
           - 'default'
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
           show-versioninfo: true
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
       - name: Generate Julia and Python v3 fixtures
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         env:
           PYTHON:
         with:
@@ -50,7 +50,7 @@ jobs:
         env:
           PYTHON:
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
