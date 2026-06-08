@@ -17,7 +17,7 @@
 
 
     g2 = zarrcache(base_array, cache_dir)
-    @test g2["a1"].cache.a.storage.folder == joinpath(cache_dir,"a1")
+    @test g2["a1"].cache.a.storage.folder == Zarr.normalize_path(joinpath(cache_dir, "a1"))
     # We also open the cache array on disk directly
     g_disk = zopen(cache_dir)
     @test g_disk.attrs == Dict("groupatt"=>5)
