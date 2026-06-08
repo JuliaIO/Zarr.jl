@@ -30,7 +30,7 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
           show-versioninfo: true
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
