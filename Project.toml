@@ -1,7 +1,7 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
-authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 version = "0.10.0"
+authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
 Blosc = "a74b3585-a348-5f62-a45c-50e91977d574"
@@ -30,14 +30,14 @@ ZarrAWSS3Ext = "AWSS3"
 [compat]
 AWSS3 = "0.10, 0.11"
 Blosc = "0.5, 0.6, 0.7"
+CRC32c = "1.10, 1.11"
 ChunkCodecCore = "1"
 ChunkCodecLibZlib = "1"
 ChunkCodecLibZstd = "1"
-CRC32c = "1.10, 1.11"
 DataStructures = "0.17, 0.18, 0.19"
 DateTimes64 = "1"
 DiskArrays = "0.4.21"
-HTTP = "^1.3"
+HTTP = "^1.3, 2"
 JSON = "0.21, 1"
 OffsetArrays = "0.11, 1.0"
 OpenSSL = "1"
