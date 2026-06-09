@@ -6,7 +6,7 @@ data will be read from the dictionary instead.
 struct ConsolidatedStore{P} <: AbstractStore
   parent::P
   path::String
-  cons::Dict{String,Any}
+  cons::AbstractDict{String,Any}
 end
 
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
@@ -20,12 +20,12 @@ end
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
   z = s[p, "zarr.json"]
   isnothing(z) && throw(ArgumentError("Missing zarr.json at $p"))
-  root = JSON.parse(String(copy(z)); dicttype=Dict{String,Any})
+  root = JSON.parse(String(copy(z)); dicttype=OrderedDict{String,Any})
   cm = get(root, "consolidated_metadata", nothing)
   isnothing(cm) && throw(ArgumentError("Missing consolidated_metadata in zarr.json"))
   metadata = get(cm, "metadata", nothing)
   isnothing(metadata) && throw(ArgumentError("Missing metadata in consolidated_metadata"))
-  return ConsolidatedStore(s, p, metadata)
+  return ConsolidatedStore(s, p, cm)
 end
 
 function ConsolidatedStore(s::AbstractStore, p)
@@ -48,7 +48,7 @@ function getmetadata(::ZarrFormat{2}, d::ConsolidatedStore, p, fill_as_missing)
     return Metadata(d.cons[_unconcpath(d, p, ".zarray")], fill_as_missing)
 end
 function getmetadata(::ZarrFormat{3}, d::ConsolidatedStore, p, fill_as_missing)
-    return Metadata(d.cons[_unconcpath(d, p)], fill_as_missing)
+    return Metadata(d.cons["metadata"][_unconcpath(d, p)], fill_as_missing)
 end
 function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
   return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
@@ -56,7 +56,7 @@ end
 
 function getattrs(::ZarrFormat{3}, d::ConsolidatedStore, p)
     json_key = _unconcpath(d, p, "zarr.json")
-    node_meta = get(d.cons, json_key, nothing)
+    node_meta = get(d.cons["metadata"], json_key, nothing)
     isnothing(node_meta) && return Dict{String, Any}()
     return get(node_meta, "attributes", Dict{String, Any}())
 end
@@ -69,16 +69,16 @@ is_zarray(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath
 is_zgroup(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, ".zgroup"))
 function is_zarray(::ZarrFormat{3}, d::ConsolidatedStore, p)
   key = _unconcpath(d, p)
-  if haskey(d.cons, key)
-    return get(d.cons[key], "node_type", "") == "array"
+  if haskey(d.cons["metadata"], key)
+    return get(d.cons["metadata"][key], "node_type", "") == "array"
   else
     return false
   end
 end
 function is_zgroup(::ZarrFormat{3}, d::ConsolidatedStore, p)
   key = _unconcpath(d, p, "zarr.json")
-  if haskey(d.cons, key)
-    return get(d.cons[key], "node_type", "") == "group"
+  if haskey(d.cons["metadata"], key)
+    return get(d.cons["metadata"][key], "node_type", "") == "group"
   else
     return is_zgroup(ZarrFormat(Val(3)), d.parent, p)
   end
@@ -157,7 +157,7 @@ function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
   else
     root = Dict{String,Any}()
   end
-  root["consolidated_metadata"] = Dict{String,Any}(
+  root["consolidated_metadata"] = OrderedDict{String,Any}(
     "kind" => "inline",
     "must_understand" => false,
     "metadata" => d,
