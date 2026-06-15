@@ -56,15 +56,15 @@ function create_and_fill(store; name, dtype=nothing, shape=nothing, chunks=nothi
     if serializer !== nothing
         kwargs = merge(kwargs, (; serializer=serializer))
     end
-    if compressors !== nothing
-        kwargs = merge(kwargs, (; compressors=compressors))
-    end
     if filters !== nothing
         kwargs = merge(kwargs, (; filters=filters))
     end
     if shards !== nothing
         kwargs = merge(kwargs, (; shards=shards))
     end
+
+    # Always pass compressors explicitly: nothing → empty list (disables default compressor)
+    kwargs = merge(kwargs, (; compressors=compressors !== nothing ? compressors : pylist([])))
 
     # create the array
     a = zarr.create_array(store; kwargs...)
@@ -477,5 +477,49 @@ create_and_fill(store;
 # Group with spaces in the name
 g = zarr.create_group(store, path="my group with spaces")
 g.attrs["description"] = "A group with spaces in the name"
+
+# Consolidated group and a subgroup with its own consolidated metadata
+consolidated = zarr.create_group(store, path="consolidated")
+consolidated.attrs["answer"] = 42
+
+# consolidated/1d.chunked.i2
+create_and_fill(store;
+    name="consolidated/1d.chunked.i2",
+    dtype="int16",
+    shape=(4,),
+    chunks=(2,),
+    serializer=codecs.BytesCodec(endian="little"),
+    compressors=nothing,
+    data=np.array([1,2,3,4], dtype="i2"),
+)
+
+# consolidated/2d.contiguous.i2
+create_and_fill(store;
+    name="consolidated/2d.contiguous.i2",
+    dtype="int16",
+    shape=(2,2),
+    chunks=(2,2),
+    serializer=codecs.BytesCodec(endian="little"),
+    compressors=nothing,
+    data=np.array([[1,2],[3,4]] |> pylist, dtype="i2"),
+)
+
+# consolidated/nested group
+nested = zarr.create_group(store, path="consolidated/nested")
+nested.attrs.__setitem__("description", "A nested group")
+
+# consolidated/nested/1d.i2
+create_and_fill(store;
+    name="consolidated/nested/1d.i2",
+    dtype="int16",
+    shape=(4,),
+    chunks=(4,),
+    serializer=codecs.BytesCodec(endian="little"),
+    compressors=nothing,
+    data=np.array([10,20,30,40], dtype="i2"),
+)
+
+# Consolidate metadata for the consolidated group
+zarr.consolidate_metadata(store, path="consolidated")
 
 @info "Zarr v3 fixtures generated at: $path_v3"

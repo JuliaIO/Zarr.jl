@@ -6,15 +6,32 @@ data will be read from the dictionary instead.
 struct ConsolidatedStore{P} <: AbstractStore
   parent::P
   path::String
-  cons::Dict{String,Any}
+  cons::AbstractDict{String,Any}
 end
-function ConsolidatedStore(s::AbstractStore, p)
+
+function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
   d = s[p, ".zmetadata"]
-  if d === nothing
-    throw(ArgumentError("Could not find consolidated metadata for store $s"))
-  end
-  meta = JSON.parse(String(copy(d)); dicttype = Dict{String,Any})
-  ConsolidatedStore(s, p, meta["metadata"])
+  isnothing(d) && throw(ArgumentError("Missing .zmetadata at $p"))
+  root = JSON.parse(String(copy(d)); dicttype=Dict{String,Any})
+  metadata = get(root, "metadata", nothing)
+  isnothing(metadata) && throw(ArgumentError("Invalid .zmetadata: missing metadata field"))
+  return ConsolidatedStore(s, p, metadata)
+end
+function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
+  z = s[p, "zarr.json"]
+  isnothing(z) && throw(ArgumentError("Missing zarr.json at $p"))
+  root = JSON.parse(String(copy(z)); dicttype=OrderedDict{String,Any})
+  cm = get(root, "consolidated_metadata", nothing)
+  isnothing(cm) && throw(ArgumentError("Missing consolidated_metadata in zarr.json"))
+  metadata = get(cm, "metadata", nothing)
+  isnothing(metadata) && throw(ArgumentError("Missing metadata in consolidated_metadata"))
+  return ConsolidatedStore(s, p, cm)
+end
+
+function ConsolidatedStore(s::AbstractStore, p)
+  z_fmt = ZarrFormat(s, p)
+  isnothing(z_fmt) && throw(ArgumentError("Could not find consolidated metadata for store $s at path $p"))
+  return ConsolidatedStore(s, p, z_fmt)
 end
 
 function Base.show(io::IO,d::ConsolidatedStore)
@@ -31,7 +48,7 @@ function getmetadata(::ZarrFormat{2}, d::ConsolidatedStore, p, fill_as_missing)
     return Metadata(d.cons[_unconcpath(d, p, ".zarray")], fill_as_missing)
 end
 function getmetadata(::ZarrFormat{3}, d::ConsolidatedStore, p, fill_as_missing)
-    return Metadata(d.cons[_unconcpath(d, p, "zarr.json")], fill_as_missing)
+    return Metadata(d.cons["metadata"][_unconcpath(d, p)], fill_as_missing)
 end
 function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
   return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
@@ -50,8 +67,23 @@ end
 _unconcpath(d,p,s) = _concatpath(_unconcpath(d,p),s)
 is_zarray(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, ".zarray"))
 is_zgroup(::ZarrFormat{2}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, ".zgroup"))
-is_zarray(::ZarrFormat{3}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, "zarr.json")) && get(d.cons[_unconcpath(d, p, "zarr.json")], "node_type", "") == "array"
-is_zgroup(::ZarrFormat{3}, d::ConsolidatedStore, p) = haskey(d.cons, _unconcpath(d, p, "zarr.json")) && get(d.cons[_unconcpath(d, p, "zarr.json")], "node_type", "") == "group"
+function is_zarray(::ZarrFormat{3}, d::ConsolidatedStore, p)
+  key = _unconcpath(d, p)
+  if haskey(d.cons["metadata"], key)
+    return get(d.cons["metadata"][key], "node_type", "") == "array"
+  else
+    return false
+  end
+end
+function is_zgroup(::ZarrFormat{3}, d::ConsolidatedStore, p)
+  key = _unconcpath(d, p, "zarr.json")
+  if haskey(d.cons["metadata"], key)
+    return get(d.cons["metadata"][key], "node_type", "") == "group"
+  else
+    return is_zgroup(ZarrFormat(Val(3)), d.parent, p)
+  end
+end
+
 ZarrFormat(d::ConsolidatedStore, path) = ZarrFormat(d.parent, path)  # detect format from parent, not cons
 check_consolidated_write(i::String) = split(i,'/')[end] in (".zattrs",".zarray",".zgroup") &&
     throw(ArgumentError("Can not modify consolidated metadata, please re-open the dataset with `consolidated=false`"))
@@ -60,14 +92,17 @@ _pdict(d::ConsolidatedStore,p) = filter(((k,v),)->startswith(k,p),d.cons)
 function subdirs(d::ConsolidatedStore,p) 
   p2 = _unconcpath(d,p)
   d2 = _pdict(d,p2)
-  _searchsubdict(d2, p2, (sp, lp) -> length(sp) > lp + 1)
+  zv = ZarrFormat(d.parent, p)
+  if zv isa ZarrFormat{3}
+    _searchsubdict(d2, p2, (sp, lp) -> length(sp) == lp + 1)
+  else
+    _searchsubdict(d2, p2, (sp, lp) -> length(sp) > lp + 1)
+  end
 end
 
 function subkeys(d::ConsolidatedStore,p) 
   subkeys(d.parent,p)
 end
-
-
 
 function Base.setindex!(d::ConsolidatedStore,v,i::String)
   #Here we check that we don't overwrite consolidated information
@@ -94,12 +129,61 @@ function consolidate_metadata(s::AbstractStore,d,prefix)
   end
   d
 end
+function consolidate_metadata_v3(s::AbstractStore, d, prefix, root_prefix)
+  zj = s[prefix, "zarr.json"]
+  if zj !== nothing
+    parsed = JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})
+    rel_key = lstrip(replace(prefix, root_prefix => "", count=1), '/')
+    rel_key = rstrip(rel_key, '/')
+    if !isempty(rel_key)
+      if get(parsed, "node_type", "") == "group"
+        if !haskey(parsed, "consolidated_metadata")
+          parsed["consolidated_metadata"] = _empty_consolidated_metadata()
+        end
+      elseif get(parsed, "node_type", "") == "array"
+        if !haskey(parsed, "storage_transformers")
+          parsed["storage_transformers"] = []
+        end
+      end
+      d[rel_key] = parsed
+    end
+  end
+  foreach(subdirs(s, prefix)) do subname
+    consolidate_metadata_v3(s, d, string(prefix, "/", subname), root_prefix)
+  end
+  d
+end
+function _empty_consolidated_metadata()
+  OrderedDict{String,Any}(
+    "kind" => "inline",
+    "must_understand" => false,
+    "metadata" => Dict{String,Any}(),
+  )
+end
 function consolidate_metadata(s::AbstractStore,p)
   d = consolidate_metadata(s,Dict{String,Any}(),p)
   buf = IOBuffer()
   JSON.print(buf,Dict("metadata"=>d,"zarr_consolidated_format"=>1),4)
   s[p,".zmetadata"] = take!(buf)
   ConsolidatedStore(s,p,d)
+end
+function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
+  d = consolidate_metadata_v3(s, Dict{String,Any}(), p, p)
+  zj = s[p, "zarr.json"]
+  if !isnothing(zj)
+    root = JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})
+  else
+    root = Dict{String,Any}()
+  end
+  root["consolidated_metadata"] = OrderedDict{String,Any}(
+    "kind" => "inline",
+    "must_understand" => false,
+    "metadata" => d,
+  )
+  buf = IOBuffer()
+  JSON.print(buf, root, 4)
+  s[p, "zarr.json"] = take!(buf)
+  ConsolidatedStore(s, p, d)
 end
 
 consolidate_metadata(s) = consolidate_metadata(zopen(s,"w"))

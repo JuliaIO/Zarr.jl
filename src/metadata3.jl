@@ -262,7 +262,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         fill_as_missing = false,
         dimension_separator::Char = '/'
     ) where {T, N}
-    @warn("Zarr v3 support is experimental")
+    @debug "Zarr v3 support is experimental"
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     if fill_value === nothing
         fill_value = zero(T)
