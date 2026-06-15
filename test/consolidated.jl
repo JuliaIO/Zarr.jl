@@ -254,27 +254,80 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     @test Zarr.getattrs(Zarr.ZarrFormat(3), cs3, "") == Dict{String,Any}()
   end
 
-  @testset "v3 is_zarray / is_zgroup" begin
-    # cons for v3 stores cm dict; cm["metadata"] holds node entries keyed by path
-    # is_zgroup(V3, cs, p) computes key = _unconcpath(d, p, "zarr.json")
-    # is_zarray(V3, cs, p) computes key = _unconcpath(d, p)  (no suffix)
+  @testset "v3 is_zarray / is_zgroup on ConsolidatedStore (unit)" begin
+    # cons is the consolidated_metadata dict: has "metadata" subkey
+    # is_zarray: looks up _unconcpath(d, p) directly in cons["metadata"]
+    # is_zgroup: looks up _unconcpath(d, p, "zarr.json") in cons["metadata"]
     meta = Dict{String,Any}(
-      "group1/zarr.json" => Dict{String,Any}("node_type" => "group"),
-      "group1/arr" => Dict{String,Any}("node_type" => "array"),
+      "group1/zarr.json" => Dict{String,Any}("node_type" => "group", "zarr_format" => 3),
+      "group1/arr"       => Dict{String,Any}("node_type" => "array", "zarr_format" => 3),
     )
-    cons = Dict{String,Any}("metadata" => meta)
+    cons = Dict{String,Any}(
+      "kind" => "inline",
+      "must_understand" => false,
+      "metadata" => meta,
+    )
     s = Zarr.DictStore()
     s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
     cs = Zarr.ConsolidatedStore(s, "", cons)
     V3 = Zarr.ZarrFormat(3)
-    # is_zarray looks up _unconcpath(d, p) — no suffix — so p="group1/arr"
+    # is_zarray: key = "group1/arr" (no suffix)
     @test  Zarr.is_zarray(V3, cs, "group1/arr")
-    @test !Zarr.is_zarray(V3, cs, "group1")      # group1 has no bare key in metadata
+    @test !Zarr.is_zarray(V3, cs, "group1")        # no bare "group1" key
     @test !Zarr.is_zarray(V3, cs, "nonexistent")
-    # is_zgroup looks up _unconcpath(d, p, "zarr.json") so p="group1"
+    # is_zgroup: key = "group1/zarr.json" (_unconcpath + "zarr.json")
     @test  Zarr.is_zgroup(V3, cs, "group1")
-    @test !Zarr.is_zgroup(V3, cs, "group1/arr")  # arr is not a group
+    @test !Zarr.is_zgroup(V3, cs, "group1/arr")    # "group1/arr/zarr.json" not in metadata
     @test !Zarr.is_zgroup(V3, cs, "nonexistent")
+  end
+
+  @testset "is_zgroup v3 fallback to parent" begin
+    # exercises the else branch: is_zgroup(ZarrFormat(Val(3)), d.parent, p)
+    # when the key is not in cons["metadata"], falls back to parent store
+    meta = Dict{String,Any}()  # empty — nothing in consolidated metadata
+    cons = Dict{String,Any}("kind" => "inline", "must_understand" => false, "metadata" => meta)
+    s = Zarr.DictStore()
+    # write a real group zarr.json to the parent so the fallback succeeds
+    s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
+    cs = Zarr.ConsolidatedStore(s, "", cons)
+    V3 = Zarr.ZarrFormat(3)
+    # not in cons["metadata"], falls back to parent — parent has zarr.json with node_type=group
+    @test Zarr.is_zgroup(V3, cs, "")
+    # not in cons["metadata"], fallback finds nothing → false
+    @test !Zarr.is_zgroup(V3, cs, "nonexistent")
+  end
+
+  @testset "consolidate_metadata v3 adds consolidated_metadata when missing" begin
+    tmp = mktempdir()
+    try
+        ds = Zarr.DirectoryStore(tmp)
+        g = zgroup(ds, "", Zarr.ZarrFormat(3))
+        zcreate(Int16, g, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
+
+        zj_path = joinpath(tmp, "zarr.json")
+        # ensure valid zarr.json WITHOUT consolidated_metadata
+        root = JSON.parsefile(zj_path; dicttype=Dict{String,Any})
+        @test !haskey(root, "consolidated_metadata")
+
+        open(zj_path, "w") do io
+            JSON.print(io, root, 4)
+        end
+        # act
+        cs = Zarr.consolidate_metadata(ds, "", Zarr.ZarrFormat(3))
+        # type check
+        @test cs isa Zarr.ConsolidatedStore
+        # reload file
+        updated = JSON.parsefile(zj_path; dicttype=Dict{String,Any})
+        # core contract checks
+        @test haskey(updated, "consolidated_metadata")
+        cm = updated["consolidated_metadata"]
+        @test haskey(cm, "metadata")
+        @test cm["kind"] == "inline"
+        @test cm["must_understand"] == false
+
+      finally
+          rm(tmp, recursive=true)
+      end
   end
 
   @testset "write protection" begin
