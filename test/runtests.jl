@@ -468,6 +468,6 @@ include("http_sharded.jl")
 
 include("consolidated.jl")
 
-    include("arraycache.jl")
+include("arraycache.jl")
 
 end  # @testset "Zarr"
