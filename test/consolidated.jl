@@ -55,6 +55,61 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     end
   end
 
+  @testset "consolidate_metadata_v3 array branch" begin
+    # exercises the storage_transformers injection for arrays
+    path_jl = joinpath(path_v3_julia, "consolidated")
+    cs = zopen(path_jl, consolidated=true)
+    # arrays must have storage_transformers in the consolidated metadata
+    meta = cs.storage.cons["metadata"]
+    @test haskey(meta["1d.chunked.i2"], "storage_transformers")
+    @test meta["1d.chunked.i2"]["storage_transformers"] == []
+  end
+
+  @testset "ConsolidatedStore v3 constructor error paths" begin
+    s = Zarr.DictStore()
+    # missing zarr.json
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    # zarr.json present but no consolidated_metadata
+    s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    # consolidated_metadata present but no metadata subkey
+    s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"consolidated_metadata":{"kind":"inline"}}""")
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+  end
+
+  @testset "getmetadata v3 on ConsolidatedStore" begin
+    path_jl = joinpath(path_v3_julia, "consolidated")
+    cs = zopen(path_jl, consolidated=true)
+    # getmetadata v3 reads from cons["metadata"][key]
+    meta = Zarr.getmetadata(Zarr.ZarrFormat(3), cs.storage, "1d.chunked.i2", false)
+    @test eltype(meta) == Int16
+    @test meta.chunks == (2,)
+  end
+
+  @testset "is_zarray / is_zgroup v3 on ConsolidatedStore" begin
+    path_jl = joinpath(path_v3_julia, "consolidated")
+    cs = zopen(path_jl, consolidated=true)
+    s = cs.storage  # the ConsolidatedStore
+    V3 = Zarr.ZarrFormat(3)
+    @test  Zarr.is_zarray(V3, s, "1d.chunked.i2")
+    @test !Zarr.is_zarray(V3, s, "nested")
+    @test !Zarr.is_zarray(V3, s, "nonexistent")
+    @test  Zarr.is_zgroup(V3, s, "nested")
+    @test !Zarr.is_zgroup(V3, s, "1d.chunked.i2")
+    @test !Zarr.is_zgroup(V3, s, "nonexistent")
+  end
+
+  @testset "subdirs v3 on ConsolidatedStore" begin
+    ds = Zarr.DirectoryStore(joinpath(path_v3_julia, "consolidated"))
+    cs = Zarr.ConsolidatedStore(ds, "", Zarr.ZarrFormat(3))
+    # v3 subdirs returns only immediate children (length(sp) == lp + 1)
+    dirs = Zarr.subdirs(cs, "")
+    @test sort(dirs) == ["1d.chunked.i2", "2d.contiguous.i2", "nested"]
+    # nested's immediate child
+    nested_dirs = Zarr.subdirs(cs, "nested")
+    @test nested_dirs == ["1d.i2"]
+  end
+
   @testset "v2 consolidate_metadata writes .zmetadata" begin
     s = Zarr.DictStore()
     g = zgroup(s, attrs=Dict("root" => 1))

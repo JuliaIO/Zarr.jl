@@ -47,8 +47,17 @@ end
 function getmetadata(::ZarrFormat{2}, d::ConsolidatedStore, p, fill_as_missing)
     return Metadata(d.cons[_unconcpath(d, p, ".zarray")], fill_as_missing)
 end
+function _to_dict(x::AbstractDict)
+    Dict{String,Any}(k => _to_dict(v) for (k, v) in x)
+end
+function _to_dict(x::AbstractVector)
+    [_to_dict(v) for v in x]
+end
+_to_dict(x) = x
+
 function getmetadata(::ZarrFormat{3}, d::ConsolidatedStore, p, fill_as_missing)
-    return Metadata(d.cons["metadata"][_unconcpath(d, p)], fill_as_missing)
+    node = d.cons["metadata"][_unconcpath(d, p)]
+    return Metadata(_to_dict(node), fill_as_missing, ZarrFormat(3))
 end
 function getattrs(::ZarrFormat{2}, d::ConsolidatedStore, p)
   return get(d.cons, _unconcpath(d, p, ".zattrs"), Dict{String,Any}())
@@ -87,8 +96,12 @@ end
 ZarrFormat(d::ConsolidatedStore, path) = ZarrFormat(d.parent, path)  # detect format from parent, not cons
 check_consolidated_write(i::String) = split(i,'/')[end] in (".zattrs",".zarray",".zgroup") &&
     throw(ArgumentError("Can not modify consolidated metadata, please re-open the dataset with `consolidated=false`"))
-
-_pdict(d::ConsolidatedStore,p) = filter(((k,v),)->startswith(k,p),d.cons)
+function _pdict(d::ConsolidatedStore, p)
+  zv = ZarrFormat(d.parent, d.path)
+  flat = zv isa ZarrFormat{3} ? d.cons["metadata"] : d.cons
+  p2 = (isempty(p) || endswith(p, '/')) ? p : p * '/'
+  filter(((k,v),) -> startswith(k, p2), flat)
+end
 function subdirs(d::ConsolidatedStore,p) 
   p2 = _unconcpath(d,p)
   d2 = _pdict(d,p2)
