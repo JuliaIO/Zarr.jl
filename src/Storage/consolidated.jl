@@ -169,6 +169,13 @@ function consolidate_metadata(s::AbstractStore,p)
 end
 function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
   d = consolidate_metadata_v3(s, Dict{String,Any}(), p, p)
+  # sort: by depth first, then case-folded name, like in https://github.com/zarr-developers/zarr-python/pull/3288
+  sorted_d = OrderedDict{String,Any}(
+    sort(
+      collect(d),
+      by = kv -> (count(c -> c == '/', kv[1]), Unicode.normalize(kv[1], compose=true, compat=true, stable=true, casefold=true))
+    )
+  )
   zj = s[p, "zarr.json"]
   if !isnothing(zj)
     root = JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})
@@ -178,12 +185,12 @@ function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
   root["consolidated_metadata"] = OrderedDict{String,Any}(
     "kind" => "inline",
     "must_understand" => false,
-    "metadata" => d,
+    "metadata" => sorted_d,
   )
   buf = IOBuffer()
   JSON.print(buf, root, 4)
   s[p, "zarr.json"] = take!(buf)
-  ConsolidatedStore(s, p, d)
+  ConsolidatedStore(s, p, sorted_d)
 end
 
 consolidate_metadata(s) = consolidate_metadata(zopen(s,"w"))
