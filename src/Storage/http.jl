@@ -16,6 +16,8 @@ struct HTTPStore <: AbstractStore
     HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
 end
 
+Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
+
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
 if r.status >= 300
@@ -83,7 +85,7 @@ function zarr_req_handler(s::AbstractStore, p, notfound = 404)
     r = s[p,k]
     try
       if r ===  nothing
-        return HTTP.Response(notfound, "Error: Key $k not found") # always 404 for missing keys
+        return HTTP.Response(notfound, "Error: Key $k not found")
       else
         return HTTP.Response(200, r)
       end
