@@ -104,8 +104,6 @@ function subkeys(d::ConsolidatedStore,p)
   subkeys(d.parent,p)
 end
 
-
-
 function Base.setindex!(d::ConsolidatedStore,v,i::String)
   #Here we check that we don't overwrite consolidated information
   check_consolidated_write(i)
@@ -131,16 +129,36 @@ function consolidate_metadata(s::AbstractStore,d,prefix)
   end
   d
 end
-function consolidate_metadata_v3(s::AbstractStore, d, prefix)
+function consolidate_metadata_v3(s::AbstractStore, d, prefix, root_prefix)
   zj = s[prefix, "zarr.json"]
   if zj !== nothing
-    d[_concatpath(prefix, "zarr.json")] =
-      JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})
+    parsed = JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})
+    rel_key = lstrip(replace(prefix, root_prefix => "", count=1), '/')
+    rel_key = rstrip(rel_key, '/')
+    if !isempty(rel_key)
+      if get(parsed, "node_type", "") == "group"
+        if !haskey(parsed, "consolidated_metadata")
+          parsed["consolidated_metadata"] = _empty_consolidated_metadata()
+        end
+      elseif get(parsed, "node_type", "") == "array"
+        if !haskey(parsed, "storage_transformers")
+          parsed["storage_transformers"] = []
+        end
+      end
+      d[rel_key] = parsed
+    end
   end
   foreach(subdirs(s, prefix)) do subname
-    consolidate_metadata_v3(s, d, string(prefix, subname, "/"))
+    consolidate_metadata_v3(s, d, string(prefix, "/", subname), root_prefix)
   end
   d
+end
+function _empty_consolidated_metadata()
+  OrderedDict{String,Any}(
+    "kind" => "inline",
+    "must_understand" => false,
+    "metadata" => Dict{String,Any}(),
+  )
 end
 function consolidate_metadata(s::AbstractStore,p)
   d = consolidate_metadata(s,Dict{String,Any}(),p)
@@ -150,7 +168,7 @@ function consolidate_metadata(s::AbstractStore,p)
   ConsolidatedStore(s,p,d)
 end
 function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
-  d = consolidate_metadata_v3(s, Dict{String,Any}(), p)
+  d = consolidate_metadata_v3(s, Dict{String,Any}(), p, p)
   zj = s[p, "zarr.json"]
   if !isnothing(zj)
     root = JSON.parse(String(copy(zj)); dicttype = Dict{String,Any})

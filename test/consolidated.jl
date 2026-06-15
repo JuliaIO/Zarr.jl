@@ -12,18 +12,47 @@ pyzarr = pyimport("zarr")
 pystorage = pyimport("zarr.storage")
 pyjson = pyimport("json")
 
-path_v3 = joinpath(@__DIR__, "v3_python", "data.zarr")
+path_v3_python = joinpath(@__DIR__, "v3_python", "data.zarr")
+path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
 
 @testset "Consolidated Metadata" begin
 
-  @testset "round-trip Python vs Julia" begin
-    store_py = pystorage.LocalStore(path_v3)
-    group_py = pyzarr.open_consolidated(store_py, path="consolidated")
-    python_str = pyconvert(String, pyjson.dumps(group_py.metadata.consolidated_metadata.to_dict()))
-    python_parsed = JSON.parse(python_str)
-    consolidated_group = zopen(path_v3, path="consolidated", consolidated=true)
-    julia_parsed = JSON.parse(JSON.json(consolidated_group.storage.cons))
-    @test julia_parsed == python_parsed
+  @testset "round-trip Julia vs Python consolidated metadata" begin
+    path_py = joinpath(path_v3_python, "consolidated")
+    path_jl = joinpath(path_v3_julia, "consolidated")
+
+    # Read Python-written store with Python
+    store_py_from_py = pystorage.LocalStore(path_py)
+    group_py_from_py = pyzarr.open_consolidated(store_py_from_py)
+    py_from_py_str = pyconvert(String, pyjson.dumps(group_py_from_py.metadata.consolidated_metadata.to_dict()))
+    py_from_py = JSON.parse(py_from_py_str)
+
+    # Read Julia-written store with Python
+    store_py_from_jl = pystorage.LocalStore(path_jl)
+    group_py_from_jl = pyzarr.open_consolidated(store_py_from_jl)
+    py_from_jl_str = pyconvert(String, pyjson.dumps(group_py_from_jl.metadata.consolidated_metadata.to_dict()))
+    py_from_jl = JSON.parse(py_from_jl_str)
+
+    # Read Python-written store with Julia
+    consolidated_group_jl_from_py = zopen(path_py, consolidated=true)
+    jl_from_py = JSON.parse(JSON.json(consolidated_group_jl_from_py.storage.cons))
+
+    # Read Julia-written store with Julia
+    consolidated_group_jl_from_jl = zopen(path_jl, consolidated=true)
+    jl_from_jl = JSON.parse(JSON.json(consolidated_group_jl_from_jl.storage.cons))
+
+    @testset "Python-written, read by Python vs Julia" begin
+      @test py_from_py == jl_from_py
+    end
+    @testset "Julia-written, read by Python vs Julia" begin
+      @test py_from_jl == jl_from_jl
+    end
+    @testset "Python-written vs Julia-written, read by Python" begin
+      @test py_from_py == py_from_jl
+    end
+    @testset "Python-written vs Julia-written, read by Julia" begin
+      @test jl_from_py == jl_from_jl
+    end
   end
 
   @testset "v2 consolidate_metadata writes .zmetadata" begin

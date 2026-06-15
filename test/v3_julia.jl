@@ -283,4 +283,29 @@ create_sharded(store, "1d.chunked.compressed.sharded.noindexcrc.i2",
 group_path = "my group with spaces"
 zgroup(g, group_path; attrs=Dict("description" => "A group with spaces in the name"))
 
+# Consolidated group - mirrors Python fixture exactly
+cg = zgroup(g, "consolidated", attrs=Dict("answer" => 42))
+# consolidated/1d.chunked.i2
+create_and_fill(store, "consolidated/1d.chunked.i2", Int16[1, 2, 3, 4];
+    shape=(4,),
+    chunks=(2,),
+    compressor=Zarr.NoCompressor(),
+)
+# consolidated/2d.contiguous.i2
+create_and_fill(store, "consolidated/2d.contiguous.i2", Int16[1 2; 3 4];
+    shape=(2, 2),
+    chunks=(2, 2),
+    compressor=Zarr.NoCompressor(),
+)
+# consolidated/nested group
+nested = zgroup(cg, "nested", attrs=Dict("description" => "A nested group"))
+# consolidated/nested/1d.i2
+create_and_fill(store, "consolidated/nested/1d.i2", Int16[10, 20, 30, 40];
+    shape=(4,),
+    chunks=(4,),
+    compressor=Zarr.NoCompressor(),
+)
+# Consolidate metadata for the consolidated group only
+Zarr.consolidate_metadata(store, "consolidated", Zarr.ZarrFormat(3))
+
 @info "Zarr v3 fixtures generated at: $path_v3"
