@@ -498,3 +498,27 @@ end
   # Cleanup
   rm(cache_dir, recursive=true)
 end
+
+# A store identical to DictStore but advertising the ConcurrentRead strategy
+# (as S3Store does), to exercise the concurrent write path.
+struct ConcurrentDictStore <: Zarr.AbstractStore
+  inner::Zarr.DictStore
+end
+ConcurrentDictStore() = ConcurrentDictStore(Zarr.DictStore())
+Base.getindex(s::ConcurrentDictStore, i::AbstractString) = s.inner[i]
+Base.setindex!(s::ConcurrentDictStore, v, i::AbstractString) = (s.inner[i] = v)
+Base.delete!(s::ConcurrentDictStore, i::AbstractString) = delete!(s.inner, i)
+Zarr.subdirs(s::ConcurrentDictStore, p) = Zarr.subdirs(s.inner, p)
+Zarr.subkeys(s::ConcurrentDictStore, p) = Zarr.subkeys(s.inner, p)
+Zarr.storagesize(s::ConcurrentDictStore, p) = Zarr.storagesize(s.inner, p)
+Zarr.store_read_strategy(::ConcurrentDictStore) = Zarr.ConcurrentRead(4)
+
+@testset "ConcurrentRead stores persist chunk writes" begin
+  data = reshape(collect(Float32, 1:12), 3, 4)
+  store = ConcurrentDictStore()
+  g = zgroup(store)
+  a = zcreate(Float32, g, "x", 3, 4; chunks=(3, 4))
+  a[:, :] = data
+  @test haskey(store.inner.a, "x/0.0")   # chunk data actually written, not just metadata
+  @test a[:, :] == data                  # round-trips through the store
+end

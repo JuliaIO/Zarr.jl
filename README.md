@@ -40,8 +40,8 @@ z2[1:10,1:10]
 [docs-dev-img]: https://img.shields.io/badge/documentation-in%20development-orange?style=round-square
 [docs-dev-url]: https://juliaio.github.io/Zarr.jl/dev/
 
-[codecov-img]: https://codecov.io/gh/meggart/Zarr.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/meggart/Zarr.jl
+[codecov-img]: https://codecov.io/gh/JuliaIO/Zarr.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/JuliaIO/Zarr.jl
 
 [ci-img]: https://github.com/JuliaIO/Zarr.jl/actions/workflows/CI.yml/badge.svg?style=round-square
 [ci-url]: https://github.com/JuliaIO/Zarr.jl/actions/workflows/CI.yml

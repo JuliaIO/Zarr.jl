@@ -278,7 +278,7 @@ function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e
         store_deletechunk(s, p, ii, e)
         end
       else
-      store_writechunk(s, data, p, ii, e) = data
+      store_writechunk(s, data, p, ii, e)
       end
       nothing
   end
