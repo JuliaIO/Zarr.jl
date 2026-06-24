@@ -34,6 +34,15 @@ function typestr3(s::AbstractString, codecs=nothing)
     return typemap3[s]
 end
 
+typestr3(d::AbstractDict) = parse_datatype3(d)
+function parse_datatype3(d)
+    name = get(d, "name", nothing)
+    if name isa String
+        return typestr3(name)
+    end
+    throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
+end
+
 function check_keys(d::AbstractDict, keys)
     for key in keys
         if !haskey(d, key)
@@ -209,7 +218,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     shape = Int.(d["shape"])
 
     # Datatype
-    data_type = d["data_type"]::String
+    data_type = d["data_type"]
 
     # Chunk Grid
     chunk_grid = d["chunk_grid"]
