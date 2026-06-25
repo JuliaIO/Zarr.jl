@@ -8,10 +8,12 @@ foreach([Bool, Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16
 end
 typemap3["complex64"] = ComplexF32
 typemap3["complex128"] = ComplexF64
+typemap3["string"] = String
 
 function typestr3(t::Type)
     return lowercase(string(t))
 end
+typestr3(t::Type{<:MaxLengthString}) = "fixed_length_utf32"
 # TODO: Check raw types
 function typestr3(::Type{NTuple{N,UInt8}}) where {N}
     return "r$(N*8)"
@@ -30,6 +32,7 @@ function typestr3(s::AbstractString, codecs=nothing)
                 throw(ArgumentError("$s must describe a raw type with bit size that is a multiple of 8 bits"))
             end
         end
+
     end
     return typemap3[s]
 end
@@ -37,8 +40,9 @@ end
 typestr3(d::AbstractDict) = parse_datatype3(d)
 function parse_datatype3(d)
     name = get(d, "name", nothing)
-    if name isa String
-        return typestr3(name)
+
+    if name == "fixed_length_utf32"
+        return MaxLengthString{d["configuration"]["length_bytes"], UInt32}
     end
     throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
 end
@@ -162,6 +166,8 @@ function get_order(md::MetadataV3)
 end
 get_order(md::MetadataV2) = md.order
 
+_sizeof(x) = sizeof(x)
+_sizeof(x::Type{String}) = 1
 
 
 function Metadata3(d::AbstractDict, fill_as_missing)
@@ -238,7 +244,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     T = typestr3(data_type)
     N = length(shape)
 
-    codec_ctx = (shape = shape, elsize = sizeof(Base.nonmissingtype(T)))
+    codec_ctx = (shape = shape, elsize = _sizeof(Base.nonmissingtype(T)))
     pipeline = Codecs.V3Codecs.getCodec(d["codecs"], codec_ctx)
 
     fv = fill_value_decoding(d["fill_value"], T)::T
@@ -253,7 +259,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         node_type,
         NTuple{N, Int}(shape) |> reverse,
         NTuple{N, Int}(chunks) |> reverse,
-        data_type,
+        typestr3(T),
         pipeline,
         fv,
         chunk_key_encoding,
