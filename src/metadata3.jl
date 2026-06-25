@@ -9,10 +9,12 @@ end
 typemap3["complex64"] = ComplexF32
 typemap3["complex128"] = ComplexF64
 typemap3["string"] = String
+typemap3["string"] = String
 
 function typestr3(t::Type)
     return lowercase(string(t))
 end
+typestr3(t::Type{<:MaxLengthString}) = "fixed_length_utf32"
 typestr3(t::Type{<:MaxLengthString}) = "fixed_length_utf32"
 # TODO: Check raw types
 function typestr3(::Type{NTuple{N,UInt8}}) where {N}
@@ -42,7 +44,7 @@ function parse_datatype3(d)
     name = get(d, "name", nothing)
 
     if name == "fixed_length_utf32"
-        return MaxLengthString{d["configuration"]["length_bytes"] ÷ 4, UInt32}
+        return MaxLengthString{d["configuration"]["length_bytes"], UInt32}
     end
     throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
 end
