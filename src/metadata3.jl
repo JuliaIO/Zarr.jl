@@ -42,7 +42,7 @@ function parse_datatype3(d)
     name = get(d, "name", nothing)
 
     if name == "fixed_length_utf32"
-        return MaxLengthString{d["configuration"]["length_bytes"], UInt32}
+        return MaxLengthString{d["configuration"]["length_bytes"] ÷ 4, UInt32}
     end
     throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
 end
