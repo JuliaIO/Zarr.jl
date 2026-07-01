@@ -60,6 +60,7 @@ jobs:
           files: lcov.info
           flag-name: run-${{ join(matrix.*, '-') }}
           parallel: true
+          fail-on-error: ${{ matrix.os != 'macOS-latest' }}
   finish:
     needs: test
     if: ${{ always() }}
