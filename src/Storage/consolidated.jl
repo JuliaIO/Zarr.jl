@@ -30,7 +30,6 @@ end
 
 function ConsolidatedStore(s::AbstractStore, p)
   z_fmt = ZarrFormat(s, p)
-  isnothing(z_fmt) && throw(ArgumentError("Could not find consolidated metadata for store $s at path $p"))
   return ConsolidatedStore(s, p, z_fmt)
 end
 
