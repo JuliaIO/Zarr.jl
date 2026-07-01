@@ -3,7 +3,7 @@ A store that wraps any other AbstractStore but has access to the consolidated me
 stored in the .zmetadata key. Whenever data attributes or metadata are accessed, the
 data will be read from the dictionary instead.
 """
-struct ConsolidatedStore{P,D} <: AbstractStore
+struct ConsolidatedStore{P,D<:AbstractDict{String,Any}} <: AbstractStore
   parent::P
   path::String
   cons::D
