@@ -10,7 +10,7 @@ makedocs(
     doctest = true,
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "github.com/JuliaIO/Zarr.jl",
-        devbranch = "master",
+        devbranch = "main",
         devurl = "dev",
     ),
     source = "src",
@@ -27,6 +27,6 @@ DocumenterVitepress.deploydocs(
     repo = "github.com/JuliaIO/Zarr.jl.git",
     target = joinpath(@__DIR__, "build"),
     branch = "gh-pages",
-    devbranch = "master",
+    devbranch = "main",
     push_preview = true,
 )
