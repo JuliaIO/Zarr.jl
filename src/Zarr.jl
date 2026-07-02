@@ -2,6 +2,8 @@ module Zarr
 
 import JSON
 import Blosc
+import Unicode
+using OrderedCollections: OrderedDict
 
 struct ZarrFormat{V}
   version::Val{V}

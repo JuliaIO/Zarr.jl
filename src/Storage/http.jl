@@ -16,6 +16,8 @@ struct HTTPStore <: AbstractStore
     HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
 end
 
+Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
+
 function Base.getindex(s::HTTPStore, k::String)
 r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
 if r.status >= 300
@@ -42,9 +44,8 @@ push!(storageregexlist,r"^http://"=>HTTPStore)
 function storefromstring(::Type{<:HTTPStore}, s,_)
     http_store = HTTPStore(s)
     try
-        if http_store["", ".zmetadata"] !== nothing
-            http_store = ConsolidatedStore(http_store,"")
-        end
+        cs = ConsolidatedStore(http_store, "")
+        return cs, ""
     catch err
         @warn exception=err "Additional metadata was not available for HTTPStore."
     end

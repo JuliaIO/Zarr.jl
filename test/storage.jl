@@ -289,26 +289,122 @@ end
   @test g2["a1"].attrs == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
   
-  # The following test doesn't pass, but maybe should?
-  # test_read_only_store_common() do ds
-  #   # This converts a DictStore to a read only ConsolidatedStore HTTPStore
-  #   @async HTTP.serve(ds,"",ip,port,server=server)
-  #   Zarr.ConsolidatedStore(Zarr.HTTPStore("http://$ip:$port"),"")
-  # end
   close(server)
+
+  @testset "HTTPStore construction and show" begin
+    hs = Zarr.HTTPStore("http://example.com")
+    @test hs.url == "http://example.com"
+    @test hs.allowed_codes == Set((404,))
+    @test sprint(show, hs) == "HTTP Storage"
+    # ConsolidatedStore wrapping an HTTPStore should compose correctly
+    cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
+    @test sprint(show, cs) == "Consolidated HTTP Storage"
+  end
+
+  @testset "missing_chunk_return_code! on HTTPStore" begin
+    hs = Zarr.HTTPStore("http://example.com")
+    @test 403 ∉ hs.allowed_codes
+    Zarr.missing_chunk_return_code!(hs, 403)
+    @test 403 ∈ hs.allowed_codes
+    # Vector form
+    Zarr.missing_chunk_return_code!(hs, [410, 451])
+    @test 410 ∈ hs.allowed_codes
+    @test 451 ∈ hs.allowed_codes
+  end
+
+  @testset "missing_chunk_return_code! delegates through ConsolidatedStore" begin
+    hs = Zarr.HTTPStore("http://example.com")
+    # Build a ConsolidatedStore wrapping the HTTPStore directly
+    cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
+    Zarr.missing_chunk_return_code!(cs, 403)
+    @test 403 ∈ hs.allowed_codes
+  end
+
+  @testset "store_read_strategy and has_configurable_missing_chunks" begin
+    hs = Zarr.HTTPStore("http://example.com")
+    @test Zarr.store_read_strategy(hs) isa Zarr.ConcurrentRead
+    @test Zarr.has_configurable_missing_chunks(hs) == true
+    # ConsolidatedStore delegates both to parent
+    cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
+    @test Zarr.store_read_strategy(cs) isa Zarr.ConcurrentRead
+    @test Zarr.has_configurable_missing_chunks(cs) == true
+  end
+
+  @testset "storefromstring HTTP/HTTPS regex" begin
+    # storefromstring dispatches on the regex list; just check the type comes back right.
+    # We use a live local server so the ConsolidatedStore path can succeed.
+    s2 = Zarr.DictStore()
+    g2 = zgroup(s2)
+    server2 = Sockets.listen(0)
+    ip2, port2 = getsockname(server2)
+    @async HTTP.serve(g2, ip2, port2, server=server2)
+    sleep(0.1)
+    store, path = Zarr.storefromstring("http://$ip2:$port2")
+    @test store isa Zarr.ConsolidatedStore
+    @test store.parent isa Zarr.HTTPStore
+    @test path == ""
+    close(server2)
+  end
+
+  @testset "storefromstring falls back gracefully without consolidated metadata" begin
+    # A server with no .zmetadata should warn and return a bare HTTPStore
+    server3 = Sockets.listen(0)
+    ip3, port3 = getsockname(server3)
+    # Serve only 404s
+    @async HTTP.serve(req -> HTTP.Response(404, "not found"), ip3, port3, server=server3)
+    sleep(0.1)
+    store, path = @test_warn r"Additional metadata was not available" Zarr.storefromstring("http://$ip3:$port3")
+    @test store isa Zarr.HTTPStore
+    @test path == ""
+    close(server3)
+  end
+
+  @testset "zarr_req_handler default 404 path" begin
+    s3 = Zarr.DictStore()
+    g3 = zgroup(s3, attrs = Dict("x" => 1))
+    a3 = zcreate(Int, g3, "b", 4, 4, chunks=(2,2))
+    a3 .= reshape(1:16, 4, 4)
+    server4 = Sockets.listen(0)
+    ip4, port4 = getsockname(server4)
+    # zarr_req_handler with default notfound=404
+    @async HTTP.serve(Zarr.zarr_req_handler(s3, g3.path), ip4, port4, server=server4)
+    sleep(0.1)
+    g4 = zopen("http://$ip4:$port4")
+    @test g4.attrs == Dict("x" => 1)
+    @test g4["b"][:,:] == reshape(1:16, 4, 4)
+    # A missing key should return nothing (404 is in the default allowed set)
+    hs4 = Zarr.HTTPStore("http://$ip4:$port4")
+    @test hs4["nonexistent/chunk"] === nothing
+    close(server4)
+  end
+
+  @testset "HTTPStore getindex error on unexpected status" begin
+    # Server that always returns 500
+    server5 = Sockets.listen(0)
+    ip5, port5 = getsockname(server5)
+    @async HTTP.serve(req -> HTTP.Response(500, "internal error"), ip5, port5, server=server5)
+    sleep(0.1)
+    hs5 = Zarr.HTTPStore("http://$ip5:$port5")
+    @test_throws ErrorException hs5["any/key"]
+    close(server5)
+  end
+
   #Test server that returns 403 instead of 404 for missing chunks
-  server = Sockets.listen(0)
-  ip,port = getsockname(server)
-  s = Zarr.DictStore()
-  g = zgroup(s, attrs = Dict("groupatt"=>5))
-  a = zcreate(Int,g,"a",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5),fill_value = -1)
-  @async HTTP.serve(Zarr.zarr_req_handler(s,g.path,403),ip,port,server=server)
-  httpstore = Zarr.ConsolidatedStore(Zarr.HTTPStore("http://$ip:$port"), "")
-  @test_throws "Received error code 403" zopen(httpstore)
-  Zarr.missing_chunk_return_code!(httpstore, 403)
-  g3 = zopen(httpstore)
-  @test all(==(-1),g3["a"][:,:])
-  close(server)
+  @testset "403 missing chunk workaround" begin
+    server6 = Sockets.listen(0)
+    ip6, port6 = getsockname(server6)
+    s6 = Zarr.DictStore()
+    g6 = zgroup(s6, attrs = Dict("groupatt"=>5))
+    a6 = zcreate(Int, g6, "a", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5), fill_value=-1)
+    @async HTTP.serve(Zarr.zarr_req_handler(s6, g6.path, 403), ip6, port6, server=server6)
+    sleep(0.1)
+    httpstore6 = Zarr.HTTPStore("http://$ip6:$port6")
+    @test_throws "Received error code 403" Zarr.ConsolidatedStore(httpstore6, "")
+    Zarr.missing_chunk_return_code!(httpstore6, 403)
+    g7 = zopen(Zarr.ConsolidatedStore(httpstore6, ""))
+    @test all(==(-1), g7["a"][:,:])
+    close(server6)
+  end
 end
 
 @testset "Zip Storage" begin
