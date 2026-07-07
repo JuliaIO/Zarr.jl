@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added support for the Zarr V3 `fixed_length_utf32` string data type [#305](https://github.com/JuliaIO/Zarr.jl/pull/305)
 - Added consolidated_metadata reading and writing support for v3 [#287](https://github.com/JuliaIO/Zarr.jl/pull/287)
 - Fix the `ConcurrentRead` write path silently dropping chunk writes; affected stores such as `S3Store` wrote array metadata but no data chunks [#297](https://github.com/JuliaIO/Zarr.jl/pull/297)
 - Added reading compat for stores produced in python with `numcodecs.blosc` [#286](https://github.com/JuliaIO/Zarr.jl/pull/286)
