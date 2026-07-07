@@ -39,7 +39,7 @@ features:
     details: <a class="highlight-link">Zarr.jl</a> integrates seamlessly with <a class="highlight-link">YAXArrays.jl</a>, providing the storage layer for labeled, multi-dimensional data.
     link: https://juliadatacubes.github.io/YAXArrays.jl/stable/
 
-  - title: Sharding - Coming Soon!
-    details: Support for the Zarr v3 sharding codec is on the roadmap, enabling efficient storage of many chunks within a single file.
+  - title: Sharding
+    details: Support for the Zarr v3 sharding codec, enabling efficient storage of many chunks within a single file.
 ---
 ```
