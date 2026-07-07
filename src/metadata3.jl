@@ -13,7 +13,14 @@ typemap3["string"] = String
 function typestr3(t::Type)
     return lowercase(string(t))
 end
-typestr3(t::Type{<:MaxLengthString}) = "fixed_length_utf32"
+
+function typestr3(::Type{MaxLengthString{N, UInt32}}) where {N}
+    return Dict{String, Any}(
+        "name" => "fixed_length_utf32",
+        "configuration" => Dict{String, Any}("length_bytes" => N * 4)
+        )
+end
+
 # TODO: Check raw types
 function typestr3(::Type{NTuple{N,UInt8}}) where {N}
     return "r$(N*8)"
@@ -42,7 +49,7 @@ function parse_datatype3(d)
     name = get(d, "name", nothing)
 
     if name == "fixed_length_utf32"
-        return MaxLengthString{d["configuration"]["length_bytes"], UInt32}
+        return MaxLengthString{d["configuration"]["length_bytes"] ÷ 4, UInt32}
     end
     throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
 end
@@ -61,7 +68,7 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding} <: A
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
-    dtype::String  # data_type in v3
+    dtype::Union{String, Dict{String, Any}}  # data_type in v3
     pipeline::P
     fill_value::Union{T, Nothing}
     chunk_key_encoding::E
@@ -82,7 +89,7 @@ Convenience constructor for MetadataV3 that builds the codec pipeline from
 and `compressor` (translated to bytes->bytes codecs).
 """
 function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::NTuple{N,Int},
-        dtype::String, fill_value;
+        dtype, fill_value;
         order::Char='C',
         endian::Symbol=:little,
         compressor=BloscCompressor(),
@@ -224,7 +231,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     shape = Int.(d["shape"])
 
     # Datatype
-    data_type = d["data_type"]::String
+    data_type = d["data_type"]
 
     # Chunk Grid
     chunk_grid = d["chunk_grid"]

@@ -680,6 +680,31 @@ end
     @test_throws ArgumentError Zarr.Metadata3(data, (4,4); compressor=_BadCompressor())
 end
 
+@testset "Metadata3 fixed_length_utf32" begin
+    # Test parsing fixed_length_utf32
+    d = Dict{String, Any}(
+        "zarr_format" => 3,
+        "node_type" => "array",
+        "shape" => [10],
+        "data_type" => Dict{String, Any}(
+            "name" => "fixed_length_utf32",
+            "configuration" => Dict{String, Any}("length_bytes" => 40)
+        ),
+        "chunk_grid" => Dict{String, Any}("name" => "regular", "configuration" => Dict{String, Any}("chunk_shape" => [10])),
+        "chunk_key_encoding" => Dict{String, Any}("name" => "default", "configuration" => Dict{String, Any}("separator" => "/")),
+        "fill_value" => "",
+        "codecs" => [Dict{String, Any}("name" => "bytes", "configuration" => Dict{String, Any}("endian" => "little"))]
+    )
+
+    md = Zarr.Metadata3(d, false)
+    # 40 bytes / 4 bytes per code unit = 10 code units
+    @test eltype(md) == Zarr.MaxLengthStrings.MaxLengthString{10, UInt32}
+    
+    # Test lowering back to JSON preserves the dict structure
+    lowered = JSON.lower(md)
+    @test lowered["data_type"] == Dict{String, Any}("name" => "fixed_length_utf32", "configuration" => Dict{String, Any}("length_bytes" => 40))
+end
+
 @testset "V3 ZArray round-trip" begin
     z = zcreate(Int32, 8; zarr_format=3, chunks=(4,), fill_value=Int32(0))
     z[:] = Int32.(1:8)
