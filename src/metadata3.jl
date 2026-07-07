@@ -224,7 +224,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     shape = Int.(d["shape"])
 
     # Datatype
-    data_type = d["data_type"]
+    data_type = d["data_type"]::String
 
     # Chunk Grid
     chunk_grid = d["chunk_grid"]

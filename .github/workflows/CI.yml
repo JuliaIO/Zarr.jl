@@ -55,6 +55,7 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
       - uses: coverallsapp/github-action@v2
+        if: matrix.os != 'macOS-latest'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           files: lcov.info
