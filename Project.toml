@@ -1,6 +1,6 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
