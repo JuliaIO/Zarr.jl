@@ -20,7 +20,7 @@ const userGuideItems = [
   // { text: 'Arrays',               link: '/UserGuide/arrays' },
   // { text: 'Groups',               link: '/UserGuide/groups' },
   { text: 'Storage Backends',     link: '/UserGuide/storage' },
-  { test: 'Locally caching data', link: '/UserGuide/caching'},
+  { text: 'Locally caching data', link: '/UserGuide/caching'},
   // { text: 'Data Types',           link: '/UserGuide/data_types' },
   // { text: 'Codecs & Performance', link: '/UserGuide/performance' },
   { text: 'Operations', link: '/UserGuide/operations'},
