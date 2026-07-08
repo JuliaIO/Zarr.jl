@@ -7,6 +7,9 @@ hero:
   name: "Zarr.jl"
   text: "A Julia library for the Zarr storage format"
   tagline: Chunked, compressed N-dimensional arrays for every scale and storage backend
+  image:
+    src: /logo.png
+    alt: Zarr.jl
   actions:
     - theme: brand
       text: Get Started
