@@ -102,6 +102,10 @@ function make_logo(; is_wireframe::Bool = true, transparency::Bool = false, seed
         cam.upvector[] = Vec3f(-0.40824829046386296, -0.40824829046386296, 0.8164965809277259)
         cam.fov[] = 45.0
         update_cam!(ax.scene, cam)
+
+        set_ambient_light!(ax, RGBf(0.7, 0.7, 0.7))
+        set_lights!(ax, [DirectionalLight(RGBf(0.15, 0.15, 0.15), cam.lookat[] - cam.eyeposition[])])
+        
         # Walls
         wall_c1 = colorant"#2E3440"
         wall_c2 = colorant"#E5E7EB"
@@ -120,7 +124,7 @@ function make_logo(; is_wireframe::Bool = true, transparency::Bool = false, seed
 
         if is_wireframe
             left_wf_marker = Rect3f(Vec3f(-0.025, -0.49, -0.49), Vec3f(0.05, 0.98, 0.98))
-            left_solid_marker = Rect3f(Vec3f(-0.1, -0.49, -0.49), Vec3f(0.2, 0.98, 0.98))
+            left_solid_marker = Rect3f(Vec3f(-0.025, -0.49, -0.49), Vec3f(0.05, 0.98, 0.98))
             left_acc_pts = [p for (p, c) in zip(left_points, left_colors) if c in accent_colors]
             left_acc_cls = [c for (p, c) in zip(left_points, left_colors) if c in accent_colors]
             if !isempty(left_acc_pts)
@@ -133,7 +137,7 @@ function make_logo(; is_wireframe::Bool = true, transparency::Bool = false, seed
             end
 
             back_wf_marker = Rect3f(Vec3f(-0.49, -0.025, -0.49), Vec3f(0.98, 0.05, 0.98))
-            back_solid_marker = Rect3f(Vec3f(-0.49, -0.1, -0.49), Vec3f(0.98, 0.2, 0.98))
+            back_solid_marker = Rect3f(Vec3f(-0.49, -0.025, -0.49), Vec3f(0.98, 0.05, 0.98))
             back_acc_pts = [p for (p, c) in zip(back_points, back_colors) if c in accent_colors]
             back_acc_cls = [c for (p, c) in zip(back_points, back_colors) if c in accent_colors]
             if !isempty(back_acc_pts)
@@ -146,7 +150,7 @@ function make_logo(; is_wireframe::Bool = true, transparency::Bool = false, seed
             end
 
             bot_wf_marker = Rect3f(Vec3f(-0.49, -0.49, -0.025), Vec3f(0.98, 0.98, 0.05))
-            bot_solid_marker = Rect3f(Vec3f(-0.49, -0.49, -0.1), Vec3f(0.98, 0.98, 0.2))
+            bot_solid_marker = Rect3f(Vec3f(-0.49, -0.49, -0.025), Vec3f(0.98, 0.98, 0.05))
             bot_acc_pts = [p for (p, c) in zip(bottom_points, bottom_colors) if c in accent_colors]
             bot_acc_cls = [c for (p, c) in zip(bottom_points, bottom_colors) if c in accent_colors]
             if !isempty(bot_acc_pts)
@@ -174,7 +178,7 @@ function make_logo(; is_wireframe::Bool = true, transparency::Bool = false, seed
 end
 
 #wireframe
-fig, ax = make_logo(is_wireframe=true, transparency=true)
+fig, ax = make_logo(is_wireframe=true, transparency=true, seed=111111111111)
 display(fig, update=false)
 
 mkpath(joinpath(@__DIR__, "../src", "public"))
