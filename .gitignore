@@ -11,3 +11,8 @@ node_modules
 package-lock.json
 docs/src/changelog.md
 docs/src/contributing.md
+*.png
+*.ico
+.DS_Store
+!logo.png
+!favicon.ico

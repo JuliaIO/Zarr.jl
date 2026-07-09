@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 
 ## v0.10.1 - 2026-07-07
 
