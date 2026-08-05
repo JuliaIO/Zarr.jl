@@ -803,11 +803,12 @@ function codec_encode(::VLenUTF8V3Codec, data::AbstractArray{<:AbstractString})
     end
     take!(b)
 end
-function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T=zero(T)) where {T <: AbstractString, N}
+function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T= Missing <: T ? missing : zero(T)) where {T <: Union{<:AbstractString, Missing}, N}
     f = IOBuffer(encoded, read=true, write=false)
     nitems = ltoh(read(f, UInt32))
-    if nitems != prod(shape)
-        throw(DimensionMismatch("Got shape $shape ($(prod(shape)) items), but the array only has $nitems items."))
+    expected = prod(shape)
+    if nitems != expected
+        throw(DimensionMismatch("Got shape $shape ($expected items), but the array only has $nitems items."))
     end
     out = Array{T}(undef, shape...)
     for i in 1:nitems
