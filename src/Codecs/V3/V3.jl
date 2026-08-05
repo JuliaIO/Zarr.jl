@@ -784,4 +784,37 @@ function codec_decode(c::CRC32cV3Codec, encoded::Vector{UInt8})
     return zdecode!(out, encoded, CRC32cCodec())
 end
 
+struct VLenUTF8V3Codec <: V3Codec{:array, :bytes} end
+name(::VLenUTF8V3Codec) = "vlen-utf8"
+register_codec("vlen-utf8", VLenUTF8V3Codec) do config, ctx
+    VLenUTF8V3Codec()
+end
+function JSON.lower(::VLenUTF8V3Codec)
+    Dict("name" => "vlen-utf8")
+end
+function codec_encode(::VLenUTF8V3Codec, data::AbstractArray{<:AbstractString})
+    b = IOBuffer()
+    nitems = length(data)
+    write(b, htol(UInt32(nitems)))
+    for a in data
+        utf8encoded = transcode(String, a)
+        write(b, htol(UInt32(ncodeunits(utf8encoded))))
+        write(b, utf8encoded)
+    end
+    take!(b)
+end
+function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T=zero(T)) where {T <: AbstractString, N}
+    f = IOBuffer(encoded, read=true, write=false)
+    nitems = ltoh(read(f, UInt32))
+    if nitems != prod(shape)
+        throw(DimensionMismatch("Got shape $shape ($(prod(shape)) items), but the array only has $nitems items."))
+    end
+    out = Array{T}(undef, shape...)
+    for i in 1:nitems
+        clen = ltoh(read(f, UInt32))
+        out[i] = String(read(f, clen))
+    end
+    out
+end
+
 end
