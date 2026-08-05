@@ -101,7 +101,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
     else
         ()
     end
-    if T_base <: AbstractString
+    if T_base <: AbstractString && T_base !== MaxLengthString
         array_bytes_codec = Codecs.V3Codecs.VLenUTF8V3Codec()
         typesize = 4
     else
