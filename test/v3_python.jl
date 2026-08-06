@@ -118,7 +118,7 @@ create_and_fill(store;
     shape=(4,),
     chunks=(4,),
     compressors=[codecs.GzipCodec()],
-    data=["1", "2", "3", "4"],
+    data=["variable", "length", "utf8", "string"],
 )
 
 # 1d.contiguous.blosc.string
@@ -128,7 +128,7 @@ create_and_fill(store;
     shape=(4,),
     chunks=(4,),
     compressors=[codecs.BloscCodec(typesize=4, shuffle="noshuffle")],
-    data=["1", "2", "3", "4"],
+    data=["variable", "length", "utf8", "string"],
 )
 
 # 1d.contiguous.raw.string
@@ -138,7 +138,7 @@ create_and_fill(store;
     shape=(4,),
     chunks=(4,),
     compressors=nothing,
-    data=["1", "2", "3", "4"],
+    data=["variable", "length", "utf8", "string"],
 )
 
 # 1d.contiguous.i4

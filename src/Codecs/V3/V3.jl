@@ -784,6 +784,11 @@ function codec_decode(c::CRC32cV3Codec, encoded::Vector{UInt8})
     return zdecode!(out, encoded, CRC32cCodec())
 end
 
+"""
+    VLenUTF8V3Codec
+
+Variable-length UTF-8 string codec for Zarr v3. See https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/vlen-utf8.
+"""
 struct VLenUTF8V3Codec <: V3Codec{:array, :bytes} end
 name(::VLenUTF8V3Codec) = "vlen-utf8"
 register_codec("vlen-utf8", VLenUTF8V3Codec) do config, ctx

@@ -797,9 +797,9 @@ end
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.gzip.i2"]))  == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.blosc.i2"])) == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.raw.i2"]))   == Int16[1, 2, 3, 4]
-            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.gzip.string"]))   == String["1", "2", "3", "4"]
-            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.blosc.string"]))   == String["1", "2", "3", "4"]
-            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.raw.string"]))   == String["1", "2", "3", "4"]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.gzip.string"]))   == String["variable", "length", "utf8", "string"]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.blosc.string"]))   == String["variable", "length", "utf8", "string"]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.raw.string"]))   == String["variable", "length", "utf8", "string"]
             @test pyconvert(Vector{Int32},   np.array(g["1d.contiguous.i4"]))       == Int32[1, 2, 3, 4]
             @test pyconvert(Vector{UInt8},   np.array(g["1d.contiguous.u1"]))       == UInt8[255, 0, 255, 0]
             @test pyconvert(Vector{Float16}, np.array(g["1d.contiguous.f2.le"]))    == Float16[-1000.5, 0.0, 1000.5, 0.0]
@@ -922,7 +922,7 @@ end
                 z = zopen(store; path="1d.contiguous.$compressor.string")
                 @test eltype(z) == String
                 @test size(z) == (4,)
-                @test z[:] == String["1", "2", "3", "4"]
+                @test z[:] == String["variable", "length", "utf8", "string"]
             end
 
             # Int32
