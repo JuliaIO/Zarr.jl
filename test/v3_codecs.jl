@@ -103,6 +103,15 @@ end
     @test_throws ArgumentError Zarr.get_order(md)
 end
 
+@testset "VLenUTF8V3Codec" begin
+    codec = Zarr.Codecs.V3Codecs.VLenUTF8V3Codec()
+    data = String["1", "23", "4"]
+    encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
+    @test encoded isa Vector{UInt8}
+    decoded = Zarr.Codecs.V3Codecs.codec_decode(codec, encoded, String, (3,))
+    @test decoded == data
+end
+
 @testset "GzipV3Codec" begin
     codec = Zarr.Codecs.V3Codecs.GzipV3Codec(6)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
@@ -788,6 +797,9 @@ end
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.gzip.i2"]))  == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.blosc.i2"])) == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.raw.i2"]))   == Int16[1, 2, 3, 4]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.gzip.string"]))   == String["variable", "length", "utf8", "string"]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.blosc.string"]))   == String["variable", "length", "utf8", "string"]
+            @test pyconvert(Vector{String},   np.array(g["1d.contiguous.raw.string"]))   == String["variable", "length", "utf8", "string"]
             @test pyconvert(Vector{Int32},   np.array(g["1d.contiguous.i4"]))       == Int32[1, 2, 3, 4]
             @test pyconvert(Vector{UInt8},   np.array(g["1d.contiguous.u1"]))       == UInt8[255, 0, 255, 0]
             @test pyconvert(Vector{Float16}, np.array(g["1d.contiguous.f2.le"]))    == Float16[-1000.5, 0.0, 1000.5, 0.0]
@@ -904,6 +916,14 @@ end
             # "raw" — actually zstd in modern Python zarr v3
             z = zopen(store; path="1d.contiguous.raw.i2")
             @test z[:] == Int16[1, 2, 3, 4]
+
+            # String
+            for compressor in ("gzip", "blosc", "raw")
+                z = zopen(store; path="1d.contiguous.$compressor.string")
+                @test eltype(z) == String
+                @test size(z) == (4,)
+                @test z[:] == String["variable", "length", "utf8", "string"]
+            end
 
             # Int32
             z = zopen(store; path="1d.contiguous.i4")

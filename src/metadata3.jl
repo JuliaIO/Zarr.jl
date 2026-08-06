@@ -101,11 +101,17 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
     else
         ()
     end
-    array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
+    if T_base <: AbstractString && T_base !== MaxLengthString
+        array_bytes_codec = Codecs.V3Codecs.VLenUTF8V3Codec()
+        typesize = 4
+    else
+        array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
+        typesize = sizeof(T_base)
+    end
     bytes_bytes_codecs = if compressor isa NoCompressor
         ()
     elseif compressor isa BloscCompressor
-        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, sizeof(T_base)),)
+        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, typesize),)
     elseif compressor isa ZlibCompressor
         # ZlibCompressor uses -1 to mean "default"; zarr v3 gzip spec requires 0-9
         level = compressor.config.level == -1 ? 6 : compressor.config.level

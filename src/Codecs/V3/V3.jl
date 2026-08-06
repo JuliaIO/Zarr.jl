@@ -784,4 +784,43 @@ function codec_decode(c::CRC32cV3Codec, encoded::Vector{UInt8})
     return zdecode!(out, encoded, CRC32cCodec())
 end
 
+"""
+    VLenUTF8V3Codec
+
+Variable-length UTF-8 string codec for Zarr v3. See https://github.com/zarr-developers/zarr-extensions/tree/main/codecs/vlen-utf8.
+"""
+struct VLenUTF8V3Codec <: V3Codec{:array, :bytes} end
+name(::VLenUTF8V3Codec) = "vlen-utf8"
+register_codec("vlen-utf8", VLenUTF8V3Codec) do config, ctx
+    VLenUTF8V3Codec()
+end
+function JSON.lower(::VLenUTF8V3Codec)
+    Dict("name" => "vlen-utf8")
+end
+function codec_encode(::VLenUTF8V3Codec, data::AbstractArray{<:AbstractString})
+    b = IOBuffer()
+    nitems = length(data)
+    write(b, htol(UInt32(nitems)))
+    for a in data
+        utf8encoded = transcode(String, a)
+        write(b, htol(UInt32(ncodeunits(utf8encoded))))
+        write(b, utf8encoded)
+    end
+    take!(b)
+end
+function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T= Missing <: T ? missing : zero(T)) where {T <: Union{<:AbstractString, Missing}, N}
+    f = IOBuffer(encoded, read=true, write=false)
+    nitems = ltoh(read(f, UInt32))
+    expected = prod(shape)
+    if nitems != expected
+        throw(DimensionMismatch("Got shape $shape ($expected items), but the array only has $nitems items."))
+    end
+    out = Array{T}(undef, shape...)
+    for i in 1:nitems
+        clen = ltoh(read(f, UInt32))
+        out[i] = String(read(f, clen))
+    end
+    out
+end
+
 end

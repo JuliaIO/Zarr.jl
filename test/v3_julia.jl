@@ -60,6 +60,27 @@ create_and_fill(store, "1d.contiguous.raw.i2", Int16[1,2,3,4];
     compressor=Zarr.NoCompressor(),
 )
 
+# 1d.contiguous.gzip.string
+create_and_fill(store, "1d.contiguous.gzip.string", String["variable", "length", "utf8", "string"];
+    shape=(4,),
+    chunks=(4,),
+    compressor=Zarr.ZlibCompressor(),
+)
+
+# 1d.contiguous.blosc.string
+create_and_fill(store, "1d.contiguous.blosc.string", String["variable", "length", "utf8", "string"];
+    shape=(4,),
+    chunks=(4,),
+    compressor=Zarr.BloscCompressor(shuffle=0),  # noshuffle
+)
+
+# 1d.contiguous.raw.string
+create_and_fill(store, "1d.contiguous.raw.string", String["variable", "length", "utf8", "string"];
+    shape=(4,),
+    chunks=(4,),
+    compressor=Zarr.NoCompressor(),
+)
+
 # 1d.contiguous.i4
 create_and_fill(store, "1d.contiguous.i4", Int32[1,2,3,4];
     shape=(4,),
