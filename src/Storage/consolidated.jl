@@ -15,7 +15,7 @@ function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{2})
   root = JSON.parse(String(copy(d)); dicttype=Dict{String,Any})
   metadata = get(root, "metadata", nothing)
   isnothing(metadata) && throw(ArgumentError("Invalid .zmetadata: missing metadata field"))
-  return ConsolidatedStore(s, p, metadata)
+  return ConsolidatedStore(s, String(p), metadata)
 end
 function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
   z = s[p, "zarr.json"]
@@ -25,7 +25,7 @@ function ConsolidatedStore(s::AbstractStore, p, ::ZarrFormat{3})
   isnothing(cm) && throw(ArgumentError("Missing consolidated_metadata in zarr.json"))
   metadata = get(cm, "metadata", nothing)
   isnothing(metadata) && throw(ArgumentError("Missing metadata in consolidated_metadata"))
-  return ConsolidatedStore(s, p, cm)
+  return ConsolidatedStore(s, String(p), cm)
 end
 
 function ConsolidatedStore(s::AbstractStore, p)
