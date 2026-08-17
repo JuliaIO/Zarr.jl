@@ -19,10 +19,15 @@ jobs:
           - 'pre'
         os:
           - ubuntu-latest
-          - macOS-latest
-          - windows-latest
         arch:
           - 'default'
+        include:
+          - os: macOS-latest
+            version: '1'
+            arch: 'default'
+          - os: windows-latest
+            version: '1'
+            arch: 'default'
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
