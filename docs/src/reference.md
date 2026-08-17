@@ -10,13 +10,13 @@ zzeros
 ## Group hierarchy
 
 ```@autodocs
-Modules = [Zarr]
+Modules = [ZarrCore]
 Pages = ["ZGroup.jl"]
 ```
 
 ## Compressors
 
 ```@autodocs
-Modules = [Zarr]
+Modules = [ZarrCore]
 Pages = ["Compressors/Compressors.jl", "Compressors/blosc.jl", "Compressors/zlib.jl", "Compressors/zstd.jl"]
 ```
