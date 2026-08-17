@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Drop HTTP.jl 2.x support
+- Move code to ZarrCore.jl with low dependencies
 - Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
 
