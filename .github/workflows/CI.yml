@@ -36,6 +36,15 @@ jobs:
           arch: ${{ matrix.arch }}
           show-versioninfo: true
       - uses: julia-actions/cache@v3
+      # Pkg only understands `[sources]`/`[workspace]` from Julia 1.11 on, so on
+      # LTS (1.10) the unregistered path dependency on ZarrCore is invisible and
+      # resolution fails with "expected package ZarrCore to be registered".
+      # Dev'ing it explicitly fixes that; on 1.11+ it is a no-op because
+      # `[sources]` already points at the same path. This only affects developing
+      # from a checkout -- once both packages are registered, users resolve
+      # ZarrCore normally on any supported Julia.
+      - name: Develop ZarrCore (Pkg < 1.11 ignores [sources])
+        run: julia --project=. -e 'using Pkg; Pkg.develop(path="lib/ZarrCore")'
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
@@ -47,7 +56,7 @@ jobs:
           timeout_minutes: 5
           max_attempts: 3
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore")]); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
             # In the workspace layout the resolved manifest lives at the repo
