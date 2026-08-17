@@ -45,7 +45,6 @@ function Zarr.storagesize(s::S3Store,p)
 end
 
 function Zarr.isinitialized(s::S3Store, i::String)
-  @show s, i
   s3_exists(s.aws,s.bucket,i)
 end
 
