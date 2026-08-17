@@ -23,7 +23,7 @@ and wrap it into a `CachedDiskArray`:
 
 ````jldoctest cache
 julia> a_lrucache = DiskArrays.cache(a,maxsize=1)
-10000×10000 DiskArrays.CachedDiskArray{Float64, 2, ZArray{Float64, 2, DirectoryStore, Zarr.MetadataV2{Float64, 2, Zarr.BloscCompressor, Nothing}}, LRUCache.LRU{ChunkIndex{2, DiskArrays.OffsetChunks}, OffsetArrays.OffsetMatrix{Float64, Matrix{Float64}}}}
+10000×10000 DiskArrays.CachedDiskArray{Float64, 2, ZArray{Float64, 2, DirectoryStore, ZarrCore.MetadataV2{Float64, 2, ZarrCore.BloscCompressor, Nothing}}, LRUCache.LRU{ChunkIndex{2, DiskArrays.OffsetChunks}, OffsetArrays.OffsetMatrix{Float64, Matrix{Float64}}}}
 
 Chunked: (
     [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
@@ -55,7 +55,7 @@ So, if we want to hold an incomplete local copy of any `AbstractDiskArray` you c
 
 ````jldoctest cache
 julia> a_arraycache = zarrcache(a,"./my_persistent_store.zarr")
-10000×10000 DiskArrays.CachedDiskArray{Float64, 2, ZArray{Float64, 2, DirectoryStore, Zarr.MetadataV2{Float64, 2, Zarr.BloscCompressor, Nothing}}, Zarr.PermanentZarrCache{Float64, 2, ZArray{Float64, 2, DirectoryStore, Zarr.MetadataV2{Float64, 2, Zarr.BloscCompressor, Nothing}}}}
+10000×10000 DiskArrays.CachedDiskArray{Float64, 2, ZArray{Float64, 2, DirectoryStore, ZarrCore.MetadataV2{Float64, 2, ZarrCore.BloscCompressor, Nothing}}, ZarrCore.PermanentZarrCache{Float64, 2, ZArray{Float64, 2, DirectoryStore, ZarrCore.MetadataV2{Float64, 2, ZarrCore.BloscCompressor, Nothing}}}}
 
 Chunked: (
     [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
