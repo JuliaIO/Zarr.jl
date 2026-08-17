@@ -1,5 +1,4 @@
 import DiskArrays: approx_chunksize, eachchunk, CachedDiskArray, ChunkIndex
-export zarrcache
 
 struct PermanentZarrCache{T,N,A<:ZArray{T,N}} 
     a::A
