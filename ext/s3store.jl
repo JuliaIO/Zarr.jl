@@ -7,7 +7,11 @@ function Zarr.S3Store(bucket::String;
   S3Store(bucket, aws)
 end
 
-Base.show(io::IO,::S3Store) = print(io,"S3 Object Storage")
+function Base.show(io::IO,store::S3Store)
+  println(io,"S3 Object Storage with:")
+  println(io, "config: ", store.aws )
+  println(io, "bucket: ", store.bucket)
+end
 
 function Base.getindex(s::S3Store, i::String)
   try
@@ -41,6 +45,7 @@ function Zarr.storagesize(s::S3Store,p)
 end
 
 function Zarr.isinitialized(s::S3Store, i::String)
+  @show s, i
   s3_exists(s.aws,s.bucket,i)
 end
 
