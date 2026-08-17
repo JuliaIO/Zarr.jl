@@ -3,6 +3,7 @@
 ## Unreleased
 - Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
+- Add more informative show method for S3Store [#320](https://github.com/JuliaIO/Zarr.jl/pull/320/)
 
 ## v0.10.1 - 2026-07-07
 
