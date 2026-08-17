@@ -1,4 +1,4 @@
-function Zarr.S3Store(bucket::String;
+function ZarrCore.S3Store(bucket::String;
     aws = nothing,
   )
   if aws === nothing
@@ -27,7 +27,7 @@ end
 
 Base.delete!(s::S3Store, d::String) = s3_delete(s.aws,s.bucket,d)
 
-function Zarr.storagesize(s::S3Store,p)
+function ZarrCore.storagesize(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   r = s3_list_objects(s.aws,s.bucket,prefix)
   s = 0
@@ -40,12 +40,12 @@ function Zarr.storagesize(s::S3Store,p)
   s
 end
 
-function Zarr.isinitialized(s::S3Store, i::String)
+function ZarrCore.isinitialized(s::S3Store, i::String)
   s3_exists(s.aws,s.bucket,i)
 end
 
 
-function Zarr.cloud_list_objects(s::S3Store,p)
+function ZarrCore.cloud_list_objects(s::S3Store,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
   s3_list_objects_delim(s.aws, s.bucket, prefix)
 end
@@ -71,12 +71,12 @@ function s3_list_objects_delim(aws, bucket, prefix, delimiter="/")
     end
     result
 end
-function Zarr.subdirs(s::S3Store, p)
+function ZarrCore.subdirs(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"CommonPrefixes") && return String[]
   allstrings(s3_resp["CommonPrefixes"],"Prefix")
 end
-function Zarr.subkeys(s::S3Store, p)
+function ZarrCore.subkeys(s::S3Store, p)
   s3_resp = cloud_list_objects(s, p)
   !haskey(s3_resp,"Contents") && return String[]
   r = allstrings(s3_resp["Contents"],"Key")
@@ -87,16 +87,16 @@ allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
 # push!(storageregexlist,r"^s3://"=>S3Store)
 
-function Zarr.storefromstring(::Type{<:S3Store}, s, _)
+function ZarrCore.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
   S3Store(String(bucket),aws=AWSS3.AWS.current_aws_config()),path
 end
 
-Zarr.store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])
+ZarrCore.store_read_strategy(::S3Store) = ConcurrentRead(concurrent_io_tasks[])
 
-function Zarr.zopen(s::S3Path, mode="r"; kwargs...)
+function ZarrCore.zopen(s::S3Path, mode="r"; kwargs...)
   decomp = split(string(s),"/",keepempty=false)
   bucket = decomp[2]
   path = join(decomp[3:end],"/")
