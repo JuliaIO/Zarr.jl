@@ -290,6 +290,28 @@ end
   
   close(server)
 
+  @testset "HTTP.serve and HTTP.serve! overloads" begin
+    # Test HTTP.serve! with (ZGroup, port)
+    srv_gp = HTTP.serve!(g, 0)
+    @test srv_gp isa HTTP.Server
+    close(srv_gp)
+
+    # Test HTTP.serve! with (ZArray, host, port) and (ZArray, port)
+    srv_a = HTTP.serve!(a, "127.0.0.1", 0)
+    @test srv_a isa HTTP.Server
+    close(srv_a)
+    srv_ap = HTTP.serve!(a, 0)
+    @test srv_ap isa HTTP.Server
+    close(srv_ap)
+
+    # Test HTTP.serve! directly on AbstractStore with (store, path, host, port) and (store, path, port)
+    srv_sp = HTTP.serve!(g.storage, g.path, "127.0.0.1", 0)
+    @test srv_sp isa HTTP.Server
+    close(srv_sp)
+    srv_sport = HTTP.serve!(g.storage, g.path, 0)
+    @test srv_sport isa HTTP.Server
+    close(srv_sport)
+  end
   @testset "HTTPStore construction and show" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test hs.url == "http://example.com"
