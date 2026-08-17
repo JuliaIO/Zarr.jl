@@ -6,6 +6,21 @@ import Unicode
 using OrderedCollections: OrderedDict
 
 """
+    PUBLIC_NAMES::Vector{Symbol}
+
+Every name this module declares with [`@public`](@ref), in declaration order.
+
+On Julia 1.11+ this duplicates what `names(ZarrCore)` already reports, but on
+1.10 the `public` keyword does not exist, so this registry is the only record
+of the public-but-not-exported API. The `Zarr` facade uses it to re-export the
+same set of names on every supported Julia version.
+
+Like `public` itself, this is per-module: every module that uses `@public` owns
+a `PUBLIC_NAMES`, and a submodule's public names live in *its* list, not here.
+"""
+const PUBLIC_NAMES = Symbol[]
+
+"""
     @public name
     @public name1, name2, ...
 
@@ -13,14 +28,21 @@ Mark `name`s as public API without exporting them, i.e. `Base.ispublic` returns
 `true` and they show up in `names(ZarrCore)`, but `using ZarrCore` does not
 bring them into scope.
 
-This is the `public` keyword, which only exists from Julia 1.11 onwards; on
-Julia 1.10 the declaration expands to nothing.
+This is the `public` keyword, which only exists from Julia 1.11 onwards. On
+Julia 1.10 the declaration itself expands to nothing, so the names are recorded
+in the calling module's [`PUBLIC_NAMES`](@ref) as well -- `names()` cannot
+report them there. A module using `@public` must therefore define its own
+`const PUBLIC_NAMES = Symbol[]`.
 """
 macro public(ex)
     syms = ex isa Symbol ? [ex] : ex.args
     all(s -> s isa Symbol, syms) ||
         throw(ArgumentError("@public expects one or more symbols, got $ex"))
-    VERSION >= v"1.11" ? esc(Expr(:public, syms...)) : nothing
+    decl = VERSION >= v"1.11" ? esc(Expr(:public, syms...)) : nothing
+    quote
+        append!($(esc(:PUBLIC_NAMES)), $(QuoteNode(syms)))
+        $decl
+    end
 end
 
 struct ZarrFormat{V}
