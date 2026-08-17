@@ -291,26 +291,41 @@ end
   close(server)
 
   @testset "HTTP.serve and HTTP.serve! overloads" begin
-    # Test HTTP.serve! with (ZGroup, port)
+    # Test HTTP.serve! with (ZGroup, port), (ZGroup, host), and (ZGroup)
     srv_gp = HTTP.serve!(g, 0)
     @test srv_gp isa HTTP.Server
     close(srv_gp)
+    srv_ghost = HTTP.serve!(g, "127.0.0.1"; listenany=true)
+    @test srv_ghost isa HTTP.Server
+    close(srv_ghost)
+    srv_gzero = HTTP.serve!(g; listenany=true)
+    @test srv_gzero isa HTTP.Server
+    close(srv_gzero)
 
-    # Test HTTP.serve! with (ZArray, host, port) and (ZArray, port)
+    # Test HTTP.serve! with (ZArray, host, port), (ZArray, port), and (ZArray)
     srv_a = HTTP.serve!(a, "127.0.0.1", 0)
     @test srv_a isa HTTP.Server
     close(srv_a)
     srv_ap = HTTP.serve!(a, 0)
     @test srv_ap isa HTTP.Server
     close(srv_ap)
+    srv_azero = HTTP.serve!(a; listenany=true)
+    @test srv_azero isa HTTP.Server
+    close(srv_azero)
 
-    # Test HTTP.serve! directly on AbstractStore with (store, path, host, port) and (store, path, port)
+    # Test HTTP.serve! directly on AbstractStore with various argument shapes
     srv_sp = HTTP.serve!(g.storage, g.path, "127.0.0.1", 0)
     @test srv_sp isa HTTP.Server
     close(srv_sp)
+    srv_shost = HTTP.serve!(g.storage, g.path, "127.0.0.1"; listenany=true)
+    @test srv_shost isa HTTP.Server
+    close(srv_shost)
     srv_sport = HTTP.serve!(g.storage, g.path, 0)
     @test srv_sport isa HTTP.Server
     close(srv_sport)
+    srv_szero = HTTP.serve!(g.storage, g.path; listenany=true)
+    @test srv_szero isa HTTP.Server
+    close(srv_szero)
   end
   @testset "HTTPStore construction and show" begin
     hs = Zarr.HTTPStore("http://example.com")
