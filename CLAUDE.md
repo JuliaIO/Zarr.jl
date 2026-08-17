@@ -28,6 +28,8 @@ Julia version requirement: 1.10+. CI tests against Julia LTS, stable (`1`), nigh
 
 Because 1.10 is still supported, the `public` keyword (Julia 1.11+) cannot be used directly. Use the `ZarrCore.@public` macro instead — it expands to `public` on 1.11+ and to nothing on 1.10.
 
+Since there is no `public` on 1.10, `names()` cannot report public names there, so `@public` *also* appends to the calling module's `PUBLIC_NAMES::Vector{Symbol}`. **Any module that uses `@public` must define its own `const PUBLIC_NAMES = Symbol[]`** (per-module, exactly like `public` itself); forgetting it is a load-time `UndefVarError`. The `Zarr` facade unions `names(ZarrCore)` with `ZarrCore.PUBLIC_NAMES`, which is what keeps the public API present on LTS — without it, every public-but-not-exported name silently vanishes from `Zarr` on 1.10 while 1.11+ looks fine.
+
 ## Architecture
 
 ### Core Type Hierarchy

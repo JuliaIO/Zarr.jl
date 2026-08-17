@@ -47,6 +47,7 @@ getCodec(::Type{<:Codec}, d::Dict) = error("Unimplemented")
 include("V3/V3.jl")
 
 import ..ZarrCore: @public
+const PUBLIC_NAMES = Symbol[]  # `@public` records here; see `?ZarrCore.@public`
 @public Codec, V3Codecs, zencode, zencode!, zdecode, zdecode!, getCodec
 
 end

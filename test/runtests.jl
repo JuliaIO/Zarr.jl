@@ -16,7 +16,8 @@ using Dates
     # These tests pin that split down so it cannot regress silently.
     #
     # On Julia 1.10 there is no `public`, so `names` yields only exports and the
-    # public-only sets are empty; the assertions still hold.
+    # public-only sets are empty; the assertions still hold. The final pair of
+    # tests covers what that blind spot hides.
     # A module always lists its own name, and `Zarr` additionally carries the
     # `ZarrCore` binding (public, so `Zarr.ZarrCore` is a documented escape hatch
     # rather than something `using Zarr` drags in). Both are structural, not API.
@@ -36,6 +37,20 @@ using Dates
     # not become an export of `Zarr`, and vice versa.
     @test isempty(intersect(publiconly(ZarrCore), exported(Zarr)))
     @test isempty(intersect(exported(ZarrCore), publiconly(Zarr)))
+
+    # Version-independent: the two assertions above compare `names` against
+    # `names`, so on 1.10 -- where `@public` expands to nothing and both
+    # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
+    # `PUBLIC_NAMES` is populated on every version, so this catches a facade
+    # that silently drops the entire public API on LTS.
+    @test !isempty(ZarrCore.PUBLIC_NAMES)
+    @test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
+
+    # Where both sources exist, they must agree -- otherwise LTS and 1.11+ would
+    # drift apart again, which is exactly what the registry is there to prevent.
+    @static if VERSION >= v"1.11"
+        @test Set(ZarrCore.PUBLIC_NAMES) == publiconly(ZarrCore)
+    end
 end
 
 @testset "ZArray" begin
