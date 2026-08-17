@@ -62,7 +62,7 @@ function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
 
   consolidated && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
   if lru !== 0
-    error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
+    error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at https://github.com/JuliaIO/Zarr.jl if you need this functionality")
   end
   if is_zarray(zv, s, path)
     return ZArray(s, mode, path, zv; fill_as_missing=fill_as_missing)

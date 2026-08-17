@@ -2,9 +2,9 @@ module V3Codecs
 
 import ..Codecs: zencode, zdecode, zencode!, zdecode!
 # Import compressor types and functions from Zarr (grandparent module)
-import ...Zarr: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
-import ...Zarr: BloscCompressor as ZarrBloscCompressor
-import ...Zarr: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
+import ...ZarrCore: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
+import ...ZarrCore: BloscCompressor as ZarrBloscCompressor
+import ...ZarrCore: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
 using CRC32c: CRC32c
 using JSON: JSON
 using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions

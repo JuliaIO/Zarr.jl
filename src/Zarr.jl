@@ -1,33 +1,9 @@
 module Zarr
 
-import JSON
-import Blosc
-import Unicode
-using OrderedCollections: OrderedDict
+import ZarrCore
 
-struct ZarrFormat{V}
-  version::Val{V}
+for name in names(ZarrCore; all = false)
+    @eval export $name
 end
-Base.Int(v::ZarrFormat{V}) where V = V
-@inline ZarrFormat(v::Int) = ZarrFormat(Val(v))
-ZarrFormat(v::ZarrFormat) = v
-#Default Zarr Version
-const DV = ZarrFormat(Val(2))
 
-include("types.jl")
-include("chunkkeyencoding.jl")
-include("metadata.jl")
-include("metadata3.jl")
-include("Compressors/Compressors.jl")
-include("Codecs/Codecs.jl")
-include("Storage/Storage.jl")
-include("Filters/Filters.jl")
-include("ZArray.jl")
-include("pipeline.jl")
-include("ZGroup.jl")
-include("caching.jl")
-
-export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
-  zinfo, DirectoryStore, S3Store, GCStore, zgroup
-
-end # module
+end

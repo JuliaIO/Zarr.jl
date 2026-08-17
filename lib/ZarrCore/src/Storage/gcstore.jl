@@ -5,7 +5,7 @@ const GOOGLE_STORAGE_REST_API = GOOGLE_STORAGE_API * "/storage/v1"
 const GOOGLE_STORAGE_CREDENTIALS = Dict{String,String}()
 
 """
-    Zarr.gcs_credentials(user_project,access_token,token_type)
+    gcs_credentials(user_project,access_token,token_type)
 
 Set the user project, access token and and token type for the Google Cloud
 Store.
@@ -18,7 +18,7 @@ function gcs_credentials(user_project,access_token,token_type)
 end
 
 """
-    Zarr.gcs_credentials(; metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
+    gcs_credentials(; metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
 
 Set (or renew) the user project, access token and and token type for the Google
 Cloud Store from the Metadata server (assuming the function is executed from

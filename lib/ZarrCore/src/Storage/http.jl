@@ -28,7 +28,7 @@ if r.status >= 300
         """Received error code $(r.status) when connecting to $(s.url) with message $(String(r.body)).
         This might be an actual error, or an indication that the server returns a different error code 
         than 404 for missing chunks. In the latter case, you can run 
-        `Zarr.missing_chunk_return_code!(a.storage,$(r.status))` where `a` is your Zarr array or group, 
+        `ZarrCore.missing_chunk_return_code!(a.storage,$(r.status))` where `a` is your Zarr array or group, 
         to fix the issue.
         """
         throw(ErrorException(err_msg))
