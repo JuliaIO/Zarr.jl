@@ -5,7 +5,7 @@ using Zarr
 import Zarr: ZarrCore
 
 CondaPkg.add([
-    PkgSpec("numpy"),
+    PkgSpec("numpy"; version=">=2.3.3,<3"),
     PkgSpec("zarr"; version="3.*"),
     PkgSpec("numcodecs")
 ])

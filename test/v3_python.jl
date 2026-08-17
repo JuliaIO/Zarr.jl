@@ -6,7 +6,7 @@ using JSON
 
 # Install Python deps into Conda env used by PythonCall (zarr v3 and numpy)
 CondaPkg.add([
-    PkgSpec("numpy"),
+    PkgSpec("numpy"; version=">=2.3.3,<3"),
     PkgSpec("zarr"; version="3.*"),
     PkgSpec("numcodecs")
 ])
