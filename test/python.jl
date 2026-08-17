@@ -29,8 +29,9 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor, MaxLengthString, 
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor,
        Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
+import Zarr: ZarrCore
 using Random: randstring
 numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
@@ -38,7 +39,7 @@ numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
     Complex{Float32}, Complex{Float64},
     Bool,)
 dtypes = (numeric_dtypes...,
-    MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
+    ZarrCore.MaxLengthString{10,UInt8},ZarrCore.MaxLengthString{10,UInt32},
     String)
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",

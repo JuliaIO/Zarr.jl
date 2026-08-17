@@ -1,6 +1,8 @@
 using CondaPkg: CondaPkg, PkgSpec
 using JSON
 using PythonCall
+using Zarr
+import Zarr: ZarrCore
 
 CondaPkg.add([
     PkgSpec("numpy"),
@@ -68,20 +70,20 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
   @testset "ConsolidatedStore v3 constructor error paths" begin
     s = Zarr.DictStore()
     # missing zarr.json
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", ZarrCore.ZarrFormat(3))
     # zarr.json present but no consolidated_metadata
     s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", ZarrCore.ZarrFormat(3))
     # consolidated_metadata present but no metadata subkey
     s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"consolidated_metadata":{"kind":"inline"}}""")
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", ZarrCore.ZarrFormat(3))
   end
 
   @testset "getmetadata v3 on ConsolidatedStore" begin
     path_jl = joinpath(path_v3_julia, "consolidated")
     cs = zopen(path_jl, consolidated=true)
     # getmetadata v3 reads from cons["metadata"][key]
-    meta = Zarr.getmetadata(Zarr.ZarrFormat(3), cs.storage, "1d.chunked.i2", false)
+    meta = ZarrCore.getmetadata(ZarrCore.ZarrFormat(3), cs.storage, "1d.chunked.i2", false)
     @test eltype(meta) == Int16
     @test meta.chunks == (2,)
   end
@@ -90,18 +92,18 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     path_jl = joinpath(path_v3_julia, "consolidated")
     cs = zopen(path_jl, consolidated=true)
     s = cs.storage  # the ConsolidatedStore
-    V3 = Zarr.ZarrFormat(3)
-    @test  Zarr.is_zarray(V3, s, "1d.chunked.i2")
-    @test !Zarr.is_zarray(V3, s, "nested")
-    @test !Zarr.is_zarray(V3, s, "nonexistent")
-    @test  Zarr.is_zgroup(V3, s, "nested")
-    @test !Zarr.is_zgroup(V3, s, "1d.chunked.i2")
-    @test !Zarr.is_zgroup(V3, s, "nonexistent")
+    V3 = ZarrCore.ZarrFormat(3)
+    @test  ZarrCore.is_zarray(V3, s, "1d.chunked.i2")
+    @test !ZarrCore.is_zarray(V3, s, "nested")
+    @test !ZarrCore.is_zarray(V3, s, "nonexistent")
+    @test  ZarrCore.is_zgroup(V3, s, "nested")
+    @test !ZarrCore.is_zgroup(V3, s, "1d.chunked.i2")
+    @test !ZarrCore.is_zgroup(V3, s, "nonexistent")
   end
 
   @testset "subdirs v3 on ConsolidatedStore" begin
     ds = Zarr.DirectoryStore(joinpath(path_v3_julia, "consolidated"))
-    cs = Zarr.ConsolidatedStore(ds, "", Zarr.ZarrFormat(3))
+    cs = Zarr.ConsolidatedStore(ds, "", ZarrCore.ZarrFormat(3))
     # v3 subdirs returns only immediate children (length(sp) == lp + 1)
     dirs = Zarr.subdirs(cs, "")
     @test sort(dirs) == ["1d.chunked.i2", "2d.contiguous.i2", "nested"]
@@ -149,28 +151,28 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     # Missing .zmetadata
     s = Zarr.DictStore()
     zgroup(s)
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(2))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", ZarrCore.ZarrFormat(2))
 
     # .zmetadata present but missing "metadata" field
     s2 = Zarr.DictStore()
     s2[".zmetadata"] = Vector{UInt8}("""{"zarr_consolidated_format":1}""")
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s2, "", Zarr.ZarrFormat(2))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s2, "", ZarrCore.ZarrFormat(2))
   end
 
   @testset "v3 ConsolidatedStore constructor errors" begin
     # Missing zarr.json
     s = Zarr.DictStore()
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s, "", ZarrCore.ZarrFormat(3))
 
     # zarr.json present but no consolidated_metadata
     s2 = Zarr.DictStore()
     s2["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s2, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s2, "", ZarrCore.ZarrFormat(3))
 
     # consolidated_metadata present but no metadata subkey
     s3 = Zarr.DictStore()
     s3["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"consolidated_metadata":{"kind":"inline"}}""")
-    @test_throws ArgumentError Zarr.ConsolidatedStore(s3, "", Zarr.ZarrFormat(3))
+    @test_throws ArgumentError Zarr.ConsolidatedStore(s3, "", ZarrCore.ZarrFormat(3))
   end
 
   @testset "auto-detect constructor errors when no format found" begin
@@ -184,12 +186,12 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     zcreate(Int, g, "arr", 4, chunks=(2,), attrs=Dict("b" => 2))
     zgroup(g, "sub")   # group with no attrs
     cs = Zarr.consolidate_metadata(s, "")
-    V2 = Zarr.ZarrFormat(2)
-    @test Zarr.getattrs(V2, cs, "") == Dict("a" => 1)
-    @test Zarr.getattrs(V2, cs, "arr") == Dict("b" => 2)
+    V2 = ZarrCore.ZarrFormat(2)
+    @test ZarrCore.getattrs(V2, cs, "") == Dict("a" => 1)
+    @test ZarrCore.getattrs(V2, cs, "arr") == Dict("b" => 2)
     # No .zattrs written for sub → returns empty dict
-    @test Zarr.getattrs(V2, cs, "sub") == Dict{String,Any}()
-    @test Zarr.getattrs(V2, cs, "nonexistent") == Dict{String,Any}()
+    @test ZarrCore.getattrs(V2, cs, "sub") == Dict{String,Any}()
+    @test ZarrCore.getattrs(V2, cs, "nonexistent") == Dict{String,Any}()
   end
 
   @testset "v2 is_zarray / is_zgroup" begin
@@ -198,15 +200,15 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     zgroup(g, "sub")
     zcreate(Float64, g, "data", 8, chunks=(4,))
     cs = Zarr.consolidate_metadata(s, "")
-    V2 = Zarr.ZarrFormat(2)
-    @test  Zarr.is_zgroup(V2, cs, "")
-    @test !Zarr.is_zarray(V2, cs, "")
-    @test  Zarr.is_zgroup(V2, cs, "sub")
-    @test !Zarr.is_zarray(V2, cs, "sub")
-    @test  Zarr.is_zarray(V2, cs, "data")
-    @test !Zarr.is_zgroup(V2, cs, "data")
-    @test !Zarr.is_zarray(V2, cs, "nonexistent")
-    @test !Zarr.is_zgroup(V2, cs, "nonexistent")
+    V2 = ZarrCore.ZarrFormat(2)
+    @test  ZarrCore.is_zgroup(V2, cs, "")
+    @test !ZarrCore.is_zarray(V2, cs, "")
+    @test  ZarrCore.is_zgroup(V2, cs, "sub")
+    @test !ZarrCore.is_zarray(V2, cs, "sub")
+    @test  ZarrCore.is_zarray(V2, cs, "data")
+    @test !ZarrCore.is_zgroup(V2, cs, "data")
+    @test !ZarrCore.is_zarray(V2, cs, "nonexistent")
+    @test !ZarrCore.is_zgroup(V2, cs, "nonexistent")
   end
 
   @testset "v2 subdirs" begin
@@ -227,8 +229,8 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     a = zcreate(Int32, g, "arr", 10, 20, chunks=(5,5), fill_value=Int32(-1))
     # I think this `fill_value` way of passing things is related to issue: https://github.com/JuliaIO/Zarr.jl/issues/292
     cs = Zarr.consolidate_metadata(s, "")
-    V2 = Zarr.ZarrFormat(2)
-    meta = Zarr.getmetadata(V2, cs, "arr", false)
+    V2 = ZarrCore.ZarrFormat(2)
+    meta = ZarrCore.getmetadata(V2, cs, "arr", false)
     @test meta.dtype == Int32 || eltype(meta) == Int32
     @test meta.chunks == (5, 5)
   end
@@ -242,16 +244,16 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
       )
     )
     cs = Zarr.ConsolidatedStore(Zarr.DictStore(), "", cons)
-    @test Zarr.getattrs(Zarr.ZarrFormat(3), cs, "") == Dict("foo" => "bar")
+    @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), cs, "") == Dict("foo" => "bar")
 
     # zarr.json present but no "attributes"
     cs2 = Zarr.ConsolidatedStore(Zarr.DictStore(), "",
       Dict{String,Any}("zarr.json" => Dict{String,Any}("node_type" => "group")))
-    @test Zarr.getattrs(Zarr.ZarrFormat(3), cs2, "") == Dict{String,Any}()
+    @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), cs2, "") == Dict{String,Any}()
 
     # zarr.json key absent entirely
     cs3 = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}())
-    @test Zarr.getattrs(Zarr.ZarrFormat(3), cs3, "") == Dict{String,Any}()
+    @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), cs3, "") == Dict{String,Any}()
   end
 
   @testset "v3 is_zarray / is_zgroup on ConsolidatedStore (unit)" begin
@@ -270,15 +272,15 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     s = Zarr.DictStore()
     s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
     cs = Zarr.ConsolidatedStore(s, "", cons)
-    V3 = Zarr.ZarrFormat(3)
+    V3 = ZarrCore.ZarrFormat(3)
     # is_zarray: key = "group1/arr" (no suffix)
-    @test  Zarr.is_zarray(V3, cs, "group1/arr")
-    @test !Zarr.is_zarray(V3, cs, "group1")        # no bare "group1" key
-    @test !Zarr.is_zarray(V3, cs, "nonexistent")
+    @test  ZarrCore.is_zarray(V3, cs, "group1/arr")
+    @test !ZarrCore.is_zarray(V3, cs, "group1")        # no bare "group1" key
+    @test !ZarrCore.is_zarray(V3, cs, "nonexistent")
     # is_zgroup: key = "group1/zarr.json" (_unconcpath + "zarr.json")
-    @test  Zarr.is_zgroup(V3, cs, "group1")
-    @test !Zarr.is_zgroup(V3, cs, "group1/arr")    # "group1/arr/zarr.json" not in metadata
-    @test !Zarr.is_zgroup(V3, cs, "nonexistent")
+    @test  ZarrCore.is_zgroup(V3, cs, "group1")
+    @test !ZarrCore.is_zgroup(V3, cs, "group1/arr")    # "group1/arr/zarr.json" not in metadata
+    @test !ZarrCore.is_zgroup(V3, cs, "nonexistent")
   end
 
   @testset "is_zgroup v3 fallback to parent" begin
@@ -290,18 +292,18 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     # write a real group zarr.json to the parent so the fallback succeeds
     s["zarr.json"] = Vector{UInt8}("""{"zarr_format":3,"node_type":"group"}""")
     cs = Zarr.ConsolidatedStore(s, "", cons)
-    V3 = Zarr.ZarrFormat(3)
+    V3 = ZarrCore.ZarrFormat(3)
     # not in cons["metadata"], falls back to parent — parent has zarr.json with node_type=group
-    @test Zarr.is_zgroup(V3, cs, "")
+    @test ZarrCore.is_zgroup(V3, cs, "")
     # not in cons["metadata"], fallback finds nothing → false
-    @test !Zarr.is_zgroup(V3, cs, "nonexistent")
+    @test !ZarrCore.is_zgroup(V3, cs, "nonexistent")
   end
 
   @testset "consolidate_metadata v3 adds consolidated_metadata when missing" begin
     tmp = mktempdir()
     try
         ds = Zarr.DirectoryStore(tmp)
-        g = zgroup(ds, "", Zarr.ZarrFormat(3))
+        g = zgroup(ds, "", ZarrCore.ZarrFormat(3))
         zcreate(Int16, g, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
 
         zj_path = joinpath(tmp, "zarr.json")
@@ -313,7 +315,7 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
             JSON.print(io, root, 4)
         end
         # act
-        cs = Zarr.consolidate_metadata(ds, "", Zarr.ZarrFormat(3))
+        cs = Zarr.consolidate_metadata(ds, "", ZarrCore.ZarrFormat(3))
         # type check
         @test cs isa Zarr.ConsolidatedStore
         # reload file
@@ -374,17 +376,17 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     s = Zarr.DictStore()
     zgroup(s)
     cs = Zarr.consolidate_metadata(s, "")
-    @test Zarr.ZarrFormat(cs, "") == Zarr.ZarrFormat(s, "")
+    @test ZarrCore.ZarrFormat(cs, "") == ZarrCore.ZarrFormat(s, "")
   end
 
   @testset "_unconcpath" begin
     s = Zarr.DictStore()
     cs = Zarr.ConsolidatedStore(s, "a/b", Dict{String,Any}())
-    @test Zarr._unconcpath(cs, "a/b/c/d") == "c/d"
-    @test Zarr._unconcpath(cs, "a/b") == ""
-    @test_throws ErrorException Zarr._unconcpath(cs, "x/y")
+    @test ZarrCore._unconcpath(cs, "a/b/c/d") == "c/d"
+    @test ZarrCore._unconcpath(cs, "a/b") == ""
+    @test_throws ErrorException ZarrCore._unconcpath(cs, "x/y")
     # with suffix
-    @test Zarr._unconcpath(cs, "a/b/c", ".zarray") == "c/.zarray"
+    @test ZarrCore._unconcpath(cs, "a/b/c", ".zarray") == "c/.zarray"
   end
 
   @testset "store_read_strategy and has_configurable_missing_chunks delegate" begin
@@ -392,7 +394,7 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     zgroup(s)
     cs = Zarr.consolidate_metadata(s, "")
     @test Zarr.store_read_strategy(cs) == Zarr.store_read_strategy(s)
-    @test Zarr.has_configurable_missing_chunks(cs) == Zarr.has_configurable_missing_chunks(s)
+    @test ZarrCore.has_configurable_missing_chunks(cs) == ZarrCore.has_configurable_missing_chunks(s)
   end
 
   @testset "v2 full data round-trip through ConsolidatedStore" begin

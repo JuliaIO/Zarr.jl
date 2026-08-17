@@ -5,7 +5,7 @@
     a .= reshape(1:200, 10, 20)
 
     # Start HTTP server
-    using Zarr.HTTP, Sockets
+    using Zarr.ZarrCore.HTTP, Sockets
     server = Sockets.listen(0)
     ip, port = getsockname(server)
     @async HTTP.serve(g, ip, port,server=server)
@@ -17,7 +17,7 @@
 
 
     g2 = zarrcache(base_array, cache_dir)
-    @test g2["a1"].cache.a.storage.folder == Zarr.normalize_path(joinpath(cache_dir, "a1"))
+    @test g2["a1"].cache.a.storage.folder == ZarrCore.normalize_path(joinpath(cache_dir, "a1"))
     # We also open the cache array on disk directly
     g_disk = zopen(cache_dir)
     @test g_disk.attrs == Dict("groupatt"=>5)
@@ -32,7 +32,7 @@
 
     # Now test if we can open the cache store from an existing path
     g3 = zarrcache(base_array, cache_dir)
-    @test g3["a1"].cache.a.storage.folder == Zarr.normalize_path(joinpath(cache_dir, "a1"))
+    @test g3["a1"].cache.a.storage.folder == ZarrCore.normalize_path(joinpath(cache_dir, "a1"))
     @test g3["a1"][1:5,6:10] == a[1:5,6:10]
     @test g_disk["a1"][1:5,6:10] == a[1:5,6:10]
     # Stop server
