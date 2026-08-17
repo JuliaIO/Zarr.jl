@@ -50,7 +50,10 @@ jobs:
             julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
-            rm test/Manifest.toml
+            # In the workspace layout the resolved manifest lives at the repo
+            # root, not in test/, so this file no longer exists; -f keeps the
+            # step from failing while still cleaning up a stale manifest.
+            rm -f test/Manifest.toml
       - uses: julia-actions/julia-runtest@v1
         env:
           PYTHON:

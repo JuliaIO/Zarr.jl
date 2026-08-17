@@ -232,7 +232,7 @@ Zarr allows you to create hierarchical groups, similar to directories:
 using Zarr
 
 store = Zarr.DirectoryStore("experiment.zarr")
-g = zgroup(store, "", Zarr.ZarrFormat(3))
+g = zgroup(store, "", 3)  # 3 selects the Zarr v3 format
 
 zcreate(Float64, g, "temperature", 100, 100; chunks=(50, 50), fill_value=0.0)
 zcreate(Float64, g, "precipitation", 100, 100; chunks=(50, 50), fill_value=0.0)
