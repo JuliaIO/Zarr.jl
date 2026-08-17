@@ -5,15 +5,13 @@
     a .= reshape(1:200, 10, 20)
 
     # Start HTTP server
-    using Zarr.HTTP, Sockets
-    server = Sockets.listen(0)
-    ip, port = getsockname(server)
-    @async HTTP.serve(g, ip, port,server=server)
-    sleep(0.5)  # wait for server to start
+    using Zarr.HTTP: HTTP
+    server = HTTP.serve!(g, "127.0.0.1", 0)
+    port = server.bound_port
 
     # Create caching store with temp cache directory
     cache_dir = tempname()
-    base_array = zopen("http://$ip:$port")
+    base_array = zopen("http://127.0.0.1:$port")
 
 
     g2 = zarrcache(base_array, cache_dir)
