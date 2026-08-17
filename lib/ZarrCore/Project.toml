@@ -1,4 +1,4 @@
-name = "Zarr"
+name = "ZarrCore"
 uuid = "77f5b75c-4c08-499f-ba13-550b0a0af171"
 version = "0.10.1"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
