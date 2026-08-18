@@ -199,7 +199,6 @@ function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs..
 end
 
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
-HTTP.serve!(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve!(s.storage, s.path, args...; kwargs...)
 HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, host, port_num; kwargs...)
 HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString; kwargs...) = HTTP.serve!(s.storage, s.path, host; kwargs...)
 HTTP.serve!(s::Union{ZArray,ZGroup}, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, port_num; kwargs...)
