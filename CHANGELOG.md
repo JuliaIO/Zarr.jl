@@ -4,7 +4,7 @@
 - Drop HTTP.jl 2.x support
 - Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
-
+- Remove lru keyword from zopen, should use DiskArrays.cache instead
 ## v0.10.1 - 2026-07-07
 
 - Add caching to menu, update sharding description [#306](https://github.com/JuliaIO/Zarr.jl/pull/306)

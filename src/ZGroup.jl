@@ -57,13 +57,9 @@ is returned instead.
 function zopen_noerr(s::AbstractStore, mode, zv::ZarrFormat;
   consolidated = false, 
   path="", 
-  lru = 0,
   fill_as_missing=false)
 
-  consolidated && return zopen(ConsolidatedStore(s, path), mode, path=path, lru=lru, fill_as_missing=fill_as_missing)
-  if lru !== 0
-    error("LRU caches are not supported anymore by the current Zarr version. Please use an earlier version of Zarr for now and open an issue at Zarr.jl if you need this functionality")
-  end
+  consolidated && return zopen(ConsolidatedStore(s, path), mode, path=path, fill_as_missing=fill_as_missing)
   if is_zarray(zv, s, path)
     return ZArray(s, mode, path, zv; fill_as_missing=fill_as_missing)
   elseif is_zgroup(zv, s, path)
@@ -94,14 +90,12 @@ end
 
 
 """
-    zopen(s::AbstractStore, mode="r"; consolidated = false, path = "", lru = 0)
+    zopen(s::AbstractStore, mode="r"; consolidated = false, path = "")
 
 Opens a zarr Array or Group at Store `s`. If `consolidated` is set to "true",
 Zarr will search for a consolidated metadata field as created by the python zarr
 `consolidate_metadata` function. This can substantially speed up metadata parsing
-of large zarr groups. Setting `lru` to a value > 0 means that chunks that have been
-accessed before will be cached and consecutive reads will happen from the cache. 
-Here, `lru` denotes the number of chunks that remain in memory. The expected zarr version
+of large zarr groups. The expected zarr version
 can be supplied through `zarr_format` and defaults to `:auto` which tries to detect 
 if the zarr version is v2 or v3.
 """
@@ -109,7 +103,6 @@ function zopen(s::AbstractStore, mode="r";
   zarr_format=:auto,
   consolidated = false, 
   path = "", 
-  lru = 0,
   fill_as_missing = false)
 
   zarr_format = if zarr_format == :auto
@@ -118,7 +111,7 @@ function zopen(s::AbstractStore, mode="r";
     ZarrFormat(zarr_format)
   end
   # add interfaces to Stores later    
-  r = zopen_noerr(s, mode, zarr_format; consolidated=consolidated, path=path, lru=lru, fill_as_missing=fill_as_missing)
+  r = zopen_noerr(s, mode, zarr_format; consolidated=consolidated, path=path, fill_as_missing=fill_as_missing)
   if r === nothing
     throw(ArgumentError("Specified store $s in path $(path) is neither a ZArray nor a ZGroup"))
   else
