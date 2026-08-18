@@ -60,7 +60,7 @@ function JSON.lower(c::ShuffleFilter)
     return Dict("id" => "shuffle", "elementsize" => Int64(c.elementsize))
 end
 
-filterdict["shuffle"] = ShuffleFilter
+register_filter("shuffle", ShuffleFilter)
 #=
 
 # Tests

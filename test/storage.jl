@@ -280,7 +280,7 @@ end
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
   a .= reshape(1:200,10,20)
-  using Zarr.ZarrCore.HTTP, Sockets
+  using Zarr.ZarrHTTP.HTTP, Sockets
   server = Sockets.listen(0)
   ip,port = getsockname(server)
   @async HTTP.serve(g,ip,port,server=server)
@@ -304,10 +304,10 @@ end
   @testset "missing_chunk_return_code! on HTTPStore" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test 403 ∉ hs.allowed_codes
-    ZarrCore.missing_chunk_return_code!(hs, 403)
+    Zarr.missing_chunk_return_code!(hs, 403)
     @test 403 ∈ hs.allowed_codes
     # Vector form
-    ZarrCore.missing_chunk_return_code!(hs, [410, 451])
+    Zarr.missing_chunk_return_code!(hs, [410, 451])
     @test 410 ∈ hs.allowed_codes
     @test 451 ∈ hs.allowed_codes
   end
@@ -316,7 +316,7 @@ end
     hs = Zarr.HTTPStore("http://example.com")
     # Build a ConsolidatedStore wrapping the HTTPStore directly
     cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
-    ZarrCore.missing_chunk_return_code!(cs, 403)
+    Zarr.missing_chunk_return_code!(cs, 403)
     @test 403 ∈ hs.allowed_codes
   end
 
@@ -367,7 +367,7 @@ end
     server4 = Sockets.listen(0)
     ip4, port4 = getsockname(server4)
     # zarr_req_handler with default notfound=404
-    @async HTTP.serve(ZarrCore.zarr_req_handler(s3, g3.path), ip4, port4, server=server4)
+    @async HTTP.serve(Zarr.ZarrHTTP.zarr_req_handler(s3, g3.path), ip4, port4, server=server4)
     sleep(0.1)
     g4 = zopen("http://$ip4:$port4")
     @test g4.attrs == Dict("x" => 1)
@@ -396,11 +396,11 @@ end
     s6 = Zarr.DictStore()
     g6 = zgroup(s6, attrs = Dict("groupatt"=>5))
     a6 = zcreate(Int, g6, "a", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5), fill_value=-1)
-    @async HTTP.serve(ZarrCore.zarr_req_handler(s6, g6.path, 403), ip6, port6, server=server6)
+    @async HTTP.serve(Zarr.ZarrHTTP.zarr_req_handler(s6, g6.path, 403), ip6, port6, server=server6)
     sleep(0.1)
     httpstore6 = Zarr.HTTPStore("http://$ip6:$port6")
     @test_throws "Received error code 403" Zarr.ConsolidatedStore(httpstore6, "")
-    ZarrCore.missing_chunk_return_code!(httpstore6, 403)
+    Zarr.missing_chunk_return_code!(httpstore6, 403)
     g7 = zopen(Zarr.ConsolidatedStore(httpstore6, ""))
     @test all(==(-1), g7["a"][:,:])
     close(server6)
@@ -462,7 +462,7 @@ end
   a .= reshape(1:200, 10, 20)
 
   # Start HTTP server
-  using Zarr.ZarrCore.HTTP, Sockets
+  using Zarr.ZarrHTTP.HTTP, Sockets
   server = Sockets.listen(0)
   ip, port = getsockname(server)
   @async HTTP.serve(g, ip, port, server=server)

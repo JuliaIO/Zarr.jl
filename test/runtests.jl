@@ -15,48 +15,64 @@ using Dates
     # the whole extension API, and using `Base.ispublic` would export nothing.
     # These tests pin that split down so it cannot regress silently.
     #
+    # `Zarr` is a facade over N subpackages (`ZarrCore`, `ZarrZip`, ...), so its
+    # API surface is the *union* of theirs. Deriving `mods` from the facade's own
+    # list means extracting another subpackage needs no change here.
+    #
     # On Julia 1.10 there is no `public`, so `names` yields only exports and the
     # public-only sets are empty; the assertions still hold. The final pair of
     # tests covers what that blind spot hides.
-    # A module always lists its own name, and `Zarr` additionally carries the
-    # `ZarrCore` binding (public, so `Zarr.ZarrCore` is a documented escape hatch
-    # rather than something `using Zarr` drags in). Both are structural, not API.
-    modnames = Set((:Zarr, :ZarrCore))
+    # A module always lists its own name, and `Zarr` additionally carries a
+    # binding for each subpackage (public, so `Zarr.ZarrCore` is a documented
+    # escape hatch rather than something `using Zarr` drags in). Both are
+    # structural, not API.
+    mods = Zarr.REEXPORTED_MODULES
+    modnames = Set((:Zarr, map(nameof, mods)...))
     exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
     publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+    allexported = mapreduce(exported, union, mods)
+    allpublic = mapreduce(publiconly, union, mods)
+    allregistry = mapreduce(m -> m.PUBLIC_NAMES, union, mods)
 
-    # `Zarr.ZarrCore` is reachable, but `using Zarr` must not bring it into scope.
-    @test isdefined(Zarr, :ZarrCore)
-    @test !Base.isexported(Zarr, :ZarrCore)
+    # `Zarr.ZarrCore` & co. are reachable, but `using Zarr` must not bring them
+    # into scope.
+    @test all(m -> isdefined(Zarr, nameof(m)), mods)
+    @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
 
-    # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
-    @test exported(Zarr) == exported(ZarrCore)
-    @test publiconly(Zarr) == publiconly(ZarrCore)
+    # `Zarr` mirrors the subpackages' combined API surface exactly, split intact.
+    @test exported(Zarr) == allexported
+    @test publiconly(Zarr) == allpublic
 
-    # The specific failure mode: a name that is only `public` in `ZarrCore` must
-    # not become an export of `Zarr`, and vice versa.
-    @test isempty(intersect(publiconly(ZarrCore), exported(Zarr)))
-    @test isempty(intersect(exported(ZarrCore), publiconly(Zarr)))
+    # The specific failure mode: a name that is only `public` in a subpackage
+    # must not become an export of `Zarr`, and vice versa.
+    @test isempty(intersect(allpublic, exported(Zarr)))
+    @test isempty(intersect(allexported, publiconly(Zarr)))
 
     # Version-independent: the two assertions above compare `names` against
     # `names`, so on 1.10 -- where `@public` expands to nothing and both
     # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
     # `PUBLIC_NAMES` is populated on every version, so this catches a facade
     # that silently drops the entire public API on LTS.
-    @test !isempty(ZarrCore.PUBLIC_NAMES)
-    @test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
+    # Checked on the union rather than per module: a subpackage whose whole API
+    # is exported has a legitimately empty registry (`ZarrS3` exports `S3Store`
+    # and marks nothing else public). What must never happen is the *combined*
+    # registry going empty, or a registered name not making it into `Zarr`.
+    @test !isempty(allregistry)
+    @test isempty(filter(n -> !isdefined(Zarr, n), allregistry))
 
     # Where both sources exist, they must agree -- otherwise LTS and 1.11+ would
     # drift apart again, which is exactly what the registry is there to prevent.
+    # Checked per module so a name registered in one but `public` in another
+    # cannot cancel out in the union.
     @static if VERSION >= v"1.11"
-        @test Set(ZarrCore.PUBLIC_NAMES) == publiconly(ZarrCore)
+        @test all(m -> Set(m.PUBLIC_NAMES) == publiconly(m), mods)
     end
 end
 
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -82,7 +98,7 @@ end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)

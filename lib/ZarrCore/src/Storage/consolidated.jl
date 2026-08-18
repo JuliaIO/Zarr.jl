@@ -128,6 +128,7 @@ end
 
 store_read_strategy(s::ConsolidatedStore) = store_read_strategy(s.parent)
 has_configurable_missing_chunks(s::ConsolidatedStore) = has_configurable_missing_chunks(s.parent)
+missing_chunk_return_code!(s::ConsolidatedStore, code) = missing_chunk_return_code!(s.parent, code)
 
 function consolidate_metadata(s::AbstractStore, d, prefix)
   for k in (".zattrs", ".zarray", ".zgroup")

@@ -26,13 +26,21 @@ Subtypes of `Codec` MAY also implement the following methods:
 - `zdecode!(data, encoded, c::Codec)`: decode the array `encoded` 
   using the codec `c` and store the result in the array `data`.
 
-Finally, an entry MUST be added to the `VN.codectypes` dictionary for each codec type where N is the
-Zarr format version.
-This must also follow the Zarr specification's name for that compressor.  The name of the compressor
-is the key, and the value is the compressor type (e.g. `BloscCodec` or `NoCodec`).
+Finally, each codec type MUST be registered in the registry for its Zarr format version, keyed by
+the name the Zarr specification gives that codec.  For v3 the registry is
+[`V3Codecs.codec_parsers`](@ref) and entries are added with
+[`V3Codecs.register_codec`](@ref), which takes the spec name, the codec type, and a parser function
+building the codec from its `"configuration"` dictionary.
 
-For example, the Blosc codec is named "blosc" in the Zarr spec, so the entry for [`BloscCodec`](@ref) 
-must be added to `codectypes` as `codectypes["blosc"] = BloscCodec`.
+For example, the Blosc codec is named "blosc" in the Zarr spec, so `ZarrBlosc.BloscV3Codec`
+is registered as `register_codec("blosc", BloscV3Codec) do config, ctx ... end`.
+
+!!! warning
+    A codec defined *outside* `ZarrCore` must call `register_codec` from its module's
+    `__init__`, not at top level. `codec_parsers` belongs to `ZarrCore`, and a mutation of
+    another package's global state made while a module body runs is discarded when the
+    precompiled image is written out -- silently, so the codec would simply be missing
+    from the registry in every fresh session.
 """
 
 abstract type Codec end

@@ -42,4 +42,4 @@ function getfilter(::Type{<: DeltaFilter}, d)
     return DeltaFilter{typestr(d["dtype"], haskey(d, "astype") ? typestr(d["astype"]) : d["dtype"])}()
 end
 
-filterdict["delta"] = DeltaFilter
+register_filter("delta", DeltaFilter)

@@ -29,20 +29,6 @@ abstract type AbstractStore end
 # Define the interface
 
 """
-    S3Store(bucket::String; aws=nothing)
- 
-An S3-backed Zarr store. Available after loading the `ZarrAWSS3Ext` extension.
-"""
-struct S3Store <: AbstractStore
-    bucket::String
-    aws::Any
-end
-
-function S3Store(args...)
-    error("AWSS3 must be loaded to use S3Store. Try `using AWSS3`.")
-end
-
-"""
     storagesize(d::AbstractStore, p::AbstractString)
 
 This function shall return the size of all data files in a store at path `p`.
@@ -76,7 +62,21 @@ function subdirs end
 
 Returns the keys of files in the given store.
 """
-function subkeys end 
+function subkeys end
+
+"""
+    cloud_list_objects(s::AbstractStore, p)
+
+List the objects and common prefixes stored under path `p` in an object-store
+backend, in whatever shape that backend's list API returns.
+
+This is the shared building block for [`subdirs`](@ref), [`subkeys`](@ref) and
+[`storagesize`](@ref) on cloud stores. The generic is declared here rather than
+next to any one implementation because the implementations live in different
+packages -- `GCStore` in ZarrGCS, `S3Store` in ZarrS3's `ZarrS3AWSS3Ext`
+extension -- and both have to add methods to the *same* function.
+"""
+function cloud_list_objects end
 
 # Function to construct the full path to a chunk given the base path, Cartesian Index i, and the chunk ecoding
 store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = s[p, citostring(e, i)]
@@ -231,6 +231,29 @@ Returns `false` by default. HTTP-based stores that support this should return `t
 """
 has_configurable_missing_chunks(::AbstractStore) = false
 
+"""
+    missing_chunk_return_code!(s::AbstractStore, code::Union{Integer,AbstractVector{<:Integer}})
+
+Extend the list of HTTP return codes that signal that a certain key in `s` is not
+available. Most data providers return code 404 for missing elements, but some use
+different return codes like 403. Use this to add the codes that signal a missing
+chunk for a particular server; see [`has_configurable_missing_chunks`](@ref) for
+whether a given store supports it.
+
+### Example
+
+````julia
+a = zopen("https://path/to/remote/array")
+missing_chunk_return_code!(a.storage, 403)
+````
+
+The generic is declared here, without any method, because its methods are spread
+across packages: `HTTPStore` implements it in ZarrHTTP while the wrapper stores
+that forward to it (`CachingStore`, `ConsolidatedStore`) stay in ZarrCore. Both
+sides have to add methods to the *same* function.
+"""
+function missing_chunk_return_code! end
+
 channelsize(s) = channelsize(store_read_strategy(s))
 channelsize(::SequentialRead) = 0
 channelsize(c::ConcurrentRead) = c.ntasks
@@ -289,14 +312,73 @@ isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 
 #Here different storage backends can register regexes that are checked against
 #during auto-check of storage format when doing zopen
-storageregexlist = Pair[]
-push!(storageregexlist, r"^s3://" => S3Store)
+
+"""
+    StoreRegexList <: AbstractVector{Pair}
+
+The registry backing [`storageregexlist`](@ref): a list of `Regex => storetype`
+pairs that [`storefromstring`](@ref) uses to guess a store type from a URL-like
+string.
+
+`storefromstring` walks the list and takes the **first** entry whose regex
+matches, so the order of the list decides the winner whenever several patterns
+match the same string -- e.g. both `r"^https://storage.googleapis.com"` and
+`r"^https://"` match a GCS URL, and only the former gives the right store.
+
+To keep that decision independent of the order in which backends happen to
+register themselves (which is not controllable once the backends live in
+separate packages that may be loaded in any order), entries are kept sorted
+most-specific-first instead of in insertion order. Specificity is approximated
+by the length of the regex pattern, on the grounds that a pattern which refines
+another one by spelling out more of the URL is the longer of the two. Entries of
+equal specificity keep their relative registration order.
+
+Backends register in the usual way and do not need to care about placement:
+
+```julia
+push!(storageregexlist, r"^myproto://" => MyStore)
+```
+"""
+struct StoreRegexList <: AbstractVector{Pair}
+  entries::Vector{Pair}
+end
+StoreRegexList() = StoreRegexList(Pair[])
+
+Base.size(l::StoreRegexList) = size(l.entries)
+Base.getindex(l::StoreRegexList, i::Int) = l.entries[i]
+Base.IndexStyle(::Type{StoreRegexList}) = IndexLinear()
+
+# How specific is a registered pattern? A longer pattern matches a subset of
+# what the shorter pattern it extends matches, which is all that is needed to
+# rank `r"^https://storage.googleapis.com"` above `r"^https://"`.
+_regex_specificity(r::Regex) = ncodeunits(r.pattern)
+_regex_specificity(x) = ncodeunits(string(x))
+_entry_specificity(p::Pair) = _regex_specificity(first(p))
+
+function _insert_by_specificity!(l::StoreRegexList, p::Pair, ties_first::Bool)
+  s = _entry_specificity(p)
+  i = if ties_first
+    findfirst(e -> _entry_specificity(e) <= s, l.entries)
+  else
+    findfirst(e -> _entry_specificity(e) < s, l.entries)
+  end
+  i === nothing ? push!(l.entries, p) : insert!(l.entries, i, p)
+  return l
+end
+
+Base.push!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, false)
+# `pushfirst!` used to be how a backend said "my pattern is more specific than
+# something already in the list". The ordering above does that now, so this is
+# only kept so existing registrations keep working; it differs from `push!`
+# solely in that it wins ties against equally specific entries.
+Base.pushfirst!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, true)
+
+const storageregexlist = StoreRegexList()
+# Deliberately empty: every URL-addressable backend now lives in a subpackage
+# (`ZarrS3`, `ZarrGCS`, `ZarrHTTP`) and registers itself from its `__init__`.
 
 #include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
-include("gcstore.jl")
 include("consolidated.jl")
-include("http.jl")
 include("cachingstore.jl")
-include("zipstore.jl")

@@ -5,7 +5,7 @@
     a .= reshape(1:200, 10, 20)
 
     # Start HTTP server
-    using Zarr.ZarrCore.HTTP, Sockets
+    using Zarr.ZarrHTTP.HTTP, Sockets
     server = Sockets.listen(0)
     ip, port = getsockname(server)
     @async HTTP.serve(g, ip, port,server=server)

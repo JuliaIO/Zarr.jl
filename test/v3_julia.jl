@@ -220,7 +220,7 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape;
     inner_pipeline = ZarrCore.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
-        (Zarr.Codecs.V3Codecs.GzipV3Codec(1),),
+        (Zarr.GzipV3Codec(1),),
     )
     index_bytes_bytes = index_crc32c ? (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),) : ()
     index_pipeline = ZarrCore.V3Pipeline(

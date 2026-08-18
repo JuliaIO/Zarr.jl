@@ -1,7 +1,6 @@
 module ZarrCore
 
 import JSON
-import Blosc
 import Unicode
 using OrderedCollections: OrderedDict
 
@@ -68,9 +67,8 @@ include("ZGroup.jl")
 include("caching.jl")
 
 import .Codecs: Codec
-import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec,
-    ShardingCodec, TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec,
-    CRC32cV3Codec, VLenUTF8V3Codec
+import .Codecs.V3Codecs: V3Codec, BytesCodec, CRC32cCodec,
+    ShardingCodec, TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec
 
 # ## Public API
 #
@@ -86,21 +84,24 @@ import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, zgroup, zarrcache,
   storagesize, storageratio, zinfo,
-  DirectoryStore, S3Store, GCStore
+  DirectoryStore
 
 @public zname, zopen_noerr
 
-# Stores. Every store type is public; `DirectoryStore`, `S3Store` and `GCStore`
-# are additionally exported for backwards compatibility.
-@public AbstractStore, DictStore, HTTPStore, ZipStore, CachingStore,
+# Stores. Every store type is public; `DirectoryStore` is additionally exported
+# for backwards compatibility. Stores that live in a subpackage (`ZipStore` in
+# ZarrZip, `HTTPStore` in ZarrHTTP, `GCStore` in ZarrGCS, `S3Store` in ZarrS3)
+# declare themselves public -- or, for `GCStore` and `S3Store`, exported --
+# over there.
+@public AbstractStore, DictStore, CachingStore,
     ConsolidatedStore, PermanentZarrCache
-@public consolidate_metadata, writezip
+@public consolidate_metadata
 
 # The interface a new store backend has to implement, see `?AbstractStore`.
 # (`storagesize` is part of it too, but is exported above.)
 @public subdirs, subkeys, isinitialized, storefromstring,
     store_read_strategy, SequentialRead, ConcurrentRead, storageregexlist,
-    cloud_list_objects, concurrent_io_tasks
+    cloud_list_objects, concurrent_io_tasks, missing_chunk_return_code!
 
 # Chunk key encodings and the registry used to add new ones.
 @public AbstractChunkKeyEncoding, ChunkKeyEncoding, SuffixChunkKeyEncoding,
@@ -110,17 +111,21 @@ export ZArray, ZGroup, zopen, zzeros, zcreate, zgroup, zarrcache,
 # Filters and the interface a new filter has to implement, see `?Filter`.
 @public Filter, VLenArrayFilter, VLenUTF8Filter, Fletcher32Filter,
     FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
-@public zencode, zdecode, getfilter, sourcetype, desttype, filterdict
+@public zencode, zdecode, getfilter, sourcetype, desttype, filterdict, register_filter
 
-# Compressors and the interface a new compressor has to implement.
-@public Compressor, NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor
+# Compressors and the interface a new compressor has to implement. The concrete
+# compressors live in subpackages (`BloscCompressor` in ZarrBlosc,
+# `ZlibCompressor` in ZarrZlib, `ZstdCompressor` in ZarrZstd) and declare
+# themselves public over there.
+@public Compressor, NoCompressor
 @public zcompress, zcompress!, zuncompress, zuncompress!, getCompressor,
-    compressortypes
+    compressortypes, DEFAULT_COMPRESSOR, v2_to_v3_codecs
 
 # v3 codecs and the interface a new codec has to implement, see `?Codec`.
-@public Codecs, Codec, V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec,
-    ShardingCodec, TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec,
-    CRC32cV3Codec, VLenUTF8V3Codec
+# Codecs that live in a subpackage (`BloscV3Codec`, `GzipV3Codec`,
+# `ZstdV3Codec`) declare themselves public over there.
+@public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec,
+    ShardingCodec, TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec
 
 # Data type and fill value encoding, needed to map Zarr dtypes to Julia types.
 # `DateTime64` is re-exported from DateTimes64.jl because it shows up as the

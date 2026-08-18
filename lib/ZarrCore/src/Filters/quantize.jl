@@ -49,4 +49,4 @@ function getfilter(::Type{<: QuantizeFilter}, d)
     return QuantizeFilter{typestr(d["dtype"], typestr(d["astype"]))}(; digits = d["digits"])
 end
 
-filterdict["quantize"] = QuantizeFilter
+register_filter("quantize", QuantizeFilter)

@@ -1,4 +1,4 @@
-function ZarrCore.S3Store(bucket::String;
+function ZarrS3.S3Store(bucket::String;
     aws = nothing,
   )
   if aws === nothing
@@ -85,7 +85,9 @@ end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
-# push!(storageregexlist,r"^s3://"=>S3Store)
+# `r"^s3://" => S3Store` is registered by `ZarrS3.__init__`, not here, so that
+# `zopen("s3://...")` without AWSS3 loaded reaches the friendly "load AWSS3"
+# error from the `S3Store` constructor instead of "no storage type matched".
 
 function ZarrCore.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)

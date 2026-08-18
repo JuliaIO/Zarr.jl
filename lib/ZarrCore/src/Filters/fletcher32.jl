@@ -21,7 +21,7 @@ end
 
 getfilter(::Type{<: Fletcher32Filter}, d::Dict) = Fletcher32Filter()
 JSON.lower(::Fletcher32Filter) = Dict("id" => "fletcher32")
-filterdict["fletcher32"] = Fletcher32Filter
+register_filter("fletcher32", Fletcher32Filter)
 
 function _checksum_fletcher32(data::AbstractArray{UInt8})
     len = length(data) ÷ 2 # length in 16-bit words
