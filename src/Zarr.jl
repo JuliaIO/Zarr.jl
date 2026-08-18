@@ -9,17 +9,17 @@ import ZarrCore
 # name in `PUBLIC_NAMES`. Taking the union keeps the surface identical on every
 # supported version; without it, every public-but-not-exported name would be
 # missing from `Zarr` on LTS.
-for name in union(names(ZarrCore; all = false), ZarrCore.PUBLIC_NAMES)
+
+for name in names(ZarrCore)
     if name !== :ZarrCore
         @eval import ZarrCore: $name
-    end
-    if Base.isexported(ZarrCore, name) && name !== :ZarrCore
-        @eval export $name
-    else
-        @static if VERSION >= v"1.11"
-            Core.eval(@__MODULE__, Expr(:public, name))
+    
+        if Base.isexported(ZarrCore, name)
+            @eval export $name
         end
     end
 end
-
+@static if VERSION >= v"1.11"
+    include("public_names_zarr.jl")
+end
 end
