@@ -280,17 +280,53 @@ end
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
   a .= reshape(1:200,10,20)
-  using Zarr.ZarrCore.HTTP, Sockets
-  server = Sockets.listen(0)
-  ip,port = getsockname(server)
-  @async HTTP.serve(g,ip,port,server=server)
-  g2 = zopen("http://$ip:$port")
+  using Zarr.ZarrCore.HTTP: HTTP
+  server = HTTP.serve!(g, "127.0.0.1", 0)
+  port = server.bound_port
+  g2 = zopen("http://127.0.0.1:$port")
   @test g2.attrs == Dict("groupatt"=>5)
   @test g2["a1"].attrs == Dict("arratt"=>2.5)
   @test g2["a1"][:,:] == reshape(1:200,10,20)
   
   close(server)
 
+  @testset "HTTP.serve and HTTP.serve! overloads" begin
+    # Test HTTP.serve! with (ZGroup, port), (ZGroup, host), and (ZGroup)
+    srv_gp = HTTP.serve!(g, 0)
+    @test srv_gp isa HTTP.Server
+    close(srv_gp)
+    srv_ghost = HTTP.serve!(g, "127.0.0.1"; listenany=true)
+    @test srv_ghost isa HTTP.Server
+    close(srv_ghost)
+    srv_gzero = HTTP.serve!(g; listenany=true)
+    @test srv_gzero isa HTTP.Server
+    close(srv_gzero)
+
+    # Test HTTP.serve! with (ZArray, host, port), (ZArray, port), and (ZArray)
+    srv_a = HTTP.serve!(a, "127.0.0.1", 0)
+    @test srv_a isa HTTP.Server
+    close(srv_a)
+    srv_ap = HTTP.serve!(a, 0)
+    @test srv_ap isa HTTP.Server
+    close(srv_ap)
+    srv_azero = HTTP.serve!(a; listenany=true)
+    @test srv_azero isa HTTP.Server
+    close(srv_azero)
+
+    # Test HTTP.serve! directly on AbstractStore with various argument shapes
+    srv_sp = HTTP.serve!(g.storage, g.path, "127.0.0.1", 0)
+    @test srv_sp isa HTTP.Server
+    close(srv_sp)
+    srv_shost = HTTP.serve!(g.storage, g.path, "127.0.0.1"; listenany=true)
+    @test srv_shost isa HTTP.Server
+    close(srv_shost)
+    srv_sport = HTTP.serve!(g.storage, g.path, 0)
+    @test srv_sport isa HTTP.Server
+    close(srv_sport)
+    srv_szero = HTTP.serve!(g.storage, g.path; listenany=true)
+    @test srv_szero isa HTTP.Server
+    close(srv_szero)
+  end
   @testset "HTTPStore construction and show" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test hs.url == "http://example.com"
@@ -335,11 +371,9 @@ end
     # We use a live local server so the ConsolidatedStore path can succeed.
     s2 = Zarr.DictStore()
     g2 = zgroup(s2)
-    server2 = Sockets.listen(0)
-    ip2, port2 = getsockname(server2)
-    @async HTTP.serve(g2, ip2, port2, server=server2)
-    sleep(0.1)
-    store, path = Zarr.storefromstring("http://$ip2:$port2")
+    server2 = HTTP.serve!(g2, "127.0.0.1", 0)
+    port2 = server2.bound_port
+    store, path = Zarr.storefromstring("http://127.0.0.1:$port2")
     @test store isa Zarr.ConsolidatedStore
     @test store.parent isa Zarr.HTTPStore
     @test path == ""
@@ -348,12 +382,10 @@ end
 
   @testset "storefromstring falls back gracefully without consolidated metadata" begin
     # A server with no .zmetadata should warn and return a bare HTTPStore
-    server3 = Sockets.listen(0)
-    ip3, port3 = getsockname(server3)
     # Serve only 404s
-    @async HTTP.serve(req -> HTTP.Response(404, "not found"), ip3, port3, server=server3)
-    sleep(0.1)
-    store, path = @test_warn r"Additional metadata was not available" Zarr.storefromstring("http://$ip3:$port3")
+    server3 = HTTP.serve!(req -> HTTP.Response(404, "not found"), "127.0.0.1", 0)
+    port3 = server3.bound_port
+    store, path = @test_warn r"Additional metadata was not available" Zarr.storefromstring("http://127.0.0.1:$port3")
     @test store isa Zarr.HTTPStore
     @test path == ""
     close(server3)
@@ -364,41 +396,35 @@ end
     g3 = zgroup(s3, attrs = Dict("x" => 1))
     a3 = zcreate(Int, g3, "b", 4, 4, chunks=(2,2))
     a3 .= reshape(1:16, 4, 4)
-    server4 = Sockets.listen(0)
-    ip4, port4 = getsockname(server4)
     # zarr_req_handler with default notfound=404
-    @async HTTP.serve(ZarrCore.zarr_req_handler(s3, g3.path), ip4, port4, server=server4)
-    sleep(0.1)
-    g4 = zopen("http://$ip4:$port4")
+    server4 = HTTP.serve!(ZarrCore.zarr_req_handler(s3, g3.path), "127.0.0.1", 0)
+    port4 = server4.bound_port
+    g4 = zopen("http://127.0.0.1:$port4")
     @test g4.attrs == Dict("x" => 1)
     @test g4["b"][:,:] == reshape(1:16, 4, 4)
     # A missing key should return nothing (404 is in the default allowed set)
-    hs4 = Zarr.HTTPStore("http://$ip4:$port4")
+    hs4 = Zarr.HTTPStore("http://127.0.0.1:$port4")
     @test hs4["nonexistent/chunk"] === nothing
     close(server4)
   end
 
   @testset "HTTPStore getindex error on unexpected status" begin
     # Server that always returns 500
-    server5 = Sockets.listen(0)
-    ip5, port5 = getsockname(server5)
-    @async HTTP.serve(req -> HTTP.Response(500, "internal error"), ip5, port5, server=server5)
-    sleep(0.1)
-    hs5 = Zarr.HTTPStore("http://$ip5:$port5")
+    server5 = HTTP.serve!(req -> HTTP.Response(500, "internal error"), "127.0.0.1", 0)
+    port5 = server5.bound_port
+    hs5 = Zarr.HTTPStore("http://127.0.0.1:$port5")
     @test_throws ErrorException hs5["any/key"]
     close(server5)
   end
 
   #Test server that returns 403 instead of 404 for missing chunks
   @testset "403 missing chunk workaround" begin
-    server6 = Sockets.listen(0)
-    ip6, port6 = getsockname(server6)
     s6 = Zarr.DictStore()
     g6 = zgroup(s6, attrs = Dict("groupatt"=>5))
     a6 = zcreate(Int, g6, "a", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5), fill_value=-1)
-    @async HTTP.serve(ZarrCore.zarr_req_handler(s6, g6.path, 403), ip6, port6, server=server6)
-    sleep(0.1)
-    httpstore6 = Zarr.HTTPStore("http://$ip6:$port6")
+    server6 = HTTP.serve!(ZarrCore.zarr_req_handler(s6, g6.path, 403), "127.0.0.1", 0)
+    port6 = server6.bound_port
+    httpstore6 = Zarr.HTTPStore("http://127.0.0.1:$port6")
     @test_throws "Received error code 403" Zarr.ConsolidatedStore(httpstore6, "")
     ZarrCore.missing_chunk_return_code!(httpstore6, 403)
     g7 = zopen(Zarr.ConsolidatedStore(httpstore6, ""))
@@ -462,15 +488,13 @@ end
   a .= reshape(1:200, 10, 20)
 
   # Start HTTP server
-  using Zarr.ZarrCore.HTTP, Sockets
-  server = Sockets.listen(0)
-  ip, port = getsockname(server)
-  @async HTTP.serve(g, ip, port, server=server)
-  sleep(0.5)  # wait for server to start
+  using Zarr.ZarrCore.HTTP: HTTP
+  server = HTTP.serve!(g, "127.0.0.1", 0)
+  port = server.bound_port
 
   # Create caching store with temp cache directory
   cache_dir = mktempdir()
-  caching_store = Zarr.CachingStore("http://$ip:$port", cache_dir)
+  caching_store = Zarr.CachingStore("http://127.0.0.1:$port", cache_dir)
 
   # Wrap in ConsolidatedStore (like HTTPStore requires)
   consolidated = Zarr.ConsolidatedStore(caching_store, "")
