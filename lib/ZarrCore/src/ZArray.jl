@@ -145,7 +145,7 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
   # temporary workaround to use strings as data values
-  inner = fill(z.metadata.fill_value, z.metadata.chunks)
+  inner = fill(z.metadata.fill_value, DiskArrays.max_chunksize.(z.metadata.chunks.chunks))
   a = SenMissArray(inner, z.metadata.fill_value)
 end
 _zero(T) = zero(T)
@@ -180,7 +180,7 @@ resetbuffer!(_, a::SenMissArray) = fill!(a, missing)
 # coverage check is needed.
 function singlechunk_fastpath(arr, z::ZArray{T,N}, blockr::CartesianIndices{N}) where {T,N}
   arr isa Array{T,N} && !(Missing <: T) &&
-  size(arr) == z.metadata.chunks && length(blockr) == 1 || return nothing
+  size(arr) == DiskArrays.max_chunksize.(z.metadata.chunks.chunks) && length(blockr) == 1 || return nothing
   return first(blockr)
 end
 
@@ -210,7 +210,7 @@ end
 # fastpath guarantees `ain` is the caller's input array, not the shared
 # scratch buffer the multi-chunk path reuses across iterations.
 function write_singlechunk_fastpath!(
-  z::ZArray{T,N,<:AbstractStore,<:MetadataV2{T,N,NoCompressor,Nothing}},
+  z::ZArray{T,N,<:AbstractStore,<:MetadataV2{T,N,NoCompressor,Nothing,<:DiskArrays.GridChunks{N}}},
   ain::Array{T,N}, bI::CartesianIndex,
 ) where {T,N}
   fv = z.metadata.fill_value
@@ -232,7 +232,6 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
   output_base_offsets = map(i->first(i)-1, r.indices)
   # Determines which chunks are affected
   blockr = CartesianIndices(map(DiskArrays.findchunk, z.metadata.chunks.chunks, r.indices))
-  @show blockr
   # Fast path: single-chunk full-read decodes directly into `aout`, skipping the readtask channel and scratch buffer.
   bI = singlechunk_fastpath(aout, z, blockr)
   if bI !== nothing
@@ -510,7 +509,7 @@ end
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
+chunkindices(z::ZArray) = CartesianIndices(map(length, z.metadata.chunks.chunks))
 
 """
     zzeros(T, dims...; kwargs... )
@@ -587,11 +586,16 @@ function Base.append!(z::ZArray{<:Any,N}, a; dims=N) where N
   nothing
 end
 
-function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_key_encoding)
+function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks::DiskArrays.GridChunks, chunk_key_encoding)
+  # Resizing/pruning is only well-defined for regular chunk grids.
+  any(c -> c isa DiskArrays.IrregularChunks, chunks.chunks) &&
+    throw(ArgumentError("Resizing arrays with irregular chunk grids is not supported"))
   dimstoshorten = findall(map(<, newsize, oldsize))
   for idim in dimstoshorten
-    delrange = (fld1(newsize[idim], chunks[idim])+1):(fld1(oldsize[idim], chunks[idim]))
-    allchunkranges = map(i->1:fld1(oldsize[i], chunks[i]), 1:length(oldsize))
+    nchunks_new = DiskArrays.findchunk(chunks.chunks[idim], max(newsize[idim], 1))
+    nchunks_old = DiskArrays.findchunk(chunks.chunks[idim], oldsize[idim])
+    delrange = (nchunks_new + 1):nchunks_old
+    allchunkranges = map(i -> 1:DiskArrays.findchunk(chunks.chunks[i], oldsize[i]), 1:length(oldsize))
     r = (allchunkranges[1:(idim-1)]..., delrange, allchunkranges[(idim+1):end]...)
     for cI in CartesianIndices(r)
       store_deletechunk(s, path, cI, chunk_key_encoding)

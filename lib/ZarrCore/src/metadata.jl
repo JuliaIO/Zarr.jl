@@ -1,5 +1,6 @@
 import Dates: Date, DateTime
 using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring
+using DiskArrays: GridChunks
 
 """NumPy array protocol type string (typestr) format
 
@@ -107,24 +108,24 @@ Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
 """Metadata for Zarr version 2 arrays"""
-struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,ChunkKeyEncoding}
+struct MetadataV2{T,N,C,F,CT<:GridChunks{N}} <: AbstractMetadata{T,N,ChunkKeyEncoding}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N,Int}}
-    chunks::NTuple{N,Int}
+    chunks::CT
     dtype::String  # structured data types not yet supported
     compressor::C
     fill_value::Union{T,Nothing}
     order::Char
     filters::F  # not yet supported
     chunk_key_encoding::ChunkKeyEncoding
-    function MetadataV2{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding) where {T2,N,C,F}
+    function MetadataV2{T2,N,C,F,CT}(zarr_format, node_type, shape, chunks::CT, dtype, compressor, fill_value, order, filters, chunk_key_encoding) where {T2,N,C,F,CT<:GridChunks{N}}
         zarr_format == 2 || throw(ArgumentError("MetadataV2 only functions if zarr_format == 2"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
-        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+        any(<(1), DiskArrays.max_chunksize.(chunks.chunks)) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
+        new{T2,N,C,F,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
     end
 end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
@@ -169,7 +170,7 @@ function Metadata(A::AbstractArray{T,N}, chunks, zarr_format=DV;
 end
 
 # V2 constructor
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
+function Metadata(A::AbstractArray{T,N}, chunks::Union{NTuple{N,Int},GridChunks{N}}, ::ZarrFormat{2};
     node_type::String="array",
     compressor::C=BloscCompressor(),
     fill_value::Union{T,Nothing}=nothing,
@@ -179,7 +180,10 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
     chunk_key_encoding=ChunkKeyEncoding('.', false)
 ) where {T,N,C,F}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-    MetadataV2{T2,N,C,typeof(filters)}(
+    if chunks isa NTuple
+        chunks = GridChunks(size(A), chunks)
+    end
+    MetadataV2{T2,N,C,typeof(filters),typeof(chunks)}(
         2,
         node_type,
         size(A),
@@ -229,11 +233,14 @@ function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{2})
 
     dim_sep = only(get(d, "dimension_separator", '.'))
 
-    MetadataV2{TU,N,C,F}(
+    shape_jl = NTuple{N,Int}(d["shape"]) |> reverse
+    chunks_tuple = NTuple{N,Int}(d["chunks"]) |> reverse
+    chunks_jl = GridChunks(shape_jl, chunks_tuple)
+    MetadataV2{TU,N,C,F,typeof(chunks_jl)}(
         d["zarr_format"],
         node_type,
-        NTuple{N,Int}(d["shape"]) |> reverse,
-        NTuple{N,Int}(d["chunks"]) |> reverse,
+        shape_jl,
+        chunks_jl,
         d["dtype"],
         compressor,
         fv,
@@ -250,7 +257,7 @@ function JSON.lower(md::MetadataV2)
         "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
-        "chunks" => md.chunks |> reverse,
+        "chunks" => reverse(DiskArrays.max_chunksize.(md.chunks.chunks)),
         "dtype" => md.dtype,
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
