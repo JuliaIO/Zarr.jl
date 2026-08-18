@@ -40,8 +40,6 @@ using Dates
     # Version-independent: the two assertions above compare `names` against
     # `names`, so on 1.10 -- where `@public` expands to nothing and both
     # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    #@test !isempty(ZarrCore.PUBLIC_NAMES)
-    #@test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
     @test all(isdefined.(Ref(Zarr), [:zname])   )
     @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
     @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
