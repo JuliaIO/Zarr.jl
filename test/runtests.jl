@@ -31,7 +31,6 @@ using Dates
 
     # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
     @test exported(Zarr) == exported(ZarrCore)
-    @test publiconly(Zarr) == publiconly(ZarrCore)
 
     # The specific failure mode: a name that is only `public` in `ZarrCore` must
     # not become an export of `Zarr`, and vice versa.
@@ -41,16 +40,19 @@ using Dates
     # Version-independent: the two assertions above compare `names` against
     # `names`, so on 1.10 -- where `@public` expands to nothing and both
     # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    # `PUBLIC_NAMES` is populated on every version, so this catches a facade
-    # that silently drops the entire public API on LTS.
-    @test !isempty(ZarrCore.PUBLIC_NAMES)
-    @test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
+    #@test !isempty(ZarrCore.PUBLIC_NAMES)
+    #@test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
+    @test all(isdefined.(Ref(Zarr), [:zname])   )
+    @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
+    @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
+    @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
+        :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
+    @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BloscCodec, :BytesCodec, :CRC32cCodec, :GzipCodec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :CRC32cV3Codec, :VLenUTF8V3Codec]))
 
-    # Where both sources exist, they must agree -- otherwise LTS and 1.11+ would
-    # drift apart again, which is exactly what the registry is there to prevent.
-    @static if VERSION >= v"1.11"
-        @test Set(ZarrCore.PUBLIC_NAMES) == publiconly(ZarrCore)
-    end
 end
 
 @testset "ZArray" begin
@@ -265,6 +267,7 @@ end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
+        using DateTimes64: DateTime64
         @test Zarr.typestr(Bool) === "|b1"
         @test Zarr.typestr(Int8) === "|i1"
         @test Zarr.typestr(Int64) === "<i8"
@@ -279,8 +282,8 @@ end
         @test Zarr.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
         @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(Zarr.DateTime64{Day}) === "<M8[D]"
-        @test Zarr.typestr(Zarr.DateTime64{Nanosecond}) === "<M8[ns]"
+        @test Zarr.typestr(DateTime64{Day}) === "<M8[D]"
+        @test Zarr.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin

@@ -60,6 +60,7 @@ end
 end
 
 @testset "ShuffleFilter" begin
+    using DateTimes64: DateTime64
 
     codecs = [
         ShuffleFilter(),

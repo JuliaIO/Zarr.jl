@@ -270,12 +270,13 @@ end
 
 @testset "Python datetime types" begin
 using Dates, Test, Zarr, PythonCall
+using DateTimes64: DateTime64
 vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
 vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
 ad = ZArray(vd)
 at = ZArray(vt)
-@test eltype(ad)==Zarr.DateTime64{Day} 
-@test eltype(at)==Zarr.DateTime64{Millisecond}
+@test eltype(ad)==DateTime64{Day} 
+@test eltype(at)==DateTime64{Millisecond}
 @test DateTime.(at[:]) == vt[:]
 @test Date.(ad[:]) == vd[:]
 
@@ -286,11 +287,11 @@ for pt in [Week, Day, Hour, Minute, Second,
     
     if pt <: DatePeriod
         vd = range(Date(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     else
         vd = range(DateTime(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     end
 end
