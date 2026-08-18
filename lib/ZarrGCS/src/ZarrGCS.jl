@@ -22,17 +22,8 @@ import JSON
 # `f(...)` definition would silently create a new `ZarrGCS.f` that shadows the
 # generic instead of adding a method to it, and `zopen` would then never see it.
 import ZarrCore
-using ZarrCore: @public, AbstractStore, ConcurrentRead, concurrent_io_tasks,
+using ZarrCore: AbstractStore, ConcurrentRead, concurrent_io_tasks,
     storageregexlist
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
 
 const GOOGLE_STORAGE_API = "https://storage.googleapis.com"
 const GOOGLE_STORAGE_REST_API = GOOGLE_STORAGE_API * "/storage/v1"
@@ -202,6 +193,8 @@ end
 # `GCStore` was exported by `ZarrCore` before it moved here, so it is exported
 # (not just public) to keep `using Zarr; GCStore` working.
 export GCStore
-@public gcs_credentials
+@static if VERSION >= v"1.11"
+    include("public_names_gcs.jl")
+end
 
 end # module

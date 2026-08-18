@@ -16,16 +16,7 @@ import ZipArchives
 # `f(...)` definition would silently create a new `ZarrZip.f` that shadows the
 # generic instead of adding a method to it, and `zopen` would then never see it.
 import ZarrCore
-using ZarrCore: @public, AbstractStore, ZArray, ZGroup, subdirs, subkeys
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
+using ZarrCore: AbstractStore, ZArray, ZGroup, subdirs, subkeys
 
 """
     ZipStore
@@ -128,6 +119,8 @@ end
 # `ZipStore` has no `storageregexlist` entry (a zip archive is not addressable
 # by a URL scheme), so there is nothing to register at load time and this module
 # deliberately has no `__init__`.
-@public ZipStore, writezip
+@static if VERSION >= v"1.11"
+    include("public_names_zip.jl")
+end
 
 end # module

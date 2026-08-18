@@ -20,18 +20,9 @@ import JSON # for JSON.lower
 # create a new `ZarrBlosc.f` that shadows the generic instead of adding a
 # method to it, and nothing in ZarrCore would ever see it.
 import ZarrCore
-using ZarrCore: @public, Compressor
+using ZarrCore: Compressor
 using ZarrCore.Codecs: V3Codecs
 using ZarrCore.Codecs.V3Codecs: V3Codec
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
 
 # ## Zarr v2: `BloscCompressor`
 
@@ -156,6 +147,8 @@ function __init__()
     end
 end
 
-@public BloscCompressor, BloscV3Codec
+@static if VERSION >= v"1.11"
+    include("public_names_blosc.jl")
+end
 
 end # module

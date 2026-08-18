@@ -20,18 +20,9 @@ using ChunkCodecCore: encode, decode, decode!
 # create a new `ZarrZstd.f` that shadows the generic instead of adding a method
 # to it, and nothing in ZarrCore would ever see it.
 import ZarrCore
-using ZarrCore: @public, Compressor
+using ZarrCore: Compressor
 using ZarrCore.Codecs: V3Codecs
 using ZarrCore.Codecs.V3Codecs: V3Codec
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
 
 # `reinterpret` needs a 1-based, non-zero-dimensional array; a 0-d chunk has to
 # be reshaped first. Kept local rather than shared, so that this package depends
@@ -128,6 +119,8 @@ function __init__()
     end
 end
 
-@public ZstdCompressor, ZstdV3Codec
+@static if VERSION >= v"1.11"
+    include("public_names_zstd.jl")
+end
 
 end # module

@@ -28,16 +28,7 @@ module ZarrS3
 # `f(...)` definition would silently create a new function that shadows the
 # generic instead of adding a method to it.
 import ZarrCore
-using ZarrCore: @public, AbstractStore, storageregexlist
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
+using ZarrCore: AbstractStore, storageregexlist
 
 """
     S3Store(bucket::String; aws=nothing)
@@ -75,5 +66,9 @@ end
 # `S3Store` was exported by `ZarrCore` before it moved here, so it is exported
 # (not just public) to keep `using Zarr; S3Store` working.
 export S3Store
+
+@static if VERSION >= v"1.11"
+    include("public_names_s3.jl")
+end
 
 end # module

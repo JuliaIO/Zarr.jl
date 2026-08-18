@@ -30,14 +30,87 @@ the documented escape hatch to internals: public, but never exported.
 """
 const REEXPORTED_MODULES = (ZarrCore, ZarrHTTP, ZarrGCS, ZarrS3, ZarrZip, ZarrBlosc, ZarrZlib, ZarrZstd)
 
+"""
+    Zarr._public_names_file(mod) -> Union{String,Nothing}
+
+Path of the `public_names_*.jl` that `mod` keeps next to its entry point, or
+`nothing` if it has none.
+
+Every package declares its public-but-not-exported names in exactly one such
+file (`public_names_core.jl`, `public_names_zip.jl`, ...), so the lookup is a
+`readdir` of the module's own source directory and needs no registration.
+"""
+function _public_names_file(mod::Module)
+    local dir
+    if mod === @__MODULE__
+        dir = @__DIR__
+    else
+        path = pathof(mod)
+        path === nothing && return nothing
+        dir = dirname(path)
+    end
+    isdir(dir) || return nothing
+    for f in readdir(dir)
+        if startswith(f, "public_names_") && endswith(f, ".jl")
+            return joinpath(dir, f)
+        end
+    end
+    return nothing
+end
+
+"""
+    Zarr._declared_public_names(mod) -> Vector{Symbol}
+
+The public-but-not-exported names `mod` declares in its `public_names_*.jl`.
+
+Those files hold nothing but bare `public` statements and are `include`d only
+under `@static if VERSION >= v"1.11"`, because `public` is not a keyword before
+that -- Julia 1.10 can neither parse the statements nor report the names through
+`names(mod)`. This function recovers them anyway: it rewrites the leading
+`public` of each statement into a macro call (same shape, parseable on every
+version), parses the result, and reads the symbols straight off the expression.
+Nothing is evaluated, and no macro named in the rewrite has to exist.
+
+It is what keeps the facade identical on LTS and on 1.11+: the re-export loop
+below uses it in place of the public half of `names(mod)`, which is empty on
+1.10. Without it every public-but-not-exported name would silently vanish from
+`Zarr` there.
+"""
+function _declared_public_names(mod::Module)
+    file = _public_names_file(mod)
+    file === nothing && return Symbol[]
+    src = replace(read(file, String), r"(?m)^public\b" => "@_public_names")
+    syms = Symbol[]
+    for stmt in Meta.parseall(src).args
+        stmt isa Expr && stmt.head === :macrocall || continue
+        stmt.args[1] === Symbol("@_public_names") || continue
+        arg = stmt.args[3]
+        if arg isa Symbol
+            push!(syms, arg)
+        elseif arg isa Expr && arg.head === :tuple
+            append!(syms, Iterators.filter(a -> a isa Symbol, arg.args))
+        end
+    end
+    return syms
+end
+
+# The names `Zarr` takes over from one subpackage: everything `names` reports
+# on 1.11+, and the same set reconstructed from the declaration file on 1.10.
+@static if VERSION >= v"1.11"
+    _reexported_names(mod::Module) = names(mod; all = false)
+else
+    _reexported_names(mod::Module) =
+        union(names(mod; all = false), _declared_public_names(mod))
+end
+
 # Mirror each subpackage's export/public split. Internals stay at
 # `Zarr.<Subpackage>.foo`.
 #
-# `names` reports exported *and* public names, but only from Julia 1.11 on --
-# 1.10 has no `public` keyword, so every subpackage additionally records its
-# `@public` names in its own `PUBLIC_NAMES`. Taking the union keeps the surface
-# identical on every supported version; without it, every public-but-not-exported
-# name would be missing from `Zarr` on LTS.
+# Exports are re-exported as exports. Everything else is only *imported*, so the
+# binding exists (`Zarr.typestr` works) without `using Zarr` dragging it into
+# scope; which of those names `Zarr` itself advertises as public is decided by
+# `public_names_zarr.jl` at the bottom of this file, and is deliberately a
+# smaller, user-facing subset of the extension API the subpackages declare.
 let seen = Set{Symbol}()
     for mod in REEXPORTED_MODULES
         modname = nameof(mod)
@@ -45,16 +118,12 @@ let seen = Set{Symbol}()
         @static if VERSION >= v"1.11"
             Core.eval(@__MODULE__, Expr(:public, modname))
         end
-        for name in union(names(mod; all = false), mod.PUBLIC_NAMES)
+        for name in _reexported_names(mod)
             name in seen && continue
             push!(seen, name)
             @eval import $modname: $name
             if Base.isexported(mod, name)
                 @eval export $name
-            else
-                @static if VERSION >= v"1.11"
-                    Core.eval(@__MODULE__, Expr(:public, name))
-                end
             end
         end
     end
@@ -69,6 +138,13 @@ end
 # discarded when the precompiled image is written out.
 function __init__()
     ZarrCore.DEFAULT_COMPRESSOR[] = ZarrBlosc.BloscCompressor()
+end
+
+# `Zarr`'s own public API: the user-facing subset of what the subpackages
+# declare. Nothing to do on 1.10, which has no `public` -- the bindings are
+# already in place, and `names()` could not report them either way.
+@static if VERSION >= v"1.11"
+    include("public_names_zarr.jl")
 end
 
 end

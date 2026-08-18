@@ -16,11 +16,13 @@ using Dates
     # These tests pin that split down so it cannot regress silently.
     #
     # `Zarr` is a facade over N subpackages (`ZarrCore`, `ZarrZip`, ...), so its
-    # API surface is the *union* of theirs. Deriving `mods` from the facade's own
-    # list means extracting another subpackage needs no change here.
+    # export surface is the *union* of theirs, while its public surface is the
+    # deliberately smaller, user-facing list in `src/public_names_zarr.jl`.
+    # Deriving `mods` from the facade's own list means extracting another
+    # subpackage needs no change here.
     #
     # On Julia 1.10 there is no `public`, so `names` yields only exports and the
-    # public-only sets are empty; the assertions still hold. The final pair of
+    # public-only sets are empty; the assertions still hold. The last group of
     # tests covers what that blind spot hides.
     # A module always lists its own name, and `Zarr` additionally carries a
     # binding for each subpackage (public, so `Zarr.ZarrCore` is a documented
@@ -30,43 +32,61 @@ using Dates
     modnames = Set((:Zarr, map(nameof, mods)...))
     exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
     publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+    # What each module *declares* in its `public_names_*.jl`. Unlike `names`,
+    # this is readable on every supported Julia version, which is the whole
+    # point of keeping the declarations in a file.
+    declared(m) = setdiff(Set(Zarr._declared_public_names(m)), modnames)
     allexported = mapreduce(exported, union, mods)
     allpublic = mapreduce(publiconly, union, mods)
-    allregistry = mapreduce(m -> m.PUBLIC_NAMES, union, mods)
+    alldeclared = mapreduce(declared, union, mods)
 
     # `Zarr.ZarrCore` & co. are reachable, but `using Zarr` must not bring them
     # into scope.
     @test all(m -> isdefined(Zarr, nameof(m)), mods)
     @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
 
-    # `Zarr` mirrors the subpackages' combined API surface exactly, split intact.
+    # `Zarr` mirrors the subpackages' combined export surface exactly.
     @test exported(Zarr) == allexported
-    @test publiconly(Zarr) == allpublic
 
     # The specific failure mode: a name that is only `public` in a subpackage
     # must not become an export of `Zarr`, and vice versa.
     @test isempty(intersect(allpublic, exported(Zarr)))
     @test isempty(intersect(allexported, publiconly(Zarr)))
 
-    # Version-independent: the two assertions above compare `names` against
-    # `names`, so on 1.10 -- where `@public` expands to nothing and both
-    # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    # `PUBLIC_NAMES` is populated on every version, so this catches a facade
-    # that silently drops the entire public API on LTS.
-    # Checked on the union rather than per module: a subpackage whose whole API
-    # is exported has a legitimately empty registry (`ZarrS3` exports `S3Store`
-    # and marks nothing else public). What must never happen is the *combined*
-    # registry going empty, or a registered name not making it into `Zarr`.
-    @test !isempty(allregistry)
-    @test isempty(filter(n -> !isdefined(Zarr, n), allregistry))
-
-    # Where both sources exist, they must agree -- otherwise LTS and 1.11+ would
-    # drift apart again, which is exactly what the registry is there to prevent.
-    # Checked per module so a name registered in one but `public` in another
-    # cannot cancel out in the union.
     @static if VERSION >= v"1.11"
-        @test all(m -> Set(m.PUBLIC_NAMES) == publiconly(m), mods)
+        # Every module's declaration file is exactly what `names` reports for it,
+        # so the two sources can never drift apart.
+        @test all(m -> declared(m) == publiconly(m), mods)
+        @test declared(Zarr) == publiconly(Zarr)
+        # `Zarr`'s public API is the user-facing *subset* of the extension API
+        # the subpackages declare -- never something they do not make public.
+        @test issubset(publiconly(Zarr), allpublic)
     end
+
+    # Version-independent: the assertions above compare `names` against `names`,
+    # so on 1.10 -- where there is no `public` and every public-only set is
+    # empty -- they pass no matter what `Zarr` re-exports. The declaration files
+    # are readable on every version, so these catch a facade that silently drops
+    # the public API on LTS.
+    # Checked on the union rather than per module: a subpackage whose whole API
+    # is exported has a legitimately empty file (`ZarrS3` exports `S3Store` and
+    # declares nothing else public). What must never happen is the *combined*
+    # set going empty, or a declared name not making it into `Zarr`.
+    @test !isempty(alldeclared)
+    @test isempty(filter(n -> !isdefined(Zarr, n), alldeclared))
+    @test !isempty(declared(Zarr))
+    @test isempty(filter(n -> !isdefined(Zarr, n), declared(Zarr)))
+
+    @test all(isdefined.(Ref(Zarr), [:zname]))
+    @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip, :missing_chunk_return_code!, :gcs_credentials]))
+    @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
+    @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
+        :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
+    @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :CRC32cV3Codec, :VLenUTF8V3Codec]))
 end
 
 @testset "ZArray" begin
@@ -281,6 +301,7 @@ end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
+        using DateTimes64: DateTime64
         @test Zarr.typestr(Bool) === "|b1"
         @test Zarr.typestr(Int8) === "|i1"
         @test Zarr.typestr(Int64) === "<i8"
@@ -295,8 +316,8 @@ end
         @test Zarr.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
         @test Zarr.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
         @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(Zarr.DateTime64{Day}) === "<M8[D]"
-        @test Zarr.typestr(Zarr.DateTime64{Nanosecond}) === "<M8[ns]"
+        @test Zarr.typestr(DateTime64{Day}) === "<M8[D]"
+        @test Zarr.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin

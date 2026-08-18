@@ -12,24 +12,14 @@ This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
 module ZarrHTTP
 
 using HTTP: HTTP
-using OpenSSL: OpenSSL
 
 # Only the names that are used unqualified live here. Methods that *extend* a
 # ZarrCore generic are always written as `ZarrCore.f(...)` below: writing a bare
 # `f(...)` definition would silently create a new `ZarrHTTP.f` that shadows the
 # generic instead of adding a method to it, and `zopen` would then never see it.
 import ZarrCore
-using ZarrCore: @public, AbstractStore, ZArray, ZGroup, ConsolidatedStore,
+using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore,
     ConcurrentRead, concurrent_io_tasks, consolidate_metadata, storageregexlist
-
-"""
-    PUBLIC_NAMES::Vector{Symbol}
-
-Every name this module declares with `ZarrCore.@public`, in declaration order.
-See `ZarrCore.PUBLIC_NAMES` -- this registry is per-module and is what lets the
-`Zarr` facade re-export the public API on Julia 1.10, which has no `public`.
-"""
-const PUBLIC_NAMES = Symbol[]
 
 """
     HTTPStore
@@ -49,7 +39,7 @@ end
 Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
 
 function Base.getindex(s::HTTPStore, k::String)
-    r = HTTP.request("GET", string(s.url, "/", k), status_exception = false, socket_type_tls = OpenSSL.SSLStream)
+    r = HTTP.request("GET", string(s.url, "/", k), status_exception = false)
     if r.status >= 300
         if r.status in s.allowed_codes
             nothing
@@ -123,7 +113,16 @@ end
 
 
 HTTP.serve(s::AbstractStore, p, args...; kwargs...) = HTTP.serve(zarr_req_handler(s,p),args...;kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, args...; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), args...; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, host::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), host, port_num; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, host::AbstractString; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), host; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), port_num; kwargs...)
+
 HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
+HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, host, port_num; kwargs...)
+HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString; kwargs...) = HTTP.serve!(s.storage, s.path, host; kwargs...)
+HTTP.serve!(s::Union{ZArray,ZGroup}, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, port_num; kwargs...)
+HTTP.serve!(s::Union{ZArray,ZGroup}; kwargs...) = HTTP.serve!(s.storage, s.path; kwargs...)
 
 # The registry lives in `ZarrCore`, so the entries have to be added at *load*
 # time, not at precompile time: a mutation of another package's global state
@@ -138,6 +137,8 @@ function __init__()
     push!(storageregexlist, r"^http://" => HTTPStore)
 end
 
-@public HTTPStore
+@static if VERSION >= v"1.11"
+    include("public_names_http.jl")
+end
 
 end # module
