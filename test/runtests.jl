@@ -276,6 +276,8 @@ end
         @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
         @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt32}) === Zarr.MaxLengthString{6,UInt32}("")
         @test Zarr.fill_value_decoding(nothing, Zarr.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding(Any[0.0, 0.0], ComplexF64) === ComplexF64(0.0, 0.0)
+        @test Zarr.fill_value_decoding(Any[1.5, -2.5], ComplexF32) === ComplexF32(1.5, -2.5)
     end
 end
 
