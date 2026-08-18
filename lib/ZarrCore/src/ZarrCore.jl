@@ -49,6 +49,6 @@ export ZArray, ZGroup, zopen, zzeros, zcreate, zgroup, zarrcache,
   DirectoryStore, S3Store, GCStore
 
 @static if VERSION >= v"1.11"
-    include("public_names.jl")
+    include("public_names_core.jl")
   end
 end # module

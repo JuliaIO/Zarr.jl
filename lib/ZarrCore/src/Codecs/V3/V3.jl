@@ -823,14 +823,8 @@ function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shap
     out
 end
 
-# The codec types themselves are re-exported (as public names) from `ZarrCore`;
-# these are the extension points for defining and registering new v3 codecs.
-import ...ZarrCore: @public
-const PUBLIC_NAMES = Symbol[]  # `@public` records here; see `?ZarrCore.@public`
-@public V3Codec, getCodec, register_codec, codec_parsers, codec_encode,
-    codec_decode, is_fixed_size, name
-@public BloscCodec, BytesCodec, CRC32cCodec, GzipCodec, ShardingCodec,
-    TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
-    VLenUTF8V3Codec
+@static if VERSION ≥ v"1.11"
+    include("public_names_v3.jl")
+end
 
 end
