@@ -3,6 +3,7 @@
 ## Unreleased
 - Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
+- Fix complex fill values in python interop tests [#316](https://github.com/JuliaIO/Zarr.jl/pull/316)
 
 ## v0.10.1 - 2026-07-07
 
