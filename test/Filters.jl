@@ -1,5 +1,5 @@
 using Test
-using Zarr: DateTime64 # for datetime reinterpret
+using DateTime64s: DateTime64 # for datetime reinterpret
 
 using Zarr: zencode, zdecode
 using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
