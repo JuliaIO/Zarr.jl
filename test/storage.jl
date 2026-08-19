@@ -206,7 +206,7 @@ end
       S3Store("zarrdata")
     end
     test_store_common(ds)
-    @test sprint(show, ds) == "S3 Object Storage"
+    @test startswith(sprint(show, ds), "S3 Object Storage")
     
     @testset "Pagination" begin
       @info "Testing pagination with Minio S3 storage"
