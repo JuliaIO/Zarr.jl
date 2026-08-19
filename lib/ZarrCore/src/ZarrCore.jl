@@ -37,7 +37,7 @@ import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec
 # The rule of thumb is: anything a downstream consumer could need, and every
 # documented extension point, is part of the public API. `export` is reserved
 # for the handful of names that are convenient to have in scope after
-# `using Zarr`; everything else is marked `@public` and must be qualified.
+# `using Zarr`; everything else is marked `public` and must be qualified.
 #
 # Things that are deliberately *not* public (and may change without notice):
 # `Metadata`/`MetadataV2`/`MetadataV3`, `ZarrFormat`, `is_zarray`, `is_zgroup`,

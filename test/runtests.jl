@@ -266,22 +266,22 @@ end
 @testset "Metadata" begin
     @testset "Data type encoding" begin
         using DateTimes64: DateTime64
-        @test Zarr.typestr(Bool) === "|b1"
-        @test Zarr.typestr(Int8) === "|i1"
-        @test Zarr.typestr(Int64) === "<i8"
-        @test Zarr.typestr(UInt8) === "|u1"
-        @test Zarr.typestr(UInt32) === "<u4"
-        @test Zarr.typestr(UInt128) === "<u16"
-        @test Zarr.typestr(Complex{Float32}) === "<c8"
-        @test Zarr.typestr(Complex{Float64}) === "<c16"
-        @test Zarr.typestr(Float16) === "<f2"
-        @test Zarr.typestr(Float64) === "<f8"
-        @test Zarr.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
-        @test Zarr.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
-        @test Zarr.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
-        @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(DateTime64{Day}) === "<M8[D]"
-        @test Zarr.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
+        @test ZarrCore.typestr(Bool) === "|b1"
+        @test ZarrCore.typestr(Int8) === "|i1"
+        @test ZarrCore.typestr(Int64) === "<i8"
+        @test ZarrCore.typestr(UInt8) === "|u1"
+        @test ZarrCore.typestr(UInt32) === "<u4"
+        @test ZarrCore.typestr(UInt128) === "<u16"
+        @test ZarrCore.typestr(Complex{Float32}) === "<c8"
+        @test ZarrCore.typestr(Complex{Float64}) === "<c16"
+        @test ZarrCore.typestr(Float16) === "<f2"
+        @test ZarrCore.typestr(Float64) === "<f8"
+        @test ZarrCore.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
+        @test ZarrCore.typestr(Vector{Int64}) === "|O"
+        @test ZarrCore.typestr(DateTime64{Day}) === "<M8[D]"
+        @test ZarrCore.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin
