@@ -19,7 +19,7 @@ end
 else
     # For Julia 1.10, we have to parse the public names from the source file, since
     # `public` is not a keyword and `names(ZarrCore)` only returns exported names.
-    let public_names = read(joinpath(@__DIR__, "public_names_zarr.jl"), String)
+    let public_names = read(joinpath(@__DIR__, "..", "lib", "ZarrCore", "public_names_zarr.jl"), String)
         public_names = replace(public_names, "public" => "using ZarrCore: ")
         eval(Meta.parseall(public_names))
     end
