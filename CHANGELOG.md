@@ -9,7 +9,6 @@
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
 - Add more informative show method for S3Store [#320](https://github.com/JuliaIO/Zarr.jl/pull/320/)
 - Fix complex fill values in python interop tests [#316](https://github.com/JuliaIO/Zarr.jl/pull/316)
-
 - Remove lru keyword from zopen, should use DiskArrays.cache instead
 
 ## v0.10.1 - 2026-07-07
