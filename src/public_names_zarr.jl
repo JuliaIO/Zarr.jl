@@ -21,3 +21,6 @@ public Compressor, NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor
 public Codecs, Codec, V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec,
     ShardingCodec, TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec,
     CRC32cV3Codec, VLenUTF8V3Codec
+
+# Data type and fill value encoding, needed to map Zarr dtypes to Julia types.
+public typestr, fill_value_encoding, fill_value_decoding
