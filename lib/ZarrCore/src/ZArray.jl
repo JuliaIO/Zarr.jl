@@ -99,7 +99,7 @@ function zinfo(io::IO, z::ZArray)
     "Type" => "ZArray",
     "Data type" => eltype(z),
     "Shape" => size(z),
-    "Chunk Shape" => z.metadata.chunks,
+    "Chunk Shape" => eachchunk(z),
     "Order" => try
       get_order(z.metadata)
     catch e
@@ -145,7 +145,7 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
   # temporary workaround to use strings as data values
-  inner = fill(z.metadata.fill_value, DiskArrays.max_chunksize.(z.metadata.chunks.chunks))
+  inner = fill(z.metadata.fill_value, DiskArrays.max_chunksize.(eachchunk(z).chunks))
   a = SenMissArray(inner, z.metadata.fill_value)
 end
 _zero(T) = zero(T)
@@ -153,7 +153,7 @@ _zero(T::Type{<:MaxLengthString}) = zero(T)
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
 _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
-getchunkarray(z::ZArray) = fill(_zero(eltype(z)), DiskArrays.max_chunksize.(z.metadata.chunks.chunks))
+getchunkarray(z::ZArray) = fill(_zero(eltype(z)), DiskArrays.max_chunksize.(eachchunk(z).chunks))
 
 # Same as `getchunkarray` but skips the zero/fill_value-fill. Use only when
 # the caller guarantees the buffer will be fully overwritten before any read
@@ -165,7 +165,7 @@ getchunkarray(z::ZArray) = fill(_zero(eltype(z)), DiskArrays.max_chunksize.(z.me
 # friends reject non-isbits eltypes).
 function getchunkarray_undef(z::ZArray{T}) where {T}
   Missing <: T && return getchunkarray(z)
-  return Array{T}(undef, DiskArrays.max_chunksize.(z.metadata.chunks.chunks))
+  return Array{T}(undef, DiskArrays.max_chunksize.(eachchunk(z).chunks))
 end
 
 maybeinner(a::Array) = a
@@ -180,7 +180,7 @@ resetbuffer!(_, a::SenMissArray) = fill!(a, missing)
 # coverage check is needed.
 function singlechunk_fastpath(arr, z::ZArray{T,N}, blockr::CartesianIndices{N}) where {T,N}
   arr isa Array{T,N} && !(Missing <: T) &&
-  size(arr) == DiskArrays.max_chunksize.(z.metadata.chunks.chunks) && length(blockr) == 1 || return nothing
+  size(arr) == DiskArrays.max_chunksize.(eachchunk(z).chunks) && length(blockr) == 1 || return nothing
   return first(blockr)
 end
 
@@ -231,7 +231,7 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
 
   output_base_offsets = map(i->first(i)-1, r.indices)
   # Determines which chunks are affected
-  blockr = CartesianIndices(map(DiskArrays.findchunk, z.metadata.chunks.chunks, r.indices))
+  blockr = CartesianIndices(map(DiskArrays.findchunk, eachchunk(z).chunks, r.indices))
   # Fast path: single-chunk full-read decodes directly into `aout`, skipping the readtask channel and scratch buffer.
   bI = singlechunk_fastpath(aout, z, blockr)
   if bI !== nothing
@@ -276,7 +276,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
   z.writeable || error("Can not write to read-only ZArray")
   input_base_offsets = map(i->first(i)-1, r.indices)
   # Determines which chunks are affected
-  blockr = CartesianIndices(map(DiskArrays.findchunk, z.metadata.chunks.chunks, r.indices))
+  blockr = CartesianIndices(map(DiskArrays.findchunk, eachchunk(z).chunks, r.indices))
   # Fast path: single-chunk full-overwrite skips the readtask/writetask channels and the scratch buffer.
   bI = singlechunk_fastpath(ain, z, blockr)
   if bI !== nothing
@@ -342,7 +342,7 @@ end
 DiskArrays.readblock!(a::ZArray, aout, i::AbstractUnitRange...) = readblock!(aout, a, CartesianIndices(i))
 DiskArrays.writeblock!(a::ZArray, v, i::AbstractUnitRange...) = writeblock!(v, a, CartesianIndices(i))
 DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
-DiskArrays.eachchunk(a::ZArray) = a.metadata.chunks
+DiskArrays.eachchunk(a::ZArray) = a.metadata.chunks[]
 
 """
     uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
@@ -376,7 +376,7 @@ function uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, c
 end
 
 function compress_raw(a, z)
-  length(a) == prod(DiskArrays.max_chunksize.(z.metadata.chunks.chunks)) || throw(DimensionMismatch("Array size does not equal chunk size"))
+  length(a) == prod(DiskArrays.max_chunksize.(eachchunk(z).chunks)) || throw(DimensionMismatch("Array size does not equal chunk size"))
   pipeline_encode(get_pipeline(z.metadata), a, z.metadata.fill_value)
 end
 
@@ -509,7 +509,7 @@ end
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(map(length, z.metadata.chunks.chunks))
+chunkindices(z::ZArray) = CartesianIndices(map(length, eachchunk(z).chunks))
 
 """
     zzeros(T, dims...; kwargs... )
@@ -518,15 +518,18 @@ Creates a zarr array and initializes all values with zero. Accepts the same keyw
 """
 function zzeros(T, dims...; kwargs...)
   z = zcreate(T, dims...; kwargs...)
-  # as = zeros(T, DiskArrays.max_chunksize.(z.metadata.chunks.chunks))
-  # data_encoded = compress_raw(as, z)
-  # p = z.path
-  # if data_encoded !== nothing
-  #   for i in chunkindices(z)
-  #     store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_key_encoding)
-  #   end
-  # end
-  z .= zero(T)
+  if all(i->isa(i, RegularChunks), eachchunk(z).chunks)
+    as = zeros(T, DiskArrays.max_chunksize.(eachchunk(z).chunks))
+    data_encoded = compress_raw(as, z)
+    p = z.path
+    if data_encoded !== nothing
+      for i in chunkindices(z)
+        store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_key_encoding)
+      end
+    end
+  else
+    z .= zero(T)
+  end
   z
 end
 
@@ -541,9 +544,14 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   any(<(0), newsize) && throw(ArgumentError("Size must be positive"))
   oldsize = z.metadata.shape[]
   z.metadata.shape[] = newsize
+  gc = z.metadata.chunks[].chunks
+  new_chunks = map(gc, newsize) do c, s
+    c isa DiskArrays.RegularChunks ? DiskArrays.RegularChunks(c.chunksize, c.offset, s) : c
+  end
+  z.metadata.chunks[] = DiskArrays.GridChunks(new_chunks)
   #Check if array was shrunk
   if any(map(<, newsize, oldsize))
-    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_key_encoding)
+    prune_oob_chunks(z.storage, z.path, oldsize, newsize, eachchunk(z), z.metadata.chunk_key_encoding)
   end
   writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
   nothing

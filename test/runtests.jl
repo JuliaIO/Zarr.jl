@@ -5,6 +5,7 @@ using JSON
 using JSON: json
 using Pkg
 using Dates
+using DiskArrays: GridChunks, DiskArrays, RegularChunks
 
 
 @testset "Zarr" begin
@@ -56,7 +57,7 @@ end
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing,GridChunks{2,Tuple{RegularChunks,RegularChunks}}}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -65,7 +66,7 @@ end
         @test z.metadata.node_type === "array"
         @test z.metadata.shape[] === (2, 3)
         @test z.metadata.order === 'C'
-        @test z.metadata.chunks === (2, 3)
+            @test z.metadata.chunks[] === GridChunks((2, 3), (2, 3))
         @test z.metadata.fill_value === nothing
         @test z.metadata.compressor isa Zarr.BloscCompressor
         @test z.metadata.compressor.blocksize === 0
@@ -82,7 +83,7 @@ end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing,GridChunks{2,Tuple{RegularChunks,RegularChunks}}}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)
@@ -290,7 +291,7 @@ end
         @test metadata isa ZarrCore.Metadata
         @test metadata.zarr_format === 2
         @test metadata.shape[] === size(A)
-        @test metadata.chunks === chunks
+            @test metadata.chunks[] === GridChunks(size(A), chunks)
         @test metadata.dtype === "<f8"
         @test metadata.compressor === Zarr.BloscCompressor(0, 5, "lz4", true)
         @test metadata.fill_value === -1.5

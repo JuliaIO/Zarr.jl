@@ -69,7 +69,7 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding,CT<:G
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N,Int}}
-    chunks::CT
+    chunks::Base.RefValue{CT}
     dtype::Union{String,Dict{String,Any}}  # data_type in v3
     pipeline::P
     fill_value::Union{T,Nothing}
@@ -79,10 +79,9 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding,CT<:G
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         all(((c, s),)->DiskArrays.arraysize_from_chunksize(c) == s, zip(chunks.chunks, shape)) || error("Chunk array does not have the same size as the array shape")
-        new{T2,N,P,E,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+        new{T2,N,P,E,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), Ref(chunks), dtype, pipeline, fill_value, chunk_key_encoding)
     end
 end
-MetadataV3{T2,N,P}(args...) where {T2,N,P} = MetadataV3{T2,N,P,ChunkKeyEncoding}(args...)
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
 
 """
@@ -111,7 +110,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks,
         typesize = sizeof(T_base)
     end
     if chunks isa Tuple
-        chunks = GridChunks(size(A), chunks)
+        chunks = GridChunks(shape, chunks)
     end
     bytes_bytes_codecs = if compressor isa NoCompressor
         ()
@@ -134,7 +133,7 @@ function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
     m1.zarr_format == m2.zarr_format &&
         m1.node_type == m2.node_type &&
         m1.shape[] == m2.shape[] &&
-        m1.chunks == m2.chunks &&
+        m1.chunks[] == m2.chunks[] &&
         m1.dtype == m2.dtype &&
         m1.fill_value == m2.fill_value &&
         m1.pipeline == m2.pipeline &&
@@ -345,12 +344,12 @@ end
 function lower3(md::MetadataV3{T}) where T
 
 
-    chunk_grid = if any(i->isa(i, IrregularChunks), md.chunks.chunks)
+    chunk_grid = if any(i->isa(i, IrregularChunks), md.chunks[].chunks)
         Dict{String,Any}(
             "name" => "rectilinear",
             "configuration" => Dict{String,Any}(
                 "kind" => "inline",
-                "chunk_shapes" => map(reverse(md.chunks.chunks)) do c
+                "chunk_shapes" => map(reverse(md.chunks[].chunks)) do c
                     if c isa RegularChunks
                         c.chunksize
                     else
@@ -363,7 +362,7 @@ function lower3(md::MetadataV3{T}) where T
         Dict{String,Any}(
             "name" => "regular",
             "configuration" => Dict{String,Any}(
-                "chunk_shape" => reverse(DiskArrays.max_chunksize.(md.chunks.chunks))
+                "chunk_shape" => reverse(DiskArrays.max_chunksize.(md.chunks[].chunks))
             )
         )
     end

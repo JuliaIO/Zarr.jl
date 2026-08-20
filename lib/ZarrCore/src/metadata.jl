@@ -112,7 +112,7 @@ struct MetadataV2{T,N,C,F,CT<:GridChunks{N}} <: AbstractMetadata{T,N,ChunkKeyEnc
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N,Int}}
-    chunks::CT
+    chunks::Base.RefValue{CT}
     dtype::String  # structured data types not yet supported
     compressor::C
     fill_value::Union{T,Nothing}
@@ -125,7 +125,7 @@ struct MetadataV2{T,N,C,F,CT<:GridChunks{N}} <: AbstractMetadata{T,N,ChunkKeyEnc
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), DiskArrays.max_chunksize.(chunks.chunks)) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
+        new{T2,N,C,F,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), Ref(chunks), dtype, compressor, fill_value, order, filters, chunk_key_encoding)
     end
 end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
@@ -138,7 +138,7 @@ function Base.:(==)(m1::MetadataV2, m2::MetadataV2)
     m1.zarr_format == m2.zarr_format &&
         m1.node_type == m2.node_type &&
         m1.shape[] == m2.shape[] &&
-        m1.chunks == m2.chunks &&
+        m1.chunks[] == m2.chunks[] &&
         m1.dtype == m2.dtype &&
         m1.compressor == m2.compressor &&
         m1.fill_value == m2.fill_value &&
@@ -257,7 +257,7 @@ function JSON.lower(md::MetadataV2)
         "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
-        "chunks" => reverse(DiskArrays.max_chunksize.(md.chunks.chunks)),
+        "chunks" => reverse(DiskArrays.max_chunksize.(md.chunks[].chunks)),
         "dtype" => md.dtype,
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),

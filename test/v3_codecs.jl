@@ -203,9 +203,11 @@ end
     let bad_blosc = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, 99, 0, 4),
         bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec(),
         bad_pipeline = ZarrCore.V3Pipeline((), bytes_codec, (bad_blosc,))
-        bad_md = ZarrCore.MetadataV3{Int32,1,typeof(bad_pipeline)}(
-            3, "array", (4,), (4,), "int32", bad_pipeline, Int32(0),
-            Zarr.ChunkKeyEncoding('/', true)
+            ch = ZarrCore.DiskArrays.GridChunks((4,), (4,))
+            cke = Zarr.ChunkKeyEncoding('/', true)
+            bad_md = ZarrCore.MetadataV3{Int32,1,typeof(bad_pipeline),typeof(cke),typeof(ch)}(
+                3, "array", (4,), ch, "int32", bad_pipeline, Int32(0),
+                cke
         )
         @test_throws ArgumentError JSON.lower(bad_md)
     end
@@ -324,9 +326,11 @@ end
     tc = Zarr.Codecs.V3Codecs.TransposeCodec((2, 1, 3))
     bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
     pipeline = ZarrCore.V3Pipeline((tc,), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(pipeline)}(
-        3, "array", (2,3,4), (2,3,4), "int32", pipeline, Int32(0),
-        Zarr.ChunkKeyEncoding('/', true)
+        ch = DiskArrays.GridChunks((2, 3, 4), (2, 3, 4))
+        cke = Zarr.ChunkKeyEncoding('/', true)
+        md = ZarrCore.MetadataV3{Int32,3,typeof(pipeline),typeof(cke),typeof(ch)}(
+            3, "array", (2, 3, 4), ch, "int32", pipeline, Int32(0),
+            cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -353,8 +357,9 @@ end
     crc32c_codec = Zarr.Codecs.V3Codecs.CRC32cV3Codec()
     bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
     pipeline = ZarrCore.V3Pipeline((), bytes_codec, (crc32c_codec,))
-    md = ZarrCore.MetadataV3{Int32,1,typeof(pipeline),Zarr.ChunkKeyEncoding}(
-        3, "array", (4,), (4,), "int32", pipeline, Int32(0),
+        ch = DiskArrays.GridChunks((4,), (4,))
+        md = ZarrCore.MetadataV3{Int32,1,typeof(pipeline),Zarr.ChunkKeyEncoding,typeof(ch)}(
+            3, "array", (4,), ch, "int32", pipeline, Int32(0),
         Zarr.ChunkKeyEncoding('/', true)
     )
     store = Zarr.DictStore()
