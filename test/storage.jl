@@ -7,11 +7,11 @@ using AWSS3
 @testset "Path Normalization" begin
     mixed_path = ".\\\\path///to\\a\\place/..\\///"
     norm_path = "path/to/a"
-    @test Zarr.normalize_path(mixed_path) == norm_path
+    @test ZarrCore.normalize_path(mixed_path) == norm_path
     @test Zarr.DirectoryStore(mixed_path).folder == norm_path
-    @test Zarr.normalize_path("/") == "/"
-    @test Zarr.normalize_path("/a/") == "/a"
-    @test Zarr.normalize_path("/path/to/a") == "/path/to/a"
+    @test ZarrCore.normalize_path("/") == "/"
+    @test ZarrCore.normalize_path("/a/") == "/a"
+    @test ZarrCore.normalize_path("/path/to/a") == "/path/to/a"
 end
 
 @testset "Version and Dimension Separator" begin
@@ -43,24 +43,24 @@ end
 Function to test the interface of AbstractStore. Every complete implementation should pass this test.
 """
 function test_store_common(ds::Zarr.AbstractStore)
-  V = Zarr.DV
-  enc = Zarr.ChunkKeyEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
+  V = ZarrCore.DV
+  enc = Zarr.ChunkKeyEncoding(ZarrCore.default_sep(V), ZarrCore.default_prefix(V))
 
-  @test !Zarr.is_zgroup(V, ds, "")
+  @test !ZarrCore.is_zgroup(V, ds, "")
   ds[".zgroup"]=rand(UInt8,50)
   @test haskey(ds,".zgroup")
 
-  @test Zarr.is_zgroup(V, ds, "")
-  @test !Zarr.is_zarray(V, ds, "")
+  @test ZarrCore.is_zgroup(V, ds, "")
+  @test !ZarrCore.is_zarray(V, ds, "")
 
   @test isempty(Zarr.subdirs(ds,""))
   @test sort(collect(Zarr.subkeys(ds,"")))==[".zgroup"]
 
   #Create a subgroup
-  @test !Zarr.is_zarray(V, ds, "bar")
+  @test !ZarrCore.is_zarray(V, ds, "bar")
   ds["bar/.zarray"] = rand(UInt8,50)
 
-  @test Zarr.is_zarray(V, ds, "bar")
+  @test ZarrCore.is_zarray(V, ds, "bar")
   @test Zarr.subdirs(ds,"") == ["bar"]
   @test Zarr.subdirs(ds,"bar") == String[]
   #Test getindex and setindex
@@ -73,19 +73,19 @@ function test_store_common(ds::Zarr.AbstractStore)
   @test Zarr.storagesize(ds,"bar")==50
   @test Zarr.isinitialized(ds,"bar/" * first_ci_str)
   @test !Zarr.isinitialized(ds,"bar/" * second_ci_str)
-  Zarr.writeattrs(V, ds, "bar", Dict("a" => "b"))
-  @test Zarr.getattrs(V, ds, "bar") == Dict("a" => "b")
+  ZarrCore.writeattrs(V, ds, "bar", Dict("a" => "b"))
+  @test ZarrCore.getattrs(V, ds, "bar") == Dict("a" => "b")
   delete!(ds,"bar/" * first_ci_str)
-  @test !Zarr.store_isinitialized(ds, "bar", CartesianIndex((1, 1, 1)), enc)
+  @test !ZarrCore.store_isinitialized(ds, "bar", CartesianIndex((1, 1, 1)), enc)
   @test !Zarr.isinitialized(ds,"bar/" * first_ci_str)
   ds["bar/" * first_ci_str] = data
-  @test !Zarr.store_isinitialized(ds, "bar", CartesianIndex(0, 0, 0), enc)
-  @test Zarr.store_isinitialized(ds, "bar", CartesianIndex(1, 1, 1), enc)
+  @test !ZarrCore.store_isinitialized(ds, "bar", CartesianIndex(0, 0, 0), enc)
+  @test ZarrCore.store_isinitialized(ds, "bar", CartesianIndex(1, 1, 1), enc)
   #Add tests for empty storage
-  @test Zarr.isemptysub(ds,"ba")
-  @test Zarr.isemptysub(ds,"ba/")
-  @test !Zarr.isemptysub(ds,"bar")
-  @test !Zarr.isemptysub(ds,"bar/")
+  @test ZarrCore.isemptysub(ds,"ba")
+  @test ZarrCore.isemptysub(ds,"ba/")
+  @test !ZarrCore.isemptysub(ds,"bar")
+  @test !ZarrCore.isemptysub(ds,"bar/")
 end
 
 """
@@ -96,11 +96,11 @@ Function to test the interface of a read only AbstractStore. Every complete impl
 `closer` is a function that gets called to close the read only store.
 """
 function test_read_only_store_common(converter, closer=Returns(nothing))
-  V = Zarr.DV
-  enc = Zarr.ChunkKeyEncoding(Zarr.default_sep(V), Zarr.default_prefix(V))
+  V = ZarrCore.DV
+  enc = Zarr.ChunkKeyEncoding(ZarrCore.default_sep(V), ZarrCore.default_prefix(V))
   ds = Zarr.DictStore()
   rs = converter(ds)
-  @test !Zarr.is_zgroup(V, rs, "")
+  @test !ZarrCore.is_zgroup(V, rs, "")
 
   closer(rs)
   ds[".zgroup"]=rand(UInt8,50)
@@ -108,20 +108,20 @@ function test_read_only_store_common(converter, closer=Returns(nothing))
 
   @test haskey(rs,".zgroup")
 
-  @test Zarr.is_zgroup(V, rs, "")
-  @test !Zarr.is_zarray(V, rs, "")
+  @test ZarrCore.is_zgroup(V, rs, "")
+  @test !ZarrCore.is_zarray(V, rs, "")
 
   @test isempty(Zarr.subdirs(rs,""))
   @test sort(collect(Zarr.subkeys(rs,"")))==[".zgroup"]
 
   #Create a subgroup
-  @test !Zarr.is_zarray(V, rs, "bar")
+  @test !ZarrCore.is_zarray(V, rs, "bar")
 
   closer(rs)
   ds["bar/.zarray"] = rand(UInt8,50)
   rs = converter(ds)
 
-  @test Zarr.is_zarray(V, rs, "bar")
+  @test ZarrCore.is_zarray(V, rs, "bar")
   @test Zarr.subdirs(rs,"") == ["bar"]
   @test Zarr.subdirs(rs,"bar") == String[]
   #Test getindex and setindex
@@ -137,16 +137,16 @@ function test_read_only_store_common(converter, closer=Returns(nothing))
   @test !Zarr.isinitialized(rs,"bar/0.0.1")
 
   closer(rs)
-  Zarr.writeattrs(V, ds, "bar", Dict("a" => "b"))
+  ZarrCore.writeattrs(V, ds, "bar", Dict("a" => "b"))
   rs = converter(ds)
 
-  @test Zarr.getattrs(V, rs, "bar") == Dict("a" => "b")
+  @test ZarrCore.getattrs(V, rs, "bar") == Dict("a" => "b")
 
   closer(rs)
   delete!(ds,"bar/0.0.0")
   rs = converter(ds)
 
-  @test !Zarr.store_isinitialized(rs, "bar", CartesianIndex((0, 0, 0)), enc)
+  @test !ZarrCore.store_isinitialized(rs, "bar", CartesianIndex((0, 0, 0)), enc)
   @test !Zarr.isinitialized(rs,"bar/0.0.0")
 
   closer(rs)
@@ -154,17 +154,17 @@ function test_read_only_store_common(converter, closer=Returns(nothing))
   rs = converter(ds)
 
   #Add tests for empty storage
-  @test Zarr.isemptysub(rs,"ba")
-  @test Zarr.isemptysub(rs,"ba/")
-  @test !Zarr.isemptysub(rs,"bar")
-  @test !Zarr.isemptysub(rs,"bar/")
+  @test ZarrCore.isemptysub(rs,"ba")
+  @test ZarrCore.isemptysub(rs,"ba/")
+  @test !ZarrCore.isemptysub(rs,"bar")
+  @test !ZarrCore.isemptysub(rs,"bar/")
   closer(rs)
 end
 
 @testset "DirectoryStore" begin
   A = fill(1.0, 30, 20)
   chunks = (5,10)
-  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  metadata = ZarrCore.Metadata(A, chunks; fill_value=-1.5)
   p = tempname()
   mkpath(joinpath(p,"foo"))
   ds = Zarr.DirectoryStore(joinpath(p,"foo"))
@@ -182,7 +182,7 @@ end
 @testset "DictStore" begin
   A = fill(1.0, 30, 20)
   chunks = (5,10)
-  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  metadata = ZarrCore.Metadata(A, chunks; fill_value=-1.5)
   ds = Zarr.DictStore()
   test_store_common(ds)
   @test haskey(ds.a,".zgroup")
@@ -195,7 +195,7 @@ end
   @info "Testing Minio S3 storage"
   A = fill(1.0, 30, 20)
   chunks = (5,10)
-  metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
+  metadata = ZarrCore.Metadata(A, chunks; fill_value=-1.5)
   using Minio
   if !isnothing(Minio.minio())
     s = Minio.Server(joinpath("./",tempname()), address="localhost:9001")
@@ -230,12 +230,12 @@ end
 end
 
 @testset "AWS S3 Storage" begin
-  V = Zarr.DV
+  V = ZarrCore.DV
   @info "Testing AWS S3 storage"
   S3, p = AWSS3.AWS.with_aws_config(AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2")) do
     Zarr.storefromstring("s3://mur-sst/zarr-v1")
   end
-  @test Zarr.is_zgroup(V, S3, p)
+  @test ZarrCore.is_zgroup(V, S3, p)
   @test storagesize(S3, p) == 10551
   S3group = zopen(S3,path=p)
   S3Array = S3group["time"]
@@ -280,7 +280,7 @@ end
   g = zgroup(s, attrs = Dict("groupatt"=>5))
   a = zcreate(Int,g,"a1",10,20,chunks=(5,5),attrs=Dict("arratt"=>2.5))
   a .= reshape(1:200,10,20)
-  using Zarr.HTTP: HTTP
+  using Zarr.ZarrCore.HTTP: HTTP
   server = HTTP.serve!(g, "127.0.0.1", 0)
   port = server.bound_port
   g2 = zopen("http://127.0.0.1:$port")
@@ -340,10 +340,10 @@ end
   @testset "missing_chunk_return_code! on HTTPStore" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test 403 ∉ hs.allowed_codes
-    Zarr.missing_chunk_return_code!(hs, 403)
+    ZarrCore.missing_chunk_return_code!(hs, 403)
     @test 403 ∈ hs.allowed_codes
     # Vector form
-    Zarr.missing_chunk_return_code!(hs, [410, 451])
+    ZarrCore.missing_chunk_return_code!(hs, [410, 451])
     @test 410 ∈ hs.allowed_codes
     @test 451 ∈ hs.allowed_codes
   end
@@ -352,18 +352,18 @@ end
     hs = Zarr.HTTPStore("http://example.com")
     # Build a ConsolidatedStore wrapping the HTTPStore directly
     cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
-    Zarr.missing_chunk_return_code!(cs, 403)
+    ZarrCore.missing_chunk_return_code!(cs, 403)
     @test 403 ∈ hs.allowed_codes
   end
 
   @testset "store_read_strategy and has_configurable_missing_chunks" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test Zarr.store_read_strategy(hs) isa Zarr.ConcurrentRead
-    @test Zarr.has_configurable_missing_chunks(hs) == true
+    @test ZarrCore.has_configurable_missing_chunks(hs) == true
     # ConsolidatedStore delegates both to parent
     cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
     @test Zarr.store_read_strategy(cs) isa Zarr.ConcurrentRead
-    @test Zarr.has_configurable_missing_chunks(cs) == true
+    @test ZarrCore.has_configurable_missing_chunks(cs) == true
   end
 
   @testset "storefromstring HTTP/HTTPS regex" begin
@@ -397,7 +397,7 @@ end
     a3 = zcreate(Int, g3, "b", 4, 4, chunks=(2,2))
     a3 .= reshape(1:16, 4, 4)
     # zarr_req_handler with default notfound=404
-    server4 = HTTP.serve!(Zarr.zarr_req_handler(s3, g3.path), "127.0.0.1", 0)
+    server4 = HTTP.serve!(ZarrCore.zarr_req_handler(s3, g3.path), "127.0.0.1", 0)
     port4 = server4.bound_port
     g4 = zopen("http://127.0.0.1:$port4")
     @test g4.attrs == Dict("x" => 1)
@@ -422,11 +422,11 @@ end
     s6 = Zarr.DictStore()
     g6 = zgroup(s6, attrs = Dict("groupatt"=>5))
     a6 = zcreate(Int, g6, "a", 10, 20, chunks=(5,5), attrs=Dict("arratt"=>2.5), fill_value=-1)
-    server6 = HTTP.serve!(Zarr.zarr_req_handler(s6, g6.path, 403), "127.0.0.1", 0)
+    server6 = HTTP.serve!(ZarrCore.zarr_req_handler(s6, g6.path, 403), "127.0.0.1", 0)
     port6 = server6.bound_port
     httpstore6 = Zarr.HTTPStore("http://127.0.0.1:$port6")
     @test_throws "Received error code 403" Zarr.ConsolidatedStore(httpstore6, "")
-    Zarr.missing_chunk_return_code!(httpstore6, 403)
+    ZarrCore.missing_chunk_return_code!(httpstore6, 403)
     g7 = zopen(Zarr.ConsolidatedStore(httpstore6, ""))
     @test all(==(-1), g7["a"][:,:])
     close(server6)
@@ -467,18 +467,18 @@ end
           "attributes" => Dict{String,Any}("foo" => "bar")
       )
   ))
-  @test Zarr.getattrs(Zarr.ZarrFormat(3), store, "") == Dict("foo" => "bar")
+  @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), store, "") == Dict("foo" => "bar")
 
   # zarr.json present but no "attributes" key: fallback return Dict{String,Any}()
   node_meta = Dict{String,Any}("node_type" => "group", "zarr_format" => 3)
   store_noattrs = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}(
       "zarr.json" => node_meta
   ))
-  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_noattrs, "") == Dict{String,Any}()
+  @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), store_noattrs, "") == Dict{String,Any}()
 
   # missing zarr.json key entirely: empty dict
   store_empty = Zarr.ConsolidatedStore(Zarr.DictStore(), "", Dict{String,Any}())
-  @test Zarr.getattrs(Zarr.ZarrFormat(3), store_empty, "") == Dict{String,Any}()
+  @test ZarrCore.getattrs(ZarrCore.ZarrFormat(3), store_empty, "") == Dict{String,Any}()
 end
 @testset "Caching Storage" begin
   # Create source data
@@ -488,6 +488,7 @@ end
   a .= reshape(1:200, 10, 20)
 
   # Start HTTP server
+  using Zarr.ZarrCore.HTTP: HTTP
   server = HTTP.serve!(g, "127.0.0.1", 0)
   port = server.bound_port
 

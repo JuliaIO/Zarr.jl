@@ -198,7 +198,7 @@ Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s;
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
     zarr_format = d["zarr_format"]::Int
-    zarr_format ∉ (2, 3) && throw(ArgumentError("Zarr.jl currently only supports v2 or v3 of the specification"))
+    zarr_format ∉ (2, 3) && throw(ArgumentError("ZarrCore.jl currently only supports v2 or v3 of the specification"))
     return Metadata(d, fill_as_missing, ZarrFormat(zarr_format))
 end
 
@@ -284,7 +284,7 @@ fill_value_decoding(v::Nothing, ::Any) = v
 fill_value_decoding(v, T) = T(v)
 fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
-fill_value_decoding(v::Nothing, ::Type{Zarr.ASCIIChar}) = v
+fill_value_decoding(v::Nothing, ::Type{ZarrCore.ASCIIChar}) = v
 fill_value_decoding(v::Vector, T::Type{<:Complex}) = T(v[1], v[2])
 # Sometimes when translating between CF (climate and forecast) convention data
 # and Zarr groups, fill values are left as "negative integers" to encode unsigned

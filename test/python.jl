@@ -29,8 +29,9 @@ groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribut
 g = zgroup(pjulia,attrs=groupattrs)
 
 # Test all supported data types and compressors
-import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor, MaxLengthString, 
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor,
        Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
+import Zarr: ZarrCore
 using Random: randstring
 numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
     Int8, Int16, Int32, Int64,
@@ -38,7 +39,7 @@ numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
     Complex{Float32}, Complex{Float64},
     Bool,)
 dtypes = (numeric_dtypes...,
-    MaxLengthString{10,UInt8},MaxLengthString{10,UInt32},
+    ZarrCore.MaxLengthString{10,UInt8},ZarrCore.MaxLengthString{10,UInt32},
     String)
 dtypesp = ("uint8","uint16","uint32","uint64",
     "int8","int16","int32","int64",
@@ -277,12 +278,13 @@ end
 
 @testset "Python datetime types" begin
 using Dates, Test, Zarr, PythonCall
+using DateTimes64: DateTime64
 vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
 vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
 ad = ZArray(vd)
 at = ZArray(vt)
-@test eltype(ad)==Zarr.DateTime64{Day} 
-@test eltype(at)==Zarr.DateTime64{Millisecond}
+@test eltype(ad)==DateTime64{Day} 
+@test eltype(at)==DateTime64{Millisecond}
 @test DateTime.(at[:]) == vt[:]
 @test Date.(ad[:]) == vd[:]
 
@@ -293,11 +295,11 @@ for pt in [Week, Day, Hour, Minute, Second,
     
     if pt <: DatePeriod
         vd = range(Date(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     else
         vd = range(DateTime(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     end
 end

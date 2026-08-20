@@ -1,33 +1,28 @@
 module Zarr
 
-import JSON
-import Blosc
-import Unicode
-using OrderedCollections: OrderedDict
+import ZarrCore
 
-struct ZarrFormat{V}
-  version::Val{V}
+# Mirror ZarrCore's export/public split. Internals stay at Zarr.ZarrCore.
+
+for name in names(ZarrCore)
+    if name !== :ZarrCore
+        @eval import ZarrCore: $name
+    
+        if Base.isexported(ZarrCore, name)
+            @eval export $name
+        end
+    end
 end
-Base.Int(v::ZarrFormat{V}) where V = V
-@inline ZarrFormat(v::Int) = ZarrFormat(Val(v))
-ZarrFormat(v::ZarrFormat) = v
-#Default Zarr Version
-const DV = ZarrFormat(Val(2))
 
-include("types.jl")
-include("chunkkeyencoding.jl")
-include("metadata.jl")
-include("metadata3.jl")
-include("Compressors/Compressors.jl")
-include("Codecs/Codecs.jl")
-include("Storage/Storage.jl")
-include("Filters/Filters.jl")
-include("ZArray.jl")
-include("pipeline.jl")
-include("ZGroup.jl")
-include("caching.jl")
+@static if VERSION >= v"1.11"
+    include("public_names_zarr.jl")
+else
+    # For Julia 1.10, we have to parse the public names from the source file, since
+    # `public` is not a keyword and `names(ZarrCore)` only returns exported names.
+    let public_names = read(joinpath(@__DIR__, "..", "lib", "ZarrCore", "src", "public_names_core.jl"), String)
+        public_names = replace(public_names, "public" => "using ZarrCore: ")
+        eval(Meta.parseall(public_names))
+    end
+end
 
-export ZArray, ZGroup, zopen, zzeros, zcreate, storagesize, storageratio,
-  zinfo, DirectoryStore, S3Store, GCStore, zgroup
-
-end # module
+end

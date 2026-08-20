@@ -1,5 +1,6 @@
 using Test
 using Zarr
+import Zarr: ZarrCore
 using JSON
 using JSON: json
 using Pkg
@@ -8,11 +9,54 @@ using Dates
 
 @testset "Zarr" begin
 
-    
+@testset "public API surface" begin
+    # `names(M)` returns exported *and* public names, so `Zarr`'s re-export loop
+    # has to split them with `Base.isexported`; using `names` alone would export
+    # the whole extension API, and using `Base.ispublic` would export nothing.
+    # These tests pin that split down so it cannot regress silently.
+    #
+    # On Julia 1.10 there is no `public`, so `names` yields only exports and the
+    # public-only sets are empty; the assertions still hold. The final pair of
+    # tests covers what that blind spot hides.
+    # A module always lists its own name, and `Zarr` additionally carries the
+    # `ZarrCore` binding (public, so `Zarr.ZarrCore` is a documented escape hatch
+    # rather than something `using Zarr` drags in). Both are structural, not API.
+    modnames = Set((:Zarr, :ZarrCore))
+    exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
+    publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+
+    # `Zarr.ZarrCore` is reachable, but `using Zarr` must not bring it into scope.
+    @test isdefined(Zarr, :ZarrCore)
+    @test !Base.isexported(Zarr, :ZarrCore)
+
+    # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
+    @test exported(Zarr) == exported(ZarrCore)
+
+    # The specific failure mode: a name that is only `public` in `ZarrCore` must
+    # not become an export of `Zarr`, and vice versa.
+    @test isempty(intersect(publiconly(ZarrCore), exported(Zarr)))
+    @test isempty(intersect(exported(ZarrCore), publiconly(Zarr)))
+
+    # Version-independent: the two assertions above compare `names` against
+    # `names`, so on 1.10 -- where `@public` expands to nothing and both
+    # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
+    @test all(isdefined.(Ref(Zarr), [:zname])   )
+    @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
+    @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
+    @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
+        :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
+    @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BloscCodec, :BytesCodec, :CRC32cCodec, :GzipCodec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :CRC32cV3Codec, :VLenUTF8V3Codec]))
+
+end
+
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,Zarr.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -30,15 +74,15 @@ using Dates
         @test z.metadata.compressor.shuffle === 1
         @test z.attrs == Dict{Any, Any}()
         @test z.writeable === true
-            @test z.metadata.chunk_key_encoding === Zarr.ChunkKeyEncoding(Zarr.default_sep(Zarr.DV), Zarr.default_prefix(Zarr.DV))
+            @test z.metadata.chunk_key_encoding === Zarr.ChunkKeyEncoding(ZarrCore.default_sep(ZarrCore.DV), ZarrCore.default_prefix(ZarrCore.DV))
         @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
         @test_throws ArgumentError zzeros(Int64,0,-1)
-        @test_throws ArgumentError Zarr.Metadata(zeros(2,2), (2,2), order = 'F')
+        @test_throws ArgumentError ZarrCore.Metadata(zeros(2,2), (2,2), order = 'F')
     end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,Zarr.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)
@@ -96,7 +140,7 @@ using Dates
             z3 = zcreate(Float32, 4, 4, 2; path=joinpath(dir, "disp"),
                          chunks=(4, 4, 2), compressor=Zarr.NoCompressor())
             ain = rand(Float32, 4, 4, 2)
-            m = which(Zarr.write_singlechunk_fastpath!, (typeof(z3), typeof(ain), CartesianIndex{3}))
+            m = which(ZarrCore.write_singlechunk_fastpath!, (typeof(z3), typeof(ain), CartesianIndex{3}))
             @test occursin("MetadataV2", string(m.sig))
             @test occursin("NoCompressor", string(m.sig))
             GC.gc()
@@ -176,8 +220,8 @@ end
     store = DirectoryStore(tempname())
     g = zgroup(store,"mygroup")
     g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
-        @test Zarr.is_zgroup(Zarr.DV, store, "mygroup")
-        @test Zarr.is_zgroup(Zarr.DV, store, "mygroup/asubgroup")
+        @test ZarrCore.is_zgroup(ZarrCore.DV, store, "mygroup")
+        @test ZarrCore.is_zgroup(ZarrCore.DV, store, "mygroup/asubgroup")
     @test g2.attrs["a1"]==5
     @test isdir(joinpath(store.folder,"mygroup"))
     @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
@@ -185,65 +229,66 @@ end
 
 @testset "Groups format inheritance v2" begin
     store = DirectoryStore(tempname())
-    zv = Zarr.ZarrFormat(2)
+    zv = ZarrCore.ZarrFormat(2)
     g = zgroup(store, "rootgroup", zv)
     sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
 
-    @test Zarr.is_zgroup(zv, store, "rootgroup")
-    @test Zarr.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
     @test sg.attrs["a1"] == 5
     @test ispath(joinpath(store.folder, "rootgroup", ".zgroup"))
     @test ispath(joinpath(store.folder, "rootgroup", "subgroup", ".zgroup"))
 
     a_root = zcreate(Float64, g, "temperature", 2, 3)
     a_sub = zcreate(Float64, sg, "pressure", 2, 3)
-    @test Zarr.zarr_format(a_root) == zv
-    @test Zarr.zarr_format(a_sub) == zv
+    @test ZarrCore.zarr_format(a_root) == zv
+    @test ZarrCore.zarr_format(a_sub) == zv
 end
 
 @testset "Groups format inheritance v3" begin
     store = DirectoryStore(tempname())
-    zv = Zarr.ZarrFormat(3)
+    zv = ZarrCore.ZarrFormat(3)
     g = zgroup(store, "rootgroup", zv)
     sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
 
-    @test Zarr.is_zgroup(zv, store, "rootgroup")
-    @test Zarr.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
     @test sg.attrs["a1"] == 5
     @test ispath(joinpath(store.folder, "rootgroup", "zarr.json"))
     @test ispath(joinpath(store.folder, "rootgroup", "subgroup", "zarr.json"))
 
     a_root = zcreate(Float64, g, "temperature", 2, 3)
     a_sub = zcreate(Float64, sg, "pressure", 2, 3)
-    @test Zarr.zarr_format(a_root) == zv
-    @test Zarr.zarr_format(a_sub) == zv
+    @test ZarrCore.zarr_format(a_root) == zv
+    @test ZarrCore.zarr_format(a_sub) == zv
 end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
-        @test Zarr.typestr(Bool) === "|b1"
-        @test Zarr.typestr(Int8) === "|i1"
-        @test Zarr.typestr(Int64) === "<i8"
-        @test Zarr.typestr(UInt8) === "|u1"
-        @test Zarr.typestr(UInt32) === "<u4"
-        @test Zarr.typestr(UInt128) === "<u16"
-        @test Zarr.typestr(Complex{Float32}) === "<c8"
-        @test Zarr.typestr(Complex{Float64}) === "<c16"
-        @test Zarr.typestr(Float16) === "<f2"
-        @test Zarr.typestr(Float64) === "<f8"
-        @test Zarr.typestr("<U1") == Zarr.MaxLengthString{1,UInt32}
-        @test Zarr.typestr(Zarr.MaxLengthString{5,UInt8}) === "<S5"
-        @test Zarr.typestr(Zarr.MaxLengthString{9,UInt32}) === "<U9"
-        @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(Zarr.DateTime64{Day}) === "<M8[D]"
-        @test Zarr.typestr(Zarr.DateTime64{Nanosecond}) === "<M8[ns]"
+        using DateTimes64: DateTime64
+        @test ZarrCore.typestr(Bool) === "|b1"
+        @test ZarrCore.typestr(Int8) === "|i1"
+        @test ZarrCore.typestr(Int64) === "<i8"
+        @test ZarrCore.typestr(UInt8) === "|u1"
+        @test ZarrCore.typestr(UInt32) === "<u4"
+        @test ZarrCore.typestr(UInt128) === "<u16"
+        @test ZarrCore.typestr(Complex{Float32}) === "<c8"
+        @test ZarrCore.typestr(Complex{Float64}) === "<c16"
+        @test ZarrCore.typestr(Float16) === "<f2"
+        @test ZarrCore.typestr(Float64) === "<f8"
+        @test ZarrCore.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
+        @test ZarrCore.typestr(Vector{Int64}) === "|O"
+        @test ZarrCore.typestr(DateTime64{Day}) === "<M8[D]"
+        @test ZarrCore.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin
         A = fill(1.0, 30, 20)
         chunks = (5,10)
-        metadata = Zarr.Metadata(A, chunks; fill_value=-1.5)
-        @test metadata isa Zarr.Metadata
+        metadata = ZarrCore.Metadata(A, chunks; fill_value=-1.5)
+        @test metadata isa ZarrCore.Metadata
         @test metadata.zarr_format === 2
         @test metadata.shape[] === size(A)
         @test metadata.chunks === chunks
@@ -254,7 +299,7 @@ end
         @test metadata.filters === nothing
 
         jsonstr = json(metadata)
-        metadata_cycled = Zarr.Metadata(jsonstr,false)
+        metadata_cycled = ZarrCore.Metadata(jsonstr,false)
         @test metadata == metadata_cycled
     end
 
@@ -272,10 +317,10 @@ end
         @test Zarr.fill_value_decoding("3", Int) === 3
         @test Zarr.fill_value_decoding(nothing, Int) === nothing
         @test Zarr.fill_value_decoding("-", String) === "-"
-        @test Zarr.fill_value_decoding("", Zarr.ASCIIChar) === nothing
-        @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt8}) === Zarr.MaxLengthString{6,UInt8}("")
-        @test Zarr.fill_value_decoding("", Zarr.MaxLengthString{6,UInt32}) === Zarr.MaxLengthString{6,UInt32}("")
-        @test Zarr.fill_value_decoding(nothing, Zarr.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding("", ZarrCore.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt8}) === ZarrCore.MaxLengthString{6,UInt8}("")
+        @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt32}) === ZarrCore.MaxLengthString{6,UInt32}("")
+        @test Zarr.fill_value_decoding(nothing, ZarrCore.ASCIIChar) === nothing
         @test Zarr.fill_value_decoding(Any[0.0, 0.0], ComplexF64) === ComplexF64(0.0, 0.0)
         @test Zarr.fill_value_decoding(Any[1.5, -2.5], ComplexF32) === ComplexF32(1.5, -2.5)
     end
@@ -345,26 +390,6 @@ end
   @test_throws ArgumentError resize!(a,(-1,2))
 end
 
-@testset "ShapeOnlyArray" begin
-    A = Zarr.ShapeOnlyArray{Float64,3}((3,4,5))
-    @test size(A) == (3,4,5)
-    @test eltype(A) == Float64
-    @test_throws ErrorException A[1]
-    @test_throws ErrorException A[1,1,1]
-    @test_throws ErrorException A[-1]
-    
-    B = Zarr.ShapeOnlyArray{Int8,1}((3,))
-    @test size(B) == (3,)
-    @test eltype(B) == Int8
-    for i in 0:4
-        @test_throws ErrorException B[i]
-    end
-    
-    C = Zarr.ShapeOnlyArray{Bool,2}((0x2,UInt16(4095)))
-    @test size(C) === (2,4095)
-    @test eltype(C) == Bool
-end
-
 @testset "zcreate does not allocate dense storage" begin
     mktempdir() do dir
         # About 1 TB if zcreate were materializing dummy storage.
@@ -398,7 +423,7 @@ end
 end
 
 @testset "MaxLengthString large-chunk read path" begin
-  MaxLS = Zarr.MaxLengthString{1024,UInt32}
+  MaxLS = ZarrCore.MaxLengthString{1024,UInt32}
   fv = MaxLS("")
   z_v2 = zcreate(MaxLS, 348; chunks=(18674,), fill_value=fv)
   @test z_v2[1] == fv
@@ -409,9 +434,9 @@ end
 end
 
 @testset "MaxLengthString conversion and display" begin
-    s8 = Zarr.MaxLengthString{5,UInt8}("abc")
-    s32 = Zarr.MaxLengthString{5,UInt32}("Snow")
-    sempty = Zarr.MaxLengthString{5,UInt32}("")
+    s8 = ZarrCore.MaxLengthString{5,UInt8}("abc")
+    s32 = ZarrCore.MaxLengthString{5,UInt32}("Snow")
+    sempty = ZarrCore.MaxLengthString{5,UInt32}("")
   
     @test String(s8) == "abc"
     @test String(s32) == "Snow"

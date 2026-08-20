@@ -1,11 +1,14 @@
 using DocumenterVitepress
 using Documenter, Zarr
+# All docstrings live in the `ZarrCore` implementation package; `Zarr` is only
+# the facade that re-exports its API.
+using Zarr: ZarrCore
 
 cp(joinpath(@__DIR__, "..", "CHANGELOG.md"), joinpath(@__DIR__, "src", "changelog.md"), force = true)
 cp(joinpath(@__DIR__, "..", "CONTRIBUTING.md"), joinpath(@__DIR__, "src", "contributing.md"), force = true)
 
 makedocs(
-    modules = [Zarr],
+    modules = [Zarr, ZarrCore],
     clean = false,
     doctest = true,
     format = DocumenterVitepress.MarkdownVitepress(
