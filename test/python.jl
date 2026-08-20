@@ -28,42 +28,42 @@ CondaPkg.add([
     groupattrs = Dict("String attribute"=>"One", "Int attribute"=>5, "Float attribute"=>10.5)
     g = zgroup(pjulia, attrs=groupattrs)
 
-    # Test all supported data types and compressors
-    import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor,
-        Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
-    import Zarr: ZarrCore
-    using Random: randstring
-    numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
-        Int8, Int16, Int32, Int64,
-        Float16, Float32, Float64,
-        Complex{Float32}, Complex{Float64},
-        Bool,)
-    dtypes = (numeric_dtypes...,
-        ZarrCore.MaxLengthString{10,UInt8}, ZarrCore.MaxLengthString{10,UInt32},
-        String)
-    dtypesp = ("uint8", "uint16", "uint32", "uint64",
-        "int8", "int16", "int32", "int64",
-        "float16", "float32", "float64",
-        "complex64", "complex128", "bool", "S10", "U10", "O")
-    compressors = (
-        "no"=>NoCompressor(),
-        "blosc"=>BloscCompressor(cname="zstd"),
-        "blosc_autoshuffle"=>BloscCompressor(cname="zstd", shuffle=-1),
-        "blosc_noshuffle"=>BloscCompressor(cname="zstd", shuffle=0),
-        "blosc_bitshuffle"=>BloscCompressor(cname="zstd", shuffle=2),
-        "zlib"=>ZlibCompressor(),
-        "zlib_2"=>ZlibCompressor(; clevel=2),
-        "zstd"=>ZstdCompressor(),
-    )
-    filters = (
-        "fletcher32"=>Fletcher32Filter(),
-        "scale_offset"=>FixedScaleOffsetFilter(offset=1000, scale=10^6, T=Float64, Tenc=Int32),
-        "shuffle"=>ShuffleFilter(elementsize=4),
-        "quantize"=>QuantizeFilter{Float64,Float32}(digits=5),
-        "delta"=>DeltaFilter{Int32}()
-    )
-    testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10, 1:6, 1:2))] : rand(t, 10, 6, 2) for t in dtypes)
-    testzerodimarrays = Dict(t=>(t<:AbstractString) ? randstring(10) : rand(t) for t in dtypes)
+# Test all supported data types and compressors
+import Zarr: NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor,
+       Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
+import Zarr: ZarrCore
+using Random: randstring
+numeric_dtypes = (UInt8, UInt16, UInt32, UInt64,
+    Int8, Int16, Int32, Int64,
+    Float16, Float32, Float64,
+    Complex{Float32}, Complex{Float64},
+    Bool,)
+dtypes = (numeric_dtypes...,
+    ZarrCore.MaxLengthString{10,UInt8},ZarrCore.MaxLengthString{10,UInt32},
+    String)
+dtypesp = ("uint8","uint16","uint32","uint64",
+    "int8","int16","int32","int64",
+    "float16","float32","float64",
+    "complex64", "complex128","bool","S10","U10", "O")
+compressors = (
+    "no"=>NoCompressor(),
+    "blosc"=>BloscCompressor(cname="zstd"),
+    "blosc_autoshuffle"=>BloscCompressor(cname="zstd",shuffle=-1),
+    "blosc_noshuffle"=>BloscCompressor(cname="zstd",shuffle=0),
+    "blosc_bitshuffle"=>BloscCompressor(cname="zstd",shuffle=2),
+    "zlib"=>ZlibCompressor(),
+    "zlib_2"=>ZlibCompressor(;clevel=2),
+    "zstd"=>ZstdCompressor(),
+)
+filters = (
+    "fletcher32"=>Fletcher32Filter(),
+    "scale_offset"=>FixedScaleOffsetFilter(offset=1000, scale=10^6, T=Float64, Tenc=Int32),
+    "shuffle"=>ShuffleFilter(elementsize=4),
+    "quantize"=>QuantizeFilter{Float64,Float32}(digits=5),
+    "delta"=>DeltaFilter{Int32}()
+)
+testarrays = Dict(t=>(t<:AbstractString) ? [randstring(maximum(i.I)) for i in CartesianIndices((1:10,1:6,1:2))] : rand(t,10,6,2) for t in dtypes)
+testzerodimarrays = Dict(t=>(t<:AbstractString) ? randstring(10) : rand(t) for t in dtypes)
 
     # Test arrays with compressors
     for t in dtypes, co in compressors
@@ -277,32 +277,32 @@ CondaPkg.add([
 end
 
 @testset "Python datetime types" begin
-    using Dates, Test, Zarr, PythonCall
-    using DateTimes64: DateTime64
-    vd = Date(1970, 1, 1):Day(1):Date(1970, 6, 30) |> collect
-    vt = DateTime(1970, 1, 1):Second(1):DateTime(1970, 1, 1, 2, 0, 0) |> collect
-    ad = ZArray(vd)
-    at = ZArray(vt)
-    @test eltype(ad)==DateTime64{Day}
-    @test eltype(at)==DateTime64{Millisecond}
-    @test DateTime.(at[:]) == vt[:]
-    @test Date.(ad[:]) == vd[:]
+using Dates, Test, Zarr, PythonCall
+using DateTimes64: DateTime64
+vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
+vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
+ad = ZArray(vd)
+at = ZArray(vt)
+@test eltype(ad)==DateTime64{Day} 
+@test eltype(at)==DateTime64{Millisecond}
+@test DateTime.(at[:]) == vt[:]
+@test Date.(ad[:]) == vd[:]
 
     p = tempname()
     g = zgroup(p)
     for pt in [Week, Day, Hour, Minute, Second,
         Millisecond]
-
-        if pt <: DatePeriod
-            vd = range(Date(1970, 1, 1), step=pt(1), length=100)
-            a = zcreate(DateTime64{pt}, g, string(pt), 100)
-            a[:] = vd
-        else
-            vd = range(DateTime(1970, 1, 1), step=pt(1), length=100)
-            a = zcreate(DateTime64{pt}, g, string(pt), 100)
-            a[:] = vd
-        end
+    
+    if pt <: DatePeriod
+        vd = range(Date(1970,1,1),step = pt(1), length=100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
+        a[:] = vd
+    else
+        vd = range(DateTime(1970,1,1),step = pt(1), length=100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
+        a[:] = vd
     end
+end
 
     zarr = pyimport("zarr")
     numpy = pyimport("numpy")

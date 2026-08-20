@@ -3,7 +3,6 @@
 
 using Zarr
 import Zarr: ZarrCore
-using DiskArrays: GridChunks
 using JSON
 
 # Paths
@@ -16,6 +15,7 @@ end
 
 # Create store and root group for v3
 store = Zarr.DirectoryStore(path_v3)
+g = zgroup(store, "", ZarrCore.ZarrFormat(3))
 g = zgroup(store, "", ZarrCore.ZarrFormat(3))
 
 # Helper: create array and set data
@@ -219,11 +219,13 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape;
     T = eltype(data)
     N = ndims(data)
     inner_pipeline = ZarrCore.V3Pipeline(
+    inner_pipeline = ZarrCore.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
         (Zarr.Codecs.V3Codecs.GzipV3Codec(1),),
     )
     index_bytes_bytes = index_crc32c ? (Zarr.Codecs.V3Codecs.CRC32cV3Codec(),) : ()
+    index_pipeline = ZarrCore.V3Pipeline(
     index_pipeline = ZarrCore.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
@@ -231,13 +233,12 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape;
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec(inner_chunk_shape, inner_pipeline, index_pipeline, index_location)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    ch = GridChunks(size(data), outer_chunk_shape)
-    cke = Zarr.ChunkKeyEncoding('/', true)
-    md = ZarrCore.MetadataV3{T, N, typeof(pipeline), typeof(cke), typeof(ch)}(
-        3, "array", size(data), ch, ZarrCore.typestr3(T), pipeline, zero(T),
-        cke,
+    md = ZarrCore.MetadataV3{T, N, typeof(pipeline)}(
+        3, "array", size(data), outer_chunk_shape, ZarrCore.typestr3(T), pipeline, zero(T),
+        Zarr.ChunkKeyEncoding('/', true),
     )
     z = Zarr.ZArray(md, store, name, Dict(), true)
+    ZarrCore.writemetadata(ZarrCore.zarr_format(md), store, name, md)
     ZarrCore.writemetadata(ZarrCore.zarr_format(md), store, name, md)
     z[:] = data
     return z
@@ -331,6 +332,7 @@ create_and_fill(store, "consolidated/nested/1d.i2", Int16[10, 20, 30, 40];
     compressor=Zarr.NoCompressor(),
 )
 # Consolidate metadata for the consolidated group only
+Zarr.consolidate_metadata(store, "consolidated", ZarrCore.ZarrFormat(3))
 Zarr.consolidate_metadata(store, "consolidated", ZarrCore.ZarrFormat(3))
 
 @info "Zarr v3 fixtures generated at: $path_v3"
