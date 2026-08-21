@@ -2,6 +2,9 @@
 
 ## Unreleased
 - Move all packages to sibling top-level directories and make the root project workspace-only.
+- Support irregular (rectilinear) chunk grids for Zarr v3 arrays. `zcreate`,
+  `zzeros`, and `ZArray(data; chunks=...)` accept `DiskArrays.GridChunks`, and
+  rectilinear metadata and exact-size chunks interoperate with zarr-python.
 - `resize!` and `append!` now throw on a read-only `ZArray` instead of rewriting its metadata and deleting chunks.
 - `resize!` through a `ConsolidatedStore` no longer deletes chunks or changes the in-memory shape before failing, and Zarr v3 consolidated stores now reject it like v2 ones instead of leaving the consolidated metadata stale.
 - Move code to ZarrCore.jl with low dependencies

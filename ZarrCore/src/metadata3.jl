@@ -63,38 +63,62 @@ function check_keys(d::AbstractDict, keys)
 end
 
 """Metadata for Zarr version 3 arrays"""
-struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding} <: AbstractMetadata{T,N,E}
+struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding,CT} <: AbstractMetadata{T,N,E}
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
-    chunks::NTuple{N, Int}
+    chunks::CT
     dtype::Union{String, Dict{String, Any}}  # data_type in v3
     pipeline::P
     fill_value::Union{T, Nothing}
     chunk_key_encoding::E
-    function MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding) where {T2,N,P,E}
+    function MetadataV3{T2,N,P,E,CT}(zarr_format, node_type, shape, chunks::CT, dtype, pipeline, fill_value, chunk_key_encoding) where {T2,N,P,E,CT}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
-        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
-        new{T2,N,P,E}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+        validate_v3_chunks(shape, chunks)
+        new{T2,N,P,E,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding)
     end
 end
+MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding) where {T2,N,P,E} =
+    MetadataV3{T2,N,P,E,typeof(chunks)}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
 MetadataV3{T2,N,P}(args...) where {T2,N,P} = MetadataV3{T2,N,P,ChunkKeyEncoding}(args...)
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
+
+function validate_v3_chunks(shape::NTuple{N,Int}, chunks::NTuple{N,Int}) where {N}
+    any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+    return chunks
+end
+
+validate_v3_chunks(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N} =
+    validate_chunk_grid(shape, chunks)
+
+function canonical_v3_chunks(shape::NTuple{N,Int}, chunks::NTuple{N,Int}) where {N}
+    validate_v3_chunks(shape, chunks)
+    return chunks
+end
+
+function canonical_v3_chunks(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N}
+    validate_v3_chunks(shape, chunks)
+    if all(c -> c isa DiskArrays.RegularChunks, chunks.chunks)
+        return map(c -> c.chunksize, chunks.chunks)
+    end
+    return chunks
+end
 
 """
 Convenience constructor for MetadataV3 that builds the codec pipeline from
 `order` (translated to a TransposeCodec), `endian` (translated to a BytesCodec),
 and `compressor` (translated to bytes->bytes codecs).
 """
-function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::NTuple{N,Int},
+function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks,
         dtype, fill_value;
         order::Char='C',
         endian::Symbol=:little,
         compressor=default_compressor(),
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T2, N, E}
+    chunks = canonical_v3_chunks(shape, chunks)
     T_base = Base.nonmissingtype(T2)
     array_array_codecs = if order == 'F'
         (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
@@ -170,6 +194,72 @@ get_order(md::MetadataV2) = md.order
 _sizeof(x) = sizeof(x)
 _sizeof(x::Type{String}) = 1
 
+function decode_rectilinear_axis(spec, axis_length::Int, axis::Int)
+    if spec isa Integer
+        spec >= 1 || throw(ArgumentError("Rectilinear chunk size on axis $axis must be >= 1"))
+        return DiskArrays.RegularChunks(spec, 0, axis_length)
+    end
+    spec isa AbstractVector ||
+        throw(ArgumentError("Rectilinear chunk_shapes entry for axis $axis must be an integer or a list"))
+
+    chunk_sizes = Int[]
+    for entry in spec
+        if entry isa Integer
+            entry >= 1 || throw(ArgumentError("Rectilinear chunk sizes must be >= 1 (axis $axis)"))
+            push!(chunk_sizes, entry)
+        elseif entry isa AbstractVector && length(entry) == 2 &&
+                entry[1] isa Integer && entry[2] isa Integer
+            value, count = entry
+            value >= 1 || throw(ArgumentError("Rectilinear chunk sizes must be >= 1 (axis $axis)"))
+            count >= 1 || throw(ArgumentError("Rectilinear run lengths must be >= 1 (axis $axis)"))
+            append!(chunk_sizes, fill(Int(value), Int(count)))
+        else
+            throw(ArgumentError(
+                "Invalid rectilinear chunk descriptor $entry on axis $axis; " *
+                "expected an integer or [chunk_size, count]"
+            ))
+        end
+    end
+
+    if axis_length == 0
+        isempty(chunk_sizes) || throw(ArgumentError("A zero-length axis cannot contain rectilinear chunks (axis $axis)"))
+        return DiskArrays.IrregularChunks([0])
+    end
+    isempty(chunk_sizes) && throw(ArgumentError("Rectilinear chunk list on axis $axis cannot be empty"))
+
+    covered = sum(chunk_sizes)
+    covered >= axis_length || throw(DimensionMismatch(
+        "Rectilinear chunks on axis $axis cover $covered elements, expected at least $axis_length"
+    ))
+    covered_before_last = covered - last(chunk_sizes)
+    covered_before_last < axis_length || throw(DimensionMismatch(
+        "Rectilinear chunks on axis $axis contain chunks beyond the array extent $axis_length"
+    ))
+    chunk_sizes[end] = axis_length - covered_before_last
+    return DiskArrays.IrregularChunks(; chunksizes=chunk_sizes)
+end
+
+function encode_rectilinear_axis(chunks::DiskArrays.RegularChunks)
+    chunks.offset == 0 || throw(ArgumentError("Zarr rectilinear grids cannot encode non-zero chunk offsets"))
+    return chunks.chunksize
+end
+
+function encode_rectilinear_axis(chunks::DiskArrays.IrregularChunks)
+    sizes = diff(chunks.offsets)
+    encoded = Any[]
+    i = firstindex(sizes)
+    while i <= lastindex(sizes)
+        j = i
+        while j < lastindex(sizes) && sizes[j + 1] == sizes[i]
+            j += 1
+        end
+        count = j - i + 1
+        push!(encoded, count == 1 ? sizes[i] : Any[sizes[i], count])
+        i = j + 1
+    end
+    return encoded
+end
+
 
 function Metadata3(d::AbstractDict, fill_as_missing)
     check_keys(d, ("zarr_format", "node_type"))
@@ -230,10 +320,23 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     # Chunk Grid
     chunk_grid = d["chunk_grid"]
     if chunk_grid["name"] == "regular"
-        chunks = Int.(chunk_grid["configuration"]["chunk_shape"])
-        if length(shape) != length(chunks)
-            throw(ArgumentError("Shape has rank $(length(shape)) which does not match the chunk_shape rank of $(length(chunks))"))
+        chunk_shape = Int.(chunk_grid["configuration"]["chunk_shape"])
+        if length(shape) != length(chunk_shape)
+            throw(ArgumentError("Shape has rank $(length(shape)) which does not match the chunk_shape rank of $(length(chunk_shape))"))
         end
+        chunks = NTuple{length(chunk_shape),Int}(reverse(chunk_shape))
+    elseif chunk_grid["name"] == "rectilinear"
+        configuration = chunk_grid["configuration"]
+        get(configuration, "kind", nothing) == "inline" ||
+            throw(ArgumentError("Only rectilinear chunk grids of kind \"inline\" are supported"))
+        chunk_shapes = get(configuration, "chunk_shapes", nothing)
+        chunk_shapes isa AbstractVector ||
+            throw(ArgumentError("Rectilinear chunk grid configuration must contain chunk_shapes"))
+        length(chunk_shapes) == length(shape) || throw(DimensionMismatch(
+            "Shape has rank $(length(shape)) which does not match the chunk_shapes rank of $(length(chunk_shapes))"
+        ))
+        axes_c = map(decode_rectilinear_axis, chunk_shapes, shape, eachindex(shape))
+        chunks = DiskArrays.GridChunks(reverse(axes_c)...)
     else
         throw(ArgumentError("Unknown chunk_grid of name, $(chunk_grid["name"])"))
     end
@@ -259,7 +362,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         zarr_format,
         node_type,
         NTuple{N, Int}(shape) |> reverse,
-        NTuple{N, Int}(chunks) |> reverse,
+        chunks,
         typestr3(T),
         pipeline,
         fv,
@@ -268,7 +371,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
 end
 
 "Construct MetadataV3 based on your data"
-function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
+function Metadata3(A::AbstractArray{T, N}, chunks;
         node_type::String="array",
         compressor=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
@@ -282,6 +385,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     if fill_value === nothing
         fill_value = zero(T)
     end
+    chunks = canonical_v3_chunks(size(A), chunks)
     return MetadataV3{T2, N}(
         3,
         node_type,
@@ -297,12 +401,22 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
 end
 
 function lower3(md::MetadataV3{T}) where T
-    chunk_grid = Dict{String,Any}(
-        "name" => "regular",
-        "configuration" => Dict{String,Any}(
-            "chunk_shape" => md.chunks |> reverse
+    chunk_grid = if md.chunks isa DiskArrays.GridChunks
+        Dict{String,Any}(
+            "name" => "rectilinear",
+            "configuration" => Dict{String,Any}(
+                "kind" => "inline",
+                "chunk_shapes" => map(encode_rectilinear_axis, reverse(md.chunks.chunks))
+            )
         )
-    )
+    else
+        Dict{String,Any}(
+            "name" => "regular",
+            "configuration" => Dict{String,Any}(
+                "chunk_shape" => reverse(md.chunks)
+            )
+        )
+    end
 
     # chunk_key_encoding
     chunk_key_encoding = lower_chunk_key_encoding(md.chunk_key_encoding)
@@ -321,7 +435,7 @@ function lower3(md::MetadataV3{T}) where T
     )
 end
 
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
+function Metadata(A::AbstractArray{T,N}, chunks::Union{NTuple{N,Int},DiskArrays.GridChunks{N}}, ::ZarrFormat{3};
         node_type::String="array",
         compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
