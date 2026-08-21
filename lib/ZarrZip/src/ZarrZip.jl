@@ -1,20 +1,13 @@
 """
     ZarrZip
 
-Zip archive support for Zarr.jl: the read-only [`ZipStore`](@ref) and
-[`writezip`](@ref), which serialises any `AbstractStore` into a zip archive.
-
-This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
-`Zarr.ZipStore` and `Zarr.writezip` keep working exactly as before.
+Read-only ZIP storage and archive writing.
 """
 module ZarrZip
 
 import ZipArchives
 
-# Only the names that are used unqualified live here. Methods that *extend* a
-# ZarrCore generic are always written as `ZarrCore.f(...)` below: writing a bare
-# `f(...)` definition would silently create a new `ZarrZip.f` that shadows the
-# generic instead of adding a method to it, and `zopen` would then never see it.
+# Qualify methods that extend ZarrCore generics.
 import ZarrCore
 using ZarrCore: AbstractStore, ZArray, ZGroup, subdirs, subkeys
 
@@ -87,15 +80,12 @@ function ZarrCore.subkeys(d::ZipStore, p)::Vector{String}
     collect(o)
 end
 
-# Zip archives are generally append only
-# so it doesn't quite work to make ZipStore writable.
-# The idea is if you want a zipfile, you should first use one of the
-# regular mutable stores, then save it to a zip archive.
+# Write mutable stores to ZIP after updates are complete.
 """
     writezip(io::IO, s::AbstractStore, p)
     writezip(io::IO, s::Union{ZArray,ZGroup})
 
-Write an AbstractStore to an IO as a zip archive.
+Write a store, array, or group to a ZIP archive.
 """
 function writezip(io::IO, s::AbstractStore, p=""; kwargs...)
     ZipArchives.ZipWriter(io; kwargs...) do w
@@ -116,9 +106,6 @@ function _writezip(w::ZipArchives.ZipWriter, s::AbstractStore, p::String)
     end
 end
 
-# `ZipStore` has no `storageregexlist` entry (a zip archive is not addressable
-# by a URL scheme), so there is nothing to register at load time and this module
-# deliberately has no `__init__`.
 @static if VERSION >= v"1.11"
     include("public_names_zip.jl")
 end

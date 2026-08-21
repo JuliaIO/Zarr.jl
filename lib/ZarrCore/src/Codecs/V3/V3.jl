@@ -660,10 +660,7 @@ function codec_decode(c::TransposeCodec, encoded::AbstractArray)
     return permutedims(encoded, inv_order)
 end
 
-# The `gzip`, `blosc` and `zstd` codecs live in `ZarrZlib`, `ZarrBlosc` and
-# `ZarrZstd` respectively, next to the v2 compressors they share an
-# implementation with. Each registers itself in `codec_parsers` from its
-# `__init__`.
+# Compression codecs are registered by their subpackages.
 
 struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
 end

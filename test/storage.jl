@@ -381,11 +381,10 @@ end
   end
 
   @testset "storefromstring falls back gracefully without consolidated metadata" begin
-    # A server with no .zmetadata should warn and return a bare HTTPStore
-    # Serve only 404s
+    # A server without .zmetadata warns and returns a bare HTTPStore.
     server3 = HTTP.serve!(req -> HTTP.Response(404, "not found"), "127.0.0.1", 0)
     port3 = server3.bound_port
-    store, path = @test_warn r"Additional metadata was not available" Zarr.storefromstring("http://127.0.0.1:$port3")
+    store, path = @test_warn r"Could not load consolidated HTTP metadata" Zarr.storefromstring("http://127.0.0.1:$port3")
     @test store isa Zarr.HTTPStore
     @test path == ""
     close(server3)

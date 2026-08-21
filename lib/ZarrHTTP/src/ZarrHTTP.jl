@@ -1,22 +1,13 @@
 """
     ZarrHTTP
 
-HTTP support for Zarr.jl: the read-only [`HTTPStore`](@ref), which serves a
-consolidated Zarr dataset over plain HTTP(S), and the small server that goes the
-other way and exposes any `AbstractStore` (or `ZArray`/`ZGroup`) through
-`HTTP.serve`.
-
-This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
-`Zarr.HTTPStore` and `zopen("https://...")` keep working exactly as before.
+HTTP storage and serving support.
 """
 module ZarrHTTP
 
 using HTTP: HTTP
 
-# Only the names that are used unqualified live here. Methods that *extend* a
-# ZarrCore generic are always written as `ZarrCore.f(...)` below: writing a bare
-# `f(...)` definition would silently create a new `ZarrHTTP.f` that shadows the
-# generic instead of adding a method to it, and `zopen` would then never see it.
+# Qualify methods that extend ZarrCore generics.
 import ZarrCore
 using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore,
     ConcurrentRead, concurrent_io_tasks, consolidate_metadata, storageregexlist
@@ -24,11 +15,7 @@ using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore,
 """
     HTTPStore
 
-A basic HTTP store without any credentials. The underlying data is supposed to be
-consolidated and only read operations are supported. This store is compatible to
-datasets being served through the [xpublish](https://xpublish.readthedocs.io/en/latest/)
-python package. In case you experience performance issues, one can try to use
-`HTTP.set_default_connection_limit!` to increase the number of concurrent connections.
+Read-only HTTP storage. Consolidated metadata is used when available.
 """
 struct HTTPStore <: AbstractStore
     url::String
@@ -44,13 +31,9 @@ function Base.getindex(s::HTTPStore, k::String)
         if r.status in s.allowed_codes
             nothing
         else
-            err_msg =
-            """Received error code $(r.status) when connecting to $(s.url) with message $(String(r.body)).
-            This might be an actual error, or an indication that the server returns a different error code
-            than 404 for missing chunks. In the latter case, you can run
-            `ZarrCore.missing_chunk_return_code!(a.storage,$(r.status))` where `a` is your Zarr array or group,
-            to fix the issue.
-            """
+            err_msg = "Received error code $(r.status) from $(s.url): $(String(r.body)). " *
+                "If this code means a missing chunk, register it with " *
+                "ZarrCore.missing_chunk_return_code!(store, $(r.status))."
             throw(ErrorException(err_msg))
         end
     else
@@ -64,7 +47,7 @@ function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, _)
         cs = ConsolidatedStore(http_store, "")
         return cs, ""
     catch err
-        @warn exception=err "Additional metadata was not available for HTTPStore."
+        @warn exception=err "Could not load consolidated HTTP metadata"
     end
     return http_store,""
 end
@@ -72,16 +55,7 @@ end
 """
     missing_chunk_return_code!(s::HTTPStore, code::Union{Int,AbstractVector{Int}})
 
-Extends the list of HTTP return codes that signals that a certain key in a HTTPStore is not available. Most data providers
-return code 404 for missing elements, but some may use different return codes like 403. This function can be used
-to add return codes that signal missing chunks.
-
-### Example
-
-````julia
-a = zopen("https://path/to/remote/array")
-missing_chunk_return_code!(a.storage, 403)
-````
+Treat `code` as a missing-key response for `s`.
 """
 ZarrCore.missing_chunk_return_code!(s::HTTPStore, code::Integer) = push!(s.allowed_codes,code)
 ZarrCore.missing_chunk_return_code!(s::HTTPStore, codes::AbstractVector{<:Integer}) = foreach(c->push!(s.allowed_codes,c),codes)
@@ -89,7 +63,7 @@ ZarrCore.store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[]
 ZarrCore.has_configurable_missing_chunks(::HTTPStore) = true
 
 
-## This is a server implementation for Zarr datasets
+# Serve a store through HTTP.
 function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   if s[p,".zmetadata"] === nothing
     consolidate_metadata(s)
@@ -124,14 +98,7 @@ HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString; kwargs...) = HTTP.ser
 HTTP.serve!(s::Union{ZArray,ZGroup}, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, port_num; kwargs...)
 HTTP.serve!(s::Union{ZArray,ZGroup}; kwargs...) = HTTP.serve!(s.storage, s.path; kwargs...)
 
-# The registry lives in `ZarrCore`, so the entries have to be added at *load*
-# time, not at precompile time: a mutation of another package's global state
-# made while this module's body runs is discarded when the precompiled image is
-# written out, and the entry would simply be missing in every fresh session.
-#
-# `storageregexlist` keeps itself sorted most-specific-first, so these generic
-# patterns lose to the host-qualified ones registered by e.g. `ZarrGCS`
-# regardless of which package is loaded first.
+# Register after precompilation; specific URL patterns take precedence.
 function __init__()
     push!(storageregexlist, r"^https://" => HTTPStore)
     push!(storageregexlist, r"^http://" => HTTPStore)

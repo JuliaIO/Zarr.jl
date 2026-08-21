@@ -89,9 +89,7 @@ end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
-# `r"^s3://" => S3Store` is registered by `ZarrS3.__init__`, not here, so that
-# `zopen("s3://...")` without AWSS3 loaded reaches the friendly "load AWSS3"
-# error from the `S3Store` constructor instead of "no storage type matched".
+# ZarrS3 registers the URL before this extension loads.
 
 function ZarrCore.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)

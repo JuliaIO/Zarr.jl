@@ -67,14 +67,7 @@ function subkeys end
 """
     cloud_list_objects(s::AbstractStore, p)
 
-List the objects and common prefixes stored under path `p` in an object-store
-backend, in whatever shape that backend's list API returns.
-
-This is the shared building block for [`subdirs`](@ref), [`subkeys`](@ref) and
-[`storagesize`](@ref) on cloud stores. The generic is declared here rather than
-next to any one implementation because the implementations live in different
-packages -- `GCStore` in ZarrGCS, `S3Store` in ZarrS3's `ZarrS3AWSS3Ext`
-extension -- and both have to add methods to the *same* function.
+Backend extension point for listing objects and prefixes below `p`.
 """
 function cloud_list_objects end
 
@@ -232,25 +225,9 @@ Returns `false` by default. HTTP-based stores that support this should return `t
 has_configurable_missing_chunks(::AbstractStore) = false
 
 """
-    missing_chunk_return_code!(s::AbstractStore, code::Union{Integer,AbstractVector{<:Integer}})
+    missing_chunk_return_code!(s, code)
 
-Extend the list of HTTP return codes that signal that a certain key in `s` is not
-available. Most data providers return code 404 for missing elements, but some use
-different return codes like 403. Use this to add the codes that signal a missing
-chunk for a particular server; see [`has_configurable_missing_chunks`](@ref) for
-whether a given store supports it.
-
-### Example
-
-````julia
-a = zopen("https://path/to/remote/array")
-missing_chunk_return_code!(a.storage, 403)
-````
-
-The generic is declared here, without any method, because its methods are spread
-across packages: `HTTPStore` implements it in ZarrHTTP while the wrapper stores
-that forward to it (`CachingStore`, `ConsolidatedStore`) stay in ZarrCore. Both
-sides have to add methods to the *same* function.
+Add HTTP status codes that `s` should treat as missing keys.
 """
 function missing_chunk_return_code! end
 
@@ -310,34 +287,12 @@ end
 
 isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 
-#Here different storage backends can register regexes that are checked against
-#during auto-check of storage format when doing zopen
-
 """
     StoreRegexList <: AbstractVector{Pair}
 
-The registry backing [`storageregexlist`](@ref): a list of `Regex => storetype`
-pairs that [`storefromstring`](@ref) uses to guess a store type from a URL-like
-string.
-
-`storefromstring` walks the list and takes the **first** entry whose regex
-matches, so the order of the list decides the winner whenever several patterns
-match the same string -- e.g. both `r"^https://storage.googleapis.com"` and
-`r"^https://"` match a GCS URL, and only the former gives the right store.
-
-To keep that decision independent of the order in which backends happen to
-register themselves (which is not controllable once the backends live in
-separate packages that may be loaded in any order), entries are kept sorted
-most-specific-first instead of in insertion order. Specificity is approximated
-by the length of the regex pattern, on the grounds that a pattern which refines
-another one by spelling out more of the URL is the longer of the two. Entries of
-equal specificity keep their relative registration order.
-
-Backends register in the usual way and do not need to care about placement:
-
-```julia
-push!(storageregexlist, r"^myproto://" => MyStore)
-```
+URL-pattern registry used by [`storefromstring`](@ref). The first match wins.
+Entries are sorted by decreasing pattern length; equal-length entries retain
+insertion order.
 """
 struct StoreRegexList <: AbstractVector{Pair}
   entries::Vector{Pair}
@@ -348,9 +303,7 @@ Base.size(l::StoreRegexList) = size(l.entries)
 Base.getindex(l::StoreRegexList, i::Int) = l.entries[i]
 Base.IndexStyle(::Type{StoreRegexList}) = IndexLinear()
 
-# How specific is a registered pattern? A longer pattern matches a subset of
-# what the shorter pattern it extends matches, which is all that is needed to
-# rank `r"^https://storage.googleapis.com"` above `r"^https://"`.
+# Longer regex patterns take precedence.
 _regex_specificity(r::Regex) = ncodeunits(r.pattern)
 _regex_specificity(x) = ncodeunits(string(x))
 _entry_specificity(p::Pair) = _regex_specificity(first(p))
@@ -367,15 +320,10 @@ function _insert_by_specificity!(l::StoreRegexList, p::Pair, ties_first::Bool)
 end
 
 Base.push!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, false)
-# `pushfirst!` used to be how a backend said "my pattern is more specific than
-# something already in the list". The ordering above does that now, so this is
-# only kept so existing registrations keep working; it differs from `push!`
-# solely in that it wins ties against equally specific entries.
+# Preserve pushfirst! precedence for equal-length patterns.
 Base.pushfirst!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, true)
 
 const storageregexlist = StoreRegexList()
-# Deliberately empty: every URL-addressable backend now lives in a subpackage
-# (`ZarrS3`, `ZarrGCS`, `ZarrHTTP`) and registers itself from its `__init__`.
 
 #include("formattedstore.jl")
 include("directorystore.jl")

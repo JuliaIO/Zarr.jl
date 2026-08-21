@@ -1,8 +1,6 @@
 module ZarrS3AWSS3Ext
 
-# `S3Store` and the friendly no-AWSS3 error come from `ZarrS3`; everything this
-# file adds methods to (`storagesize`, `subdirs`, `zopen`, ...) is a `ZarrCore`
-# generic, so both packages are imported here.
+# Extend ZarrCore operations for ZarrS3.S3Store.
 import ZarrS3
 import ZarrS3: S3Store
 

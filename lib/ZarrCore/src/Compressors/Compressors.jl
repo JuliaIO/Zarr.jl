@@ -6,33 +6,18 @@ _reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
 const compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
 
-# The compressor interface. These generics are declared here, without any
-# method, because the concrete compressors live in their own packages
-# (`ZarrBlosc`, `ZarrZlib`, `ZarrZstd`, ...) and extend them from the outside:
-# a subpackage writes `ZarrCore.zcompress(a, ::MyCompressor)`, which needs the
-# generic to already exist here to attach a method to.
+# Extension points implemented by compressor packages.
 function getCompressor end
 function zcompress end
 function zuncompress end
 function zcompress! end
 function zuncompress! end
-# JSON.lower is neither defined nor documented here, since that would be documentation piracy :yarr:
 
 """
     v2_to_v3_codecs(compressor, typesize::Int)
 
-Translate a zarr v2 `compressor` into the tuple of zarr v3 bytes->bytes codecs
-that reproduces it, given `typesize`, the size in bytes of one element of the
-array the codec pipeline will be attached to.
-
-This is the extension point a compressor implements in order to be usable in
-zarr v3: define a method for your compressor type that returns a tuple of v3
-codecs. [`NoCompressor`](@ref) maps to the empty tuple, and a compressor
-without a method throws an `ArgumentError`.
-
-The method for a compressor belongs in the same package as the compressor
-itself -- see `ZarrBlosc`, `ZarrZlib` and `ZarrZstd`, each of which defines its
-v2 compressor, its v3 codec, and the `v2_to_v3_codecs` method joining them.
+Return the v3 codec tuple equivalent to a v2 compressor. `typesize` is the
+element size in bytes. Unsupported compressor types throw `ArgumentError`.
 """
 function v2_to_v3_codecs(compressor, typesize::Int)
     throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
@@ -114,19 +99,7 @@ v2_to_v3_codecs(::NoCompressor, typesize::Int) = ()
 """
     DEFAULT_COMPRESSOR::Ref{Compressor}
 
-Holds the compressor that is used when the caller does not specify one: every
-`compressor` keyword argument in this package defaults to
-`DEFAULT_COMPRESSOR[]`.
-
-It is set by whichever package defines the default. A bare `ZarrCore` knows
-only `NoCompressor`, so that is what it starts out with; the `Zarr` umbrella
-package assigns `ZarrBlosc.BloscCompressor()` in its `__init__`, which is what
-makes Blosc the default for anyone who does `using Zarr`.
-
-Because the reference is only typed as the abstract `Compressor`, reading it
-makes array creation type-unstable. That cost is paid once per array, when its
-metadata is built -- not once per chunk: the metadata struct is parametrised on
-the concrete compressor type, so every subsequent chunk (de)compression
-dispatches statically.
+Compressor used when none is specified. `ZarrCore` defaults to
+[`NoCompressor`](@ref); `Zarr` sets this to `BloscCompressor` at load time.
 """
 const DEFAULT_COMPRESSOR = Ref{Compressor}(NoCompressor())

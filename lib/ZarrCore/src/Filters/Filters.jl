@@ -18,10 +18,8 @@ If the filter has type parameters, it MUST also implement:
 - [`sourcetype(::Filter)::T`](@ref sourcetype): equivalent to `dtype` in the Python Zarr implementation.
 - [`desttype(::Filter)::T`](@ref desttype): equivalent to `atype` in the Python Zarr implementation.
 
-Finally, each filter type MUST be registered by calling
-[`register_filter(name, FilterType)`](@ref register_filter).
-The name must follow the Zarr specification's name for that filter, and the registered
-value is the filter type (e.g. `VLenUInt8Filter` or `Fletcher32Filter`).
+Register each filter type under its Zarr `"id"` with
+[`register_filter`](@ref).
 
 
 Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletcher32Filter`](@ref).
@@ -63,23 +61,13 @@ Returns the destination type of the filter.
 """
 function desttype end
 
-"""
-Registry mapping filter names (as they appear in the `"id"` field of a filter
-specification) to filter types. Use [`register_filter`](@ref) to add new entries.
-"""
+"""Filter types keyed by their Zarr specification `"id"`."""
 const filterdict = Dict{String,Type{<:Filter}}()
 
 """
     register_filter(name::String, ::Type{T}) where {T<:Filter}
 
-Register the filter type `T` under `name`, which must be the name the Zarr
-specification uses for that filter (i.e. the `"id"` field of a filter
-specification).
-
-Filters are instantiated from their specification dictionary via
-[`getfilter`](@ref), so only the type itself is stored in the registry:
-
-    register_filter("myfilter", MyFilter)
+Register filter type `T` under the Zarr specification name `name`.
 """
 function register_filter(name::String, ::Type{T}) where {T<:Filter}
     filterdict[name] = T

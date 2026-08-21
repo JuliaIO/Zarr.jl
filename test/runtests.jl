@@ -10,68 +10,32 @@ using Dates
 @testset "Zarr" begin
 
 @testset "public API surface" begin
-    # `names(M)` returns exported *and* public names, so `Zarr`'s re-export loop
-    # has to split them with `Base.isexported`; using `names` alone would export
-    # the whole extension API, and using `Base.ispublic` would export nothing.
-    # These tests pin that split down so it cannot regress silently.
-    #
-    # `Zarr` is a facade over N subpackages (`ZarrCore`, `ZarrZip`, ...), so its
-    # export surface is the *union* of theirs, while its public surface is the
-    # deliberately smaller, user-facing list in `src/public_names_zarr.jl`.
-    # Deriving `mods` from the facade's own list means extracting another
-    # subpackage needs no change here.
-    #
-    # On Julia 1.10 there is no `public`, so `names` yields only exports and the
-    # public-only sets are empty; the assertions still hold. The last group of
-    # tests covers what that blind spot hides.
-    # A module always lists its own name, and `Zarr` additionally carries a
-    # binding for each subpackage (public, so `Zarr.ZarrCore` is a documented
-    # escape hatch rather than something `using Zarr` drags in). Both are
-    # structural, not API.
+    # Zarr exports the union of subpackage exports and exposes a smaller public API.
     mods = Zarr.REEXPORTED_MODULES
     modnames = Set((:Zarr, map(nameof, mods)...))
     exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
     publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
-    # What each module *declares* in its `public_names_*.jl`. Unlike `names`,
-    # this is readable on every supported Julia version, which is the whole
-    # point of keeping the declarations in a file.
+    # Declaration files also expose public names on Julia 1.10.
     declared(m) = setdiff(Set(Zarr._declared_public_names(m)), modnames)
     allexported = mapreduce(exported, union, mods)
     allpublic = mapreduce(publiconly, union, mods)
     alldeclared = mapreduce(declared, union, mods)
 
-    # `Zarr.ZarrCore` & co. are reachable, but `using Zarr` must not bring them
-    # into scope.
     @test all(m -> isdefined(Zarr, nameof(m)), mods)
     @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
 
-    # `Zarr` mirrors the subpackages' combined export surface exactly.
     @test exported(Zarr) == allexported
 
-    # The specific failure mode: a name that is only `public` in a subpackage
-    # must not become an export of `Zarr`, and vice versa.
     @test isempty(intersect(allpublic, exported(Zarr)))
     @test isempty(intersect(allexported, publiconly(Zarr)))
 
     @static if VERSION >= v"1.11"
-        # Every module's declaration file is exactly what `names` reports for it,
-        # so the two sources can never drift apart.
         @test all(m -> declared(m) == publiconly(m), mods)
         @test declared(Zarr) == publiconly(Zarr)
-        # `Zarr`'s public API is the user-facing *subset* of the extension API
-        # the subpackages declare -- never something they do not make public.
         @test issubset(publiconly(Zarr), allpublic)
     end
 
-    # Version-independent: the assertions above compare `names` against `names`,
-    # so on 1.10 -- where there is no `public` and every public-only set is
-    # empty -- they pass no matter what `Zarr` re-exports. The declaration files
-    # are readable on every version, so these catch a facade that silently drops
-    # the public API on LTS.
-    # Checked on the union rather than per module: a subpackage whose whole API
-    # is exported has a legitimately empty file (`ZarrS3` exports `S3Store` and
-    # declares nothing else public). What must never happen is the *combined*
-    # set going empty, or a declared name not making it into `Zarr`.
+    # Individual packages may have no public-only names; the combined set may not.
     @test !isempty(alldeclared)
     @test isempty(filter(n -> !isdefined(Zarr, n), alldeclared))
     @test !isempty(declared(Zarr))

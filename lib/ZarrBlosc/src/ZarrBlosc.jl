@@ -1,24 +1,14 @@
 """
     ZarrBlosc
 
-Blosc support for Zarr.jl: the zarr v2 [`BloscCompressor`](@ref) and the
-matching zarr v3 [`BloscV3Codec`](@ref), both backed by Blosc.jl.
-
-This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
-`Zarr.BloscCompressor` keeps working exactly as before. `Zarr` also makes
-`BloscCompressor()` the default compressor (see `ZarrCore.DEFAULT_COMPRESSOR`);
-a bare `ZarrCore` without this package defaults to `ZarrCore.NoCompressor()`.
+Blosc v2 compressor and v3 codec support.
 """
 module ZarrBlosc
 
 import Blosc
 import JSON # for JSON.lower
 
-# Only the names that are used unqualified live here. Methods that *extend* a
-# ZarrCore generic are always written as `ZarrCore.f(...)` (or
-# `V3Codecs.f(...)`) below: writing a bare `f(...)` definition would silently
-# create a new `ZarrBlosc.f` that shadows the generic instead of adding a
-# method to it, and nothing in ZarrCore would ever see it.
+# Qualify methods that extend ZarrCore or V3Codecs generics.
 import ZarrCore
 using ZarrCore: Compressor
 using ZarrCore.Codecs: V3Codecs
@@ -60,8 +50,7 @@ end
 function ZarrCore.zcompress(a, c::BloscCompressor)
     itemsize = sizeof(eltype(a))
     shuffle = c.shuffle
-    # Weird auto shuffle logic from
-    # https://github.com/zarr-developers/numcodecs/blob/7d8f9762b4f0f9b5e135688b2eeb3f783f90f208/numcodecs/blosc.pyx#L264-L272
+    # Match numcodecs AUTOSHUFFLE behavior.
     if shuffle == -1
         if itemsize == 1
             shuffle = Blosc.BITSHUFFLE
@@ -125,10 +114,7 @@ function V3Codecs.codec_decode(c::BloscV3Codec, encoded::Vector{UInt8})
     return collect(ZarrCore.zuncompress(encoded, comp, UInt8))
 end
 
-# Both registries live in `ZarrCore`, so the entries have to be added at *load*
-# time, not at precompile time: a mutation of another package's global state
-# made while this module's body runs is discarded when the precompiled image is
-# written out, and the entry would simply be missing in every fresh session.
+# Cross-package registrations must run after precompilation.
 function __init__()
     ZarrCore.compressortypes["blosc"] = BloscCompressor
     V3Codecs.register_codec("blosc", BloscV3Codec) do config, ctx

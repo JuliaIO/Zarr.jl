@@ -1,15 +1,7 @@
 """
     ZarrGCS
 
-Google Cloud Storage support for Zarr.jl: the read-only [`GCStore`](@ref), which
-talks to the GCS JSON/XML APIs over plain HTTP, plus
-[`gcs_credentials`](@ref) for requester-pays and private buckets.
-
-This package depends on HTTP.jl directly rather than on `ZarrHTTP`: it issues
-its own requests and never goes through `HTTPStore`.
-
-This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
-`Zarr.GCStore` and `zopen("gs://...")` keep working exactly as before.
+Google Cloud Storage support.
 """
 module ZarrGCS
 
@@ -17,10 +9,7 @@ using HTTP: HTTP
 using URIs: URI
 import JSON
 
-# Only the names that are used unqualified live here. Methods that *extend* a
-# ZarrCore generic are always written as `ZarrCore.f(...)` below: writing a bare
-# `f(...)` definition would silently create a new `ZarrGCS.f` that shadows the
-# generic instead of adding a method to it, and `zopen` would then never see it.
+# Qualify methods that extend ZarrCore generics.
 import ZarrCore
 using ZarrCore: AbstractStore, ConcurrentRead, concurrent_io_tasks,
     storageregexlist
@@ -32,8 +21,7 @@ const GOOGLE_STORAGE_CREDENTIALS = Dict{String,String}()
 """
     gcs_credentials(user_project,access_token,token_type)
 
-Set the user project, access token and and token type for the Google Cloud
-Store.
+Set credentials for Google Cloud Storage requests.
 """
 function gcs_credentials(user_project,access_token,token_type)
   GOOGLE_STORAGE_CREDENTIALS["user_project"] = user_project
@@ -45,11 +33,7 @@ end
 """
     gcs_credentials(; metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
 
-Set (or renew) the user project, access token and and token type for the Google
-Cloud Store from the Metadata server (assuming the function is executed from
-the Google Cloud).
-For some data sets, the error message "Bucket is requester pays bucket but no
-user project provided" is returned if the credentials are not provided.
+Load Google Cloud Storage credentials from a metadata server.
 """
 function gcs_credentials(;metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
   headers = Dict("Metadata-Flavor" => "Google")
@@ -176,22 +160,13 @@ end
 
 ZarrCore.store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
 
-# The registry lives in `ZarrCore`, so the entries have to be added at *load*
-# time, not at precompile time: a mutation of another package's global state
-# made while this module's body runs is discarded when the precompiled image is
-# written out, and the entry would simply be missing in every fresh session.
-#
-# The first two patterns also match `ZarrHTTP`'s generic `^https?://` patterns.
-# `storageregexlist` sorts by specificity, so the host-qualified patterns below
-# win regardless of whether the HTTP backend registered before or after this one.
+# Register after precompilation; GCS URLs outrank generic HTTP URLs.
 function __init__()
   push!(storageregexlist, r"^https://storage.googleapis.com" => GCStore)
   push!(storageregexlist, r"^http://storage.googleapis.com" => GCStore)
   push!(storageregexlist, r"^gs://" => GCStore)
 end
 
-# `GCStore` was exported by `ZarrCore` before it moved here, so it is exported
-# (not just public) to keep `using Zarr; GCStore` working.
 export GCStore
 @static if VERSION >= v"1.11"
     include("public_names_gcs.jl")

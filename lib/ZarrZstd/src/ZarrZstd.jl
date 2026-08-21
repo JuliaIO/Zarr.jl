@@ -1,11 +1,7 @@
 """
     ZarrZstd
 
-Zstandard support for Zarr.jl: the zarr v2 [`ZstdCompressor`](@ref) and the
-matching zarr v3 [`ZstdV3Codec`](@ref), both backed by ChunkCodecLibZstd.jl.
-
-This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
-`Zarr.ZstdCompressor` keeps working exactly as before.
+Zstandard v2 compressor and v3 codec support.
 """
 module ZarrZstd
 
@@ -14,19 +10,13 @@ import JSON # for JSON.lower
 using ChunkCodecLibZstd: ZstdEncodeOptions
 using ChunkCodecCore: encode, decode, decode!
 
-# Only the names that are used unqualified live here. Methods that *extend* a
-# ZarrCore generic are always written as `ZarrCore.f(...)` (or
-# `V3Codecs.f(...)`) below: writing a bare `f(...)` definition would silently
-# create a new `ZarrZstd.f` that shadows the generic instead of adding a method
-# to it, and nothing in ZarrCore would ever see it.
+# Qualify methods that extend ZarrCore or V3Codecs generics.
 import ZarrCore
 using ZarrCore: Compressor
 using ZarrCore.Codecs: V3Codecs
 using ZarrCore.Codecs.V3Codecs: V3Codec
 
-# `reinterpret` needs a 1-based, non-zero-dimensional array; a 0-d chunk has to
-# be reshaped first. Kept local rather than shared, so that this package depends
-# only on ZarrCore's documented API.
+# `reinterpret` requires a one-based, non-zero-dimensional array.
 _reinterpret(::Type{T}, x::AbstractArray{S, 0}) where {T, S} = reinterpret(T, reshape(x, 1))
 _reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
@@ -108,10 +98,7 @@ function V3Codecs.codec_decode(c::ZstdV3Codec, encoded::Vector{UInt8})
     return collect(ZarrCore.zuncompress(encoded, comp, UInt8))
 end
 
-# Both registries live in `ZarrCore`, so the entries have to be added at *load*
-# time, not at precompile time: a mutation of another package's global state
-# made while this module's body runs is discarded when the precompiled image is
-# written out, and the entry would simply be missing in every fresh session.
+# Cross-package registrations must run after precompilation.
 function __init__()
     ZarrCore.compressortypes["zstd"] = ZstdCompressor
     V3Codecs.register_codec("zstd", ZstdV3Codec) do config, ctx
