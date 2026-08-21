@@ -63,8 +63,8 @@ The repo is a Pkg workspace:
 - `ZarrGCS` — `GCStore` and GCS credentials.
 - `ZarrS3` — `S3Store`; AWSS3 methods load through a weak extension.
 - `ZarrZip` — `ZipStore` and `writezip`.
-- `ZarrBlosc`, `ZarrZlib`, `ZarrZstd` — v2 compressors and matching v3 codecs.
-- `Zarr` — facade that re-exports `REEXPORTED_MODULES` and sets Blosc as the default compressor.
+- `ZarrBlosc`, `ZarrZlib`, `ZarrZstd` — v2 compressors and matching v3 codecs; `ZarrBlosc` provides the default compressor.
+- `Zarr` — facade that re-exports `REEXPORTED_MODULES`.
 
 Package rules:
 

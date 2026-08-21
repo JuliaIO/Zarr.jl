@@ -90,11 +90,6 @@ let seen = Set{Symbol}()
     end
 end
 
-# Cross-package state must be set at load time, after precompilation.
-function __init__()
-    ZarrCore.DEFAULT_COMPRESSOR[] = ZarrBlosc.BloscCompressor()
-end
-
 # User-facing public names; Julia 1.10 uses the parsed declarations above.
 @static if VERSION >= v"1.11"
     include("public_names_zarr.jl")

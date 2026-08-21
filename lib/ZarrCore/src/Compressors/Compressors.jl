@@ -96,10 +96,13 @@ compressortypes[nothing] = NoCompressor
 
 v2_to_v3_codecs(::NoCompressor, typesize::Int) = ()
 
-"""
-    DEFAULT_COMPRESSOR::Ref{Compressor}
+struct _DefaultCompressorFallback end
 
-Compressor used when none is specified. `ZarrCore` defaults to
-[`NoCompressor`](@ref); `Zarr` sets this to `BloscCompressor` at load time.
 """
-const DEFAULT_COMPRESSOR = Ref{Compressor}(NoCompressor())
+    default_compressor()
+
+Return the compressor used when none is specified. Bare `ZarrCore` returns
+[`NoCompressor`](@ref); compressor packages may provide a zero-argument method.
+"""
+# The fallback remains less specific than a package's zero-argument method.
+default_compressor(::_DefaultCompressorFallback...) = NoCompressor()

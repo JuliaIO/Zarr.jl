@@ -36,6 +36,8 @@ Returns a `BloscCompressor` struct that can serve as a Zarr array compressor. Ke
 BloscCompressor(;blocksize=0, clevel=5, cname="lz4", shuffle=1) =
     BloscCompressor(blocksize, clevel, cname, shuffle)
 
+ZarrCore.default_compressor() = BloscCompressor()
+
 function ZarrCore.getCompressor(::Type{BloscCompressor}, d::Dict)
     BloscCompressor(d["blocksize"], d["clevel"], d["cname"], d["shuffle"])
 end

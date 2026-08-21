@@ -53,6 +53,16 @@ using Dates
         :CRC32cV3Codec, :VLenUTF8V3Codec]))
 end
 
+@testset "default compressor" begin
+    @test @inferred(ZarrCore.default_compressor()) == Zarr.BloscCompressor()
+    core_only = """
+        using ZarrCore
+        @assert ZarrCore.default_compressor() isa ZarrCore.NoCompressor
+        @assert ZarrCore.Metadata(zeros(UInt8, 1), (1,)).compressor isa ZarrCore.NoCompressor
+        """
+    @test success(`$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $core_only`)
+end
+
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)

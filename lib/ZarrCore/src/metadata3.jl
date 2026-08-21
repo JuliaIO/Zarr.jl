@@ -92,7 +92,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         dtype, fill_value;
         order::Char='C',
         endian::Symbol=:little,
-        compressor=DEFAULT_COMPRESSOR[],
+        compressor=default_compressor(),
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T2, N, E}
     T_base = Base.nonmissingtype(T2)
@@ -270,7 +270,7 @@ end
 "Construct MetadataV3 based on your data"
 function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         node_type::String="array",
-        compressor=DEFAULT_COMPRESSOR[],
+        compressor=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         endian::Symbol=:little,
@@ -323,7 +323,7 @@ end
 
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         node_type::String="array",
-        compressor::C=DEFAULT_COMPRESSOR[],
+        compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         endian::Symbol=:little,

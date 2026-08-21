@@ -28,7 +28,7 @@ public zencode, zdecode, getfilter, sourcetype, desttype, filterdict,
 # Compressor interface; concrete compressors are declared by their packages.
 public Compressor, NoCompressor
 public zcompress, zcompress!, zuncompress, zuncompress!, getCompressor,
-    compressortypes, DEFAULT_COMPRESSOR, v2_to_v3_codecs
+    compressortypes, default_compressor, v2_to_v3_codecs
 
 # Core v3 codecs; backend codecs are declared by their packages.
 public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,

@@ -4,7 +4,7 @@
 - Move code to ZarrCore.jl with low dependencies
 - Move HTTP, GCS, S3, and ZIP backends into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`.
 - Move Blosc, zlib, and Zstandard support into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`; each provides its v2 compressor and v3 codec.
-- `Zarr` re-exports the subpackages and defaults to `BloscCompressor()`; bare `ZarrCore` defaults to `NoCompressor()`.
+- Loading `ZarrBlosc` makes `default_compressor()` return `BloscCompressor()`; bare `ZarrCore` returns `NoCompressor()`.
 - Register external compressors, codecs, and URL stores at load time. URL patterns are matched by specificity.
 - AWSS3 remains an optional dependency of `ZarrS3`.
 - Make `missing_chunk_return_code!` and `gcs_credentials` public. Stop exposing
