@@ -1,4 +1,29 @@
+"""
+    ZarrGCS
+
+Google Cloud Storage support for Zarr.jl: the read-only [`GCStore`](@ref), which
+talks to the GCS JSON/XML APIs over plain HTTP, plus
+[`gcs_credentials`](@ref) for requester-pays and private buckets.
+
+This package depends on HTTP.jl directly rather than on `ZarrHTTP`: it issues
+its own requests and never goes through `HTTPStore`.
+
+This is a subpackage of Zarr.jl; its public API is re-exported by `Zarr`, so
+`Zarr.GCStore` and `zopen("gs://...")` keep working exactly as before.
+"""
+module ZarrGCS
+
+using HTTP: HTTP
 using URIs: URI
+import JSON
+
+# Only the names that are used unqualified live here. Methods that *extend* a
+# ZarrCore generic are always written as `ZarrCore.f(...)` below: writing a bare
+# `f(...)` definition would silently create a new `ZarrGCS.f` that shadows the
+# generic instead of adding a method to it, and `zopen` would then never see it.
+import ZarrCore
+using ZarrCore: AbstractStore, ConcurrentRead, concurrent_io_tasks,
+    storageregexlist
 
 const GOOGLE_STORAGE_API = "https://storage.googleapis.com"
 const GOOGLE_STORAGE_REST_API = GOOGLE_STORAGE_API * "/storage/v1"
@@ -56,6 +81,12 @@ function _gcs_request_headers()
   return headers
 end
 
+"""
+    GCStore(url::String)
+
+A read-only store for a Google Cloud Storage bucket. `url` may be either a
+`gs://bucket/path` URL or an `https://storage.googleapis.com/bucket/path` one.
+"""
 struct GCStore <: AbstractStore
   bucket::String
 
@@ -91,7 +122,7 @@ function Base.getindex(s::GCStore, k::String)
   end
 end
 
-function cloud_list_objects(s::GCStore,p)
+function ZarrCore.cloud_list_objects(s::GCStore,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
 
   url = string(GOOGLE_STORAGE_REST_API, "/b/", s.bucket, "/o")
@@ -105,8 +136,8 @@ function cloud_list_objects(s::GCStore,p)
   return r
 end
 
-function storagesize(s::GCStore,p)
-  r = cloud_list_objects(s,p)
+function ZarrCore.storagesize(s::GCStore,p)
+  r = ZarrCore.cloud_list_objects(s,p)
   items = r["items"]
   datafiles = filter(entry -> !any(filename -> endswith(entry["name"], filename), [".zattrs",".zarray",".zgroup"]), items)
   if isempty(datafiles)
@@ -118,23 +149,19 @@ function storagesize(s::GCStore,p)
   end
 end
 
-function subkeys(s::GCStore, p)
-  r = cloud_list_objects(s, p)
+function ZarrCore.subkeys(s::GCStore, p)
+  r = ZarrCore.cloud_list_objects(s, p)
   keys = map(item -> String(split(item["name"],'/')[end]),  r["items"])
   return keys
 end
 
-function subdirs(s::GCStore, p)
-  r = cloud_list_objects(s,p)
+function ZarrCore.subdirs(s::GCStore, p)
+  r = ZarrCore.cloud_list_objects(s,p)
   dirs = map(prefix -> String(split(prefix,'/')[end-1]), r["prefixes"])
   return dirs
 end
 
-pushfirst!(storageregexlist,r"^https://storage.googleapis.com"=>GCStore)
-pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
-push!(storageregexlist,r"^gs://"=>GCStore)
-
-function storefromstring(::Type{<:GCStore}, url,_)
+function ZarrCore.storefromstring(::Type{<:GCStore}, url,_)
   uri = URI(url)
   if uri.scheme == "gs"
     p = lstrip(uri.path,'/')
@@ -147,4 +174,27 @@ function storefromstring(::Type{<:GCStore}, url,_)
   return GCStore(url),p
 end
 
-store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
+ZarrCore.store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
+
+# The registry lives in `ZarrCore`, so the entries have to be added at *load*
+# time, not at precompile time: a mutation of another package's global state
+# made while this module's body runs is discarded when the precompiled image is
+# written out, and the entry would simply be missing in every fresh session.
+#
+# The first two patterns also match `ZarrHTTP`'s generic `^https?://` patterns.
+# `storageregexlist` sorts by specificity, so the host-qualified patterns below
+# win regardless of whether the HTTP backend registered before or after this one.
+function __init__()
+  push!(storageregexlist, r"^https://storage.googleapis.com" => GCStore)
+  push!(storageregexlist, r"^http://storage.googleapis.com" => GCStore)
+  push!(storageregexlist, r"^gs://" => GCStore)
+end
+
+# `GCStore` was exported by `ZarrCore` before it moved here, so it is exported
+# (not just public) to keep `using Zarr; GCStore` working.
+export GCStore
+@static if VERSION >= v"1.11"
+    include("public_names_gcs.jl")
+end
+
+end # module

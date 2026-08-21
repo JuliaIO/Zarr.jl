@@ -15,48 +15,84 @@ using Dates
     # the whole extension API, and using `Base.ispublic` would export nothing.
     # These tests pin that split down so it cannot regress silently.
     #
+    # `Zarr` is a facade over N subpackages (`ZarrCore`, `ZarrZip`, ...), so its
+    # export surface is the *union* of theirs, while its public surface is the
+    # deliberately smaller, user-facing list in `src/public_names_zarr.jl`.
+    # Deriving `mods` from the facade's own list means extracting another
+    # subpackage needs no change here.
+    #
     # On Julia 1.10 there is no `public`, so `names` yields only exports and the
-    # public-only sets are empty; the assertions still hold. The final pair of
+    # public-only sets are empty; the assertions still hold. The last group of
     # tests covers what that blind spot hides.
-    # A module always lists its own name, and `Zarr` additionally carries the
-    # `ZarrCore` binding (public, so `Zarr.ZarrCore` is a documented escape hatch
-    # rather than something `using Zarr` drags in). Both are structural, not API.
-    modnames = Set((:Zarr, :ZarrCore))
+    # A module always lists its own name, and `Zarr` additionally carries a
+    # binding for each subpackage (public, so `Zarr.ZarrCore` is a documented
+    # escape hatch rather than something `using Zarr` drags in). Both are
+    # structural, not API.
+    mods = Zarr.REEXPORTED_MODULES
+    modnames = Set((:Zarr, map(nameof, mods)...))
     exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
     publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+    # What each module *declares* in its `public_names_*.jl`. Unlike `names`,
+    # this is readable on every supported Julia version, which is the whole
+    # point of keeping the declarations in a file.
+    declared(m) = setdiff(Set(Zarr._declared_public_names(m)), modnames)
+    allexported = mapreduce(exported, union, mods)
+    allpublic = mapreduce(publiconly, union, mods)
+    alldeclared = mapreduce(declared, union, mods)
 
-    # `Zarr.ZarrCore` is reachable, but `using Zarr` must not bring it into scope.
-    @test isdefined(Zarr, :ZarrCore)
-    @test !Base.isexported(Zarr, :ZarrCore)
+    # `Zarr.ZarrCore` & co. are reachable, but `using Zarr` must not bring them
+    # into scope.
+    @test all(m -> isdefined(Zarr, nameof(m)), mods)
+    @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
 
-    # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
-    @test exported(Zarr) == exported(ZarrCore)
+    # `Zarr` mirrors the subpackages' combined export surface exactly.
+    @test exported(Zarr) == allexported
 
-    # The specific failure mode: a name that is only `public` in `ZarrCore` must
-    # not become an export of `Zarr`, and vice versa.
-    @test isempty(intersect(publiconly(ZarrCore), exported(Zarr)))
-    @test isempty(intersect(exported(ZarrCore), publiconly(Zarr)))
+    # The specific failure mode: a name that is only `public` in a subpackage
+    # must not become an export of `Zarr`, and vice versa.
+    @test isempty(intersect(allpublic, exported(Zarr)))
+    @test isempty(intersect(allexported, publiconly(Zarr)))
 
-    # Version-independent: the two assertions above compare `names` against
-    # `names`, so on 1.10 -- where `@public` expands to nothing and both
-    # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    @test all(isdefined.(Ref(Zarr), [:zname])   )
+    @static if VERSION >= v"1.11"
+        # Every module's declaration file is exactly what `names` reports for it,
+        # so the two sources can never drift apart.
+        @test all(m -> declared(m) == publiconly(m), mods)
+        @test declared(Zarr) == publiconly(Zarr)
+        # `Zarr`'s public API is the user-facing *subset* of the extension API
+        # the subpackages declare -- never something they do not make public.
+        @test issubset(publiconly(Zarr), allpublic)
+    end
+
+    # Version-independent: the assertions above compare `names` against `names`,
+    # so on 1.10 -- where there is no `public` and every public-only set is
+    # empty -- they pass no matter what `Zarr` re-exports. The declaration files
+    # are readable on every version, so these catch a facade that silently drops
+    # the public API on LTS.
+    # Checked on the union rather than per module: a subpackage whose whole API
+    # is exported has a legitimately empty file (`ZarrS3` exports `S3Store` and
+    # declares nothing else public). What must never happen is the *combined*
+    # set going empty, or a declared name not making it into `Zarr`.
+    @test !isempty(alldeclared)
+    @test isempty(filter(n -> !isdefined(Zarr, n), alldeclared))
+    @test !isempty(declared(Zarr))
+    @test isempty(filter(n -> !isdefined(Zarr, n), declared(Zarr)))
+
+    @test all(isdefined.(Ref(Zarr), [:zname]))
     @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
-    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip, :missing_chunk_return_code!, :gcs_credentials]))
     @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
     @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
         :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
     @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
-    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BloscCodec, :BytesCodec, :CRC32cCodec, :GzipCodec,
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
         :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
         :CRC32cV3Codec, :VLenUTF8V3Codec]))
-
 end
 
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -82,7 +118,7 @@ end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)

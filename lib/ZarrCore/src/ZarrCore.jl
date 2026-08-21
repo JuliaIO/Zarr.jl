@@ -1,7 +1,6 @@
 module ZarrCore
 
 import JSON
-import Blosc
 import Unicode
 using OrderedCollections: OrderedDict
 
@@ -28,9 +27,8 @@ include("ZGroup.jl")
 include("caching.jl")
 
 import .Codecs: Codec
-import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec,
-    ShardingCodec, TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec,
-    CRC32cV3Codec, VLenUTF8V3Codec
+import .Codecs.V3Codecs: V3Codec, BytesCodec, CRC32cCodec,
+    ShardingCodec, TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec
 
 # ## Public API
 #
@@ -46,9 +44,18 @@ import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, zgroup, zarrcache,
   storagesize, storageratio, zinfo,
-  DirectoryStore, S3Store, GCStore
+  DirectoryStore
 
+# The public-but-not-exported half of the API is declared with bare `public`
+# statements in `public_names_core.jl`, which only Julia 1.11+ can parse.
+#
+# Names that live in a subpackage declare themselves over there, in that
+# package's own `public_names_*.jl`: `HTTPStore` (ZarrHTTP), `ZipStore` and
+# `writezip` (ZarrZip), `gcs_credentials` (ZarrGCS), `BloscCompressor` and
+# `BloscV3Codec` (ZarrBlosc), `ZlibCompressor` and `GzipV3Codec` (ZarrZlib),
+# `ZstdCompressor` and `ZstdV3Codec` (ZarrZstd). `GCStore` and `S3Store` are
+# exported by ZarrGCS and ZarrS3 respectively.
 @static if VERSION >= v"1.11"
     include("public_names_core.jl")
-  end
+end
 end # module

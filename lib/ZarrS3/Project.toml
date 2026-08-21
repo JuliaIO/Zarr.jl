@@ -1,0 +1,18 @@
+name = "ZarrS3"
+uuid = "3ac672aa-0e94-41ce-be0d-2f83c20261dd"
+version = "0.10.1"
+authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
+
+[deps]
+ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
+
+[weakdeps]
+AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
+
+[extensions]
+ZarrS3AWSS3Ext = "AWSS3"
+
+[compat]
+AWSS3 = "0.10, 0.11"
+ZarrCore = "0.10"
+julia = "1.10"

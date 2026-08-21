@@ -49,4 +49,4 @@ function JSON.lower(c::FixedScaleOffsetFilter{ScaleOffsetType, T, Tenc}) where {
     return Dict("id" => "fixedscaleoffset", "scale" => c.scale, "offset" => c.offset, "dtype" => typestr(T), "astype" => typestr(Tenc))
 end
 
-filterdict["fixedscaleoffset"] = FixedScaleOffsetFilter
+register_filter("fixedscaleoffset", FixedScaleOffsetFilter)

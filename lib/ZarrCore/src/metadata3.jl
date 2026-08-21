@@ -92,7 +92,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         dtype, fill_value;
         order::Char='C',
         endian::Symbol=:little,
-        compressor=BloscCompressor(),
+        compressor=DEFAULT_COMPRESSOR[],
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T2, N, E}
     T_base = Base.nonmissingtype(T2)
@@ -108,19 +108,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
         typesize = sizeof(T_base)
     end
-    bytes_bytes_codecs = if compressor isa NoCompressor
-        ()
-    elseif compressor isa BloscCompressor
-        (Codecs.V3Codecs.BloscV3Codec(compressor.cname, compressor.clevel, compressor.shuffle, compressor.blocksize, typesize),)
-    elseif compressor isa ZlibCompressor
-        # ZlibCompressor uses -1 to mean "default"; zarr v3 gzip spec requires 0-9
-        level = compressor.config.level == -1 ? 6 : compressor.config.level
-        (Codecs.V3Codecs.GzipV3Codec(level),)
-    elseif compressor isa ZstdCompressor
-        (Codecs.V3Codecs.ZstdV3Codec(compressor.config.compressionLevel),)
-    else
-        throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
-    end
+    bytes_bytes_codecs = v2_to_v3_codecs(compressor, typesize)
     pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
     return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
 end
@@ -282,7 +270,7 @@ end
 "Construct MetadataV3 based on your data"
 function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         node_type::String="array",
-        compressor=BloscCompressor(),
+        compressor=DEFAULT_COMPRESSOR[],
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         endian::Symbol=:little,
@@ -335,7 +323,7 @@ end
 
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         node_type::String="array",
-        compressor::C=BloscCompressor(),
+        compressor::C=DEFAULT_COMPRESSOR[],
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         endian::Symbol=:little,

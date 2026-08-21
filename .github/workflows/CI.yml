@@ -37,17 +37,18 @@ jobs:
           show-versioninfo: true
       - uses: julia-actions/cache@v3
       # Pkg only understands `[sources]`/`[workspace]` from Julia 1.11 on, so on
-      # LTS (1.10) the unregistered path dependency on ZarrCore is invisible and
-      # resolution fails with "expected package ZarrCore to be registered".
-      # Dev'ing it explicitly fixes that; on 1.11+ it is a no-op because
-      # `[sources]` already points at the same path. This only affects developing
-      # from a checkout -- once both packages are registered, users resolve
-      # ZarrCore normally on any supported Julia.
-      - name: Develop ZarrCore (Pkg < 1.11 ignores [sources])
+      # LTS (1.10) the unregistered path dependencies on the `lib/` subpackages
+      # are invisible and resolution fails with "expected package ZarrCore to be
+      # registered". Dev'ing them explicitly fixes that; on 1.11+ it is a no-op
+      # because `[sources]` already points at the same paths. This only affects
+      # developing from a checkout -- once the packages are registered, users
+      # resolve them normally on any supported Julia. Every new subpackage under
+      # `lib/` has to be added here and to the fixture step below.
+      - name: Develop the lib/ subpackages (Pkg < 1.11 ignores [sources])
         # bash on every platform: PowerShell mangles the embedded double quotes
         # when forwarding them to a native executable.
         shell: bash
-        run: julia --project=. -e 'using Pkg; Pkg.develop(path="lib/ZarrCore")'
+        run: julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")])'
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
@@ -62,16 +63,16 @@ jobs:
           # `rm`-style POSIX commands added here behave consistently).
           shell: bash
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
-      # The step above dev's ZarrCore into the test environment so the fixture
-      # scripts can `using Zarr` on LTS, which makes ZarrCore a *direct* dep of
-      # test/Project.toml. `Pkg.test` then builds its sandbox by merging the
-      # active manifest (where ZarrCore is also dev'd, hence fixed) with the
+      # The step above dev's the subpackages into the test environment so the
+      # fixture scripts can `using Zarr` on LTS, which makes them *direct* deps
+      # of test/Project.toml. `Pkg.test` then builds its sandbox by merging the
+      # active manifest (where they are also dev'd, hence fixed) with the
       # fixed deps of the test manifest, and refuses to merge a package that
       # appears in both: "ERROR: can not merge projects". Dropping the test
-      # manifest leaves nothing to merge; the sandbox resolves ZarrCore from the
+      # manifest leaves nothing to merge; the sandbox resolves them from the
       # active manifest instead. On 1.11+ the workspace keeps the only manifest
       # at the repo root, so this is a no-op there.
       - name: Drop the test manifest so Pkg.test can build its sandbox

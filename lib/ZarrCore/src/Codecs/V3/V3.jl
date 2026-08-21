@@ -1,16 +1,39 @@
 module V3Codecs
 
 import ..Codecs: zencode, zdecode, zencode!, zdecode!
-# Import compressor types and functions from Zarr (grandparent module)
-import ...ZarrCore: ZlibCompressor, ZstdCompressor, zcompress, zuncompress
-import ...ZarrCore: BloscCompressor as ZarrBloscCompressor
+# Import pipeline internals from ZarrCore (grandparent module)
 import ...ZarrCore: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
 using CRC32c: CRC32c
 using JSON: JSON
-using ChunkCodecLibZlib: GzipCodec as LibZGzipCodec, GzipEncodeOptions
-using ChunkCodecCore: encode as cc_encode, decode as cc_decode
 
 abstract type V3Codec{In,Out} end
+
+"""
+    name(codec::V3Codec) -> String
+
+The name the zarr v3 spec gives `codec`, i.e. the key it is registered under in
+[`codec_parsers`](@ref) and the `"name"` field of its serialised form.
+"""
+function name end
+
+"""
+    codec_encode(codec::V3Codec, data)
+
+Apply `codec` in the encoding direction. Array->array codecs take and return an
+`AbstractArray`, array->bytes codecs take an `AbstractArray` and return a
+`Vector{UInt8}`, and bytes->bytes codecs take and return a `Vector{UInt8}`.
+"""
+function codec_encode end
+
+"""
+    codec_decode(codec::V3Codec, encoded)
+    codec_decode(codec::V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape; fill_value=nothing)
+
+Apply `codec` in the decoding direction, inverting [`codec_encode`](@ref). The
+four-argument form is the one array->bytes codecs implement, since they need
+the element type and shape to rebuild the array.
+"""
+function codec_decode end
 
 """
     is_fixed_size(codec::V3Codec) -> Bool
@@ -64,30 +87,6 @@ function register_codec(parser::Function, name::String, ::Type{T}) where {T<:V3C
 end
 register_codec(parser::Function, name::String) = register_codec(parser, name, V3Codec)
 
-@enum BloscCompressor begin
-    lz4
-    lz4hc
-    blosclz
-    zstd
-    snappy
-    zlib
-end
-
-@enum BloscShuffle begin
-    noshuffle
-    shuffle
-    bitshuffle
-end
-
-struct BloscCodec <: V3Codec{:bytes, :bytes}
-    cname::BloscCompressor
-    clevel::Int64
-    shuffle::BloscShuffle
-    typesize::UInt8
-    blocksize::UInt
-end
-name(::BloscCodec) = "blosc"
-
 struct BytesCodec <: V3Codec{:array, :bytes}
     endian::Symbol  # :little or :big
     function BytesCodec(endian::Symbol)
@@ -114,10 +113,6 @@ _needs_bswap(endian::Symbol) = (endian == :little) != _SYSTEM_LITTLE_ENDIAN
 struct CRC32cCodec <: V3Codec{:bytes, :bytes}
 end
 name(::CRC32cCodec) = "crc32c"
-
-struct GzipCodec <: V3Codec{:bytes, :bytes}
-end
-name(::GzipCodec) = "gzip"
 
 function crc32c_stream!(output::IO, input::IO; buffer = Vector{UInt8}(undef, 1024*32))
     hash::UInt32 = 0x00000000
@@ -665,101 +660,10 @@ function codec_decode(c::TransposeCodec, encoded::AbstractArray)
     return permutedims(encoded, inv_order)
 end
 
-struct GzipV3Codec <: V3Codec{:bytes, :bytes}
-    level::Int
-end
-GzipV3Codec() = GzipV3Codec(6)
-name(::GzipV3Codec) = "gzip"
-
-register_codec("gzip", GzipV3Codec) do config, ctx
-    GzipV3Codec(get(config, "level", 6))
-end
-
-function JSON.lower(c::GzipV3Codec)
-    Dict("name" => "gzip", "configuration" => Dict("level" => c.level))
-end
-
-function codec_encode(c::GzipV3Codec, data::Vector{UInt8})
-    opts = GzipEncodeOptions(; level=c.level)
-    return cc_encode(opts, data)
-end
-
-function codec_decode(c::GzipV3Codec, encoded::Vector{UInt8})
-    return cc_decode(LibZGzipCodec(), encoded)
-end
-
-struct BloscV3Codec <: V3Codec{:bytes, :bytes}
-    cname::String
-    clevel::Int
-    shuffle::Int
-    blocksize::Int
-    typesize::Int
-end
-BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
-name(::BloscV3Codec) = "blosc"
-
-register_codec("blosc", BloscV3Codec) do config, ctx
-    cname = get(config, "cname", "lz4")
-    clevel = get(config, "clevel", 5)
-    shuffle_val = get(config, "shuffle", "noshuffle")
-    shuffle_int = shuffle_val isa Integer ? shuffle_val :
-                  shuffle_val == "noshuffle"  ? 0 :
-                  shuffle_val == "shuffle"     ? 1 :
-                  shuffle_val == "bitshuffle"  ? 2 :
-                  throw(ArgumentError("Unknown shuffle: \"$shuffle_val\"."))
-    blocksize = get(config, "blocksize", 0)
-    typesize_default = isnothing(ctx) ? 4 : ctx.elsize
-    typesize = get(config, "typesize", typesize_default)
-    BloscV3Codec(string(cname), clevel, shuffle_int, blocksize, typesize)
-end
-
-function JSON.lower(c::BloscV3Codec)
-    shuffle_str = c.shuffle == 0 ? "noshuffle" :
-                  c.shuffle == 1 ? "shuffle" :
-                  c.shuffle == 2 ? "bitshuffle" :
-                  throw(ArgumentError("Unknown shuffle integer: $(c.shuffle)"))
-    Dict("name" => "blosc", "configuration" => Dict(
-        "cname"     => c.cname,
-        "clevel"    => c.clevel,
-        "shuffle"   => shuffle_str,
-        "blocksize" => c.blocksize,
-        "typesize"  => c.typesize
-    ))
-end
-
-function codec_encode(c::BloscV3Codec, data::Vector{UInt8})
-    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle)
-    return zcompress(data, comp)
-end
-
-function codec_decode(c::BloscV3Codec, encoded::Vector{UInt8})
-    comp = ZarrBloscCompressor(blocksize=c.blocksize, clevel=c.clevel, cname=c.cname, shuffle=c.shuffle)
-    return collect(zuncompress(encoded, comp, UInt8))
-end
-
-struct ZstdV3Codec <: V3Codec{:bytes, :bytes}
-    level::Int
-end
-ZstdV3Codec() = ZstdV3Codec(3)
-name(::ZstdV3Codec) = "zstd"
-
-register_codec("zstd", ZstdV3Codec) do config, ctx
-    ZstdV3Codec(get(config, "level", 3))
-end
-
-function JSON.lower(c::ZstdV3Codec)
-    Dict("name" => "zstd", "configuration" => Dict("level" => c.level))
-end
-
-function codec_encode(c::ZstdV3Codec, data::Vector{UInt8})
-    comp = ZstdCompressor(level=c.level)
-    return zcompress(data, comp)
-end
-
-function codec_decode(c::ZstdV3Codec, encoded::Vector{UInt8})
-    comp = ZstdCompressor(level=c.level)
-    return collect(zuncompress(encoded, comp, UInt8))
-end
+# The `gzip`, `blosc` and `zstd` codecs live in `ZarrZlib`, `ZarrBlosc` and
+# `ZarrZstd` respectively, next to the v2 compressors they share an
+# implementation with. Each registers itself in `codec_parsers` from its
+# `__init__`.
 
 struct CRC32cV3Codec <: V3Codec{:bytes, :bytes}
 end
@@ -823,7 +727,7 @@ function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shap
     out
 end
 
-@static if VERSION ≥ v"1.11"
+@static if VERSION >= v"1.11"
     include("public_names_v3.jl")
 end
 
