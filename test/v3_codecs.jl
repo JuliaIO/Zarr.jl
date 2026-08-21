@@ -68,39 +68,41 @@ end
 
 @testset "get_order" begin
     bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
+    ch = DiskArrays.GridChunks((3, 3, 3), (3, 3, 3))
+    cke = Zarr.ChunkKeyEncoding('/', true)
 
     # No array->array codecs → 'C'
     p = ZarrCore.V3Pipeline((), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test ZarrCore.get_order(md) == 'C'
 
     # Single TransposeCodec with identity permutation → 'C'
     tc_c = Zarr.Codecs.V3Codecs.TransposeCodec((1,2,3))
     p = ZarrCore.V3Pipeline((tc_c,), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test ZarrCore.get_order(md) == 'C'
 
     # Single TransposeCodec with reverse permutation → 'F'
     tc_f = Zarr.Codecs.V3Codecs.TransposeCodec((3,2,1))
     p = ZarrCore.V3Pipeline((tc_f,), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test ZarrCore.get_order(md) == 'F'
 
     # Single TransposeCodec with arbitrary (non-C, non-F) permutation → ArgumentError
     tc_other = Zarr.Codecs.V3Codecs.TransposeCodec((2,1,3))
     p = ZarrCore.V3Pipeline((tc_other,), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test_throws ArgumentError ZarrCore.get_order(md)
 
     # Multiple array->array codecs → ArgumentError
     p = ZarrCore.V3Pipeline((tc_f, tc_f), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test_throws ArgumentError ZarrCore.get_order(md)
 
     # Unrecognized array->array codec type → ArgumentError
     struct _FakeCodec <: Zarr.Codecs.V3Codecs.V3Codec{:array,:array} end
     p = ZarrCore.V3Pipeline((_FakeCodec(),), bytes_codec, ())
-    md = ZarrCore.MetadataV3{Int32,3,typeof(p)}(3, "array", (3,3,3), (3,3,3), "int32", p, Int32(0), Zarr.ChunkKeyEncoding('/',true))
+    md = ZarrCore.MetadataV3{Int32,3,typeof(p),typeof(cke),typeof(ch)}(3, "array", (3,3,3), ch, "int32", p, Int32(0), cke)
     @test_throws ArgumentError ZarrCore.get_order(md)
 end
 
@@ -440,7 +442,7 @@ end
     md = ZarrCore.Metadata(json_str, false)
     @test md isa ZarrCore.MetadataV3
     @test md.shape[] == (4,)
-    @test md.chunks == (4,)
+    @test md.chunks[] == GridChunks((4,), (4,))
     @test md.fill_value == Int32(0)
 
     pipeline = ZarrCore.get_pipeline(md)
@@ -631,7 +633,8 @@ end
     pipeline = ZarrCore.V3Pipeline((), bytes_codec, ())
     P = typeof(pipeline)
     E = typeof(cke)
-    md = ZarrCore.MetadataV3{Int32,2,P,E}(3, "array", (4,4), (2,2), "int32", pipeline, Int32(0), cke)
+    ch = DiskArrays.GridChunks((4, 4), (2, 2))
+    md = ZarrCore.MetadataV3{Int32,2,P,E,typeof(ch)}(3, "array", (4,4), ch, "int32", pipeline, Int32(0), cke)
     z = Zarr.ZArray(md, store, "", Dict(), true)
     z[:,:] = reshape(Int32.(1:16), 4, 4)
     @test z[:,:] == reshape(Int32.(1:16), 4, 4)
@@ -1141,9 +1144,11 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline)}(
-        3, "array", (3,), (3,), "int16", pipeline, Int16(0),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch = DiskArrays.GridChunks((3,), (3,))
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline),typeof(cke),typeof(ch)}(
+        3, "array", (3,), ch, "int16", pipeline, Int16(0),
+        cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -1165,9 +1170,11 @@ end
     )
     sharding2 = Zarr.Codecs.V3Codecs.ShardingCodec((2,2), inner_pipeline2, index_pipeline2, :end)
     pipeline2 = ZarrCore.V3Pipeline((), sharding2, ())
-    md2 = ZarrCore.MetadataV3{Int32,2,typeof(pipeline2)}(
-        3, "array", (3,3), (3,3), "int32", pipeline2, Int32(0),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch2 = DiskArrays.GridChunks((3, 3), (3, 3))
+    cke2 = Zarr.ChunkKeyEncoding('/', true)
+    md2 = ZarrCore.MetadataV3{Int32,2,typeof(pipeline2),typeof(cke2),typeof(ch2)}(
+        3, "array", (3,3), ch2, "int32", pipeline2, Int32(0),
+        cke2
     )
     store2 = Zarr.DictStore()
     z2 = Zarr.ZArray(md2, store2, "", Dict(), true)
@@ -1192,9 +1199,11 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline)}(
-        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch = DiskArrays.GridChunks((4,), (4,))
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline),typeof(cke),typeof(ch)}(
+        3, "array", (4,), ch, "int16", pipeline, Int16(0),
+        cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -1221,9 +1230,11 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :start)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline)}(
-        3, "array", (4,), (4,), "int16", pipeline, Int16(0),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch = DiskArrays.GridChunks((4,), (4,))
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline),typeof(cke),typeof(ch)}(
+        3, "array", (4,), ch, "int16", pipeline, Int16(0),
+        cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -1300,9 +1311,11 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline)}(
-        3, "array", (8,), (4,), "int16", pipeline, Int16(0),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch = DiskArrays.GridChunks((8,), (4,))
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline),typeof(cke),typeof(ch)}(
+        3, "array", (8,), ch, "int16", pipeline, Int16(0),
+        cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)
@@ -1329,9 +1342,11 @@ end
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec((2,), inner_pipeline, index_pipeline, :end)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline)}(
-        3, "array", (4,), (4,), "int16", pipeline, Int16(99),
-        Zarr.ChunkKeyEncoding('/', true)
+    ch = DiskArrays.GridChunks((4,), (4,))
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{Int16,1,typeof(pipeline),typeof(cke),typeof(ch)}(
+        3, "array", (4,), ch, "int16", pipeline, Int16(99),
+        cke
     )
     store = Zarr.DictStore()
     z = Zarr.ZArray(md, store, "", Dict(), true)

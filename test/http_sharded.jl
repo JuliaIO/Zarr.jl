@@ -45,7 +45,7 @@ const TESSERA_BASE = "https://dl2.geotessera.org/zarr/v1/2024.zarr"
         # Julia reverses to column-major: (128, 66560, 1355776)
         @test size(z) == (128, 66560, 1355776)
         # Outer shard shape [256, 256, 128] → Julia (128, 256, 256)
-            @test z.metadata.chunks[] == (128, 256, 256)
+            @test DiskArrays.max_chunksize.(z.metadata.chunks[].chunks) == (128, 256, 256)
 
         # Verify the codec is sharding_indexed with the expected inner chunk shape
         pipeline = z.metadata.pipeline
@@ -144,7 +144,7 @@ const FLAMINGO_BASE = "https://radosgw.public.os.wwu.de/n4bi-goe"
         @test eltype(z) == UInt16
         @test ndims(z) == 3
         @test size(z) == (1024, 1024, 192)
-            @test z.metadata.chunks[] == (512, 512, 512)
+            @test DiskArrays.max_chunksize.(z.metadata.chunks[].chunks) == (512, 512, 512)
 
         sharding = z.metadata.pipeline.array_bytes
         @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
@@ -173,7 +173,7 @@ const MUENSTER_BASE = "https://radosgw.public.os2.wwu.de/ngff"
         @test eltype(z) == UInt8
         @test ndims(z) == 3
         @test size(z) == (6000, 6000, 6000)
-            @test z.metadata.chunks[] == (8192, 8192, 1)
+            @test DiskArrays.max_chunksize.(z.metadata.chunks[].chunks) == (8192, 8192, 1)
 
         sharding = z.metadata.pipeline.array_bytes
         @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
@@ -234,7 +234,7 @@ end # @testset "Remote HTTP sharded arrays (SSBD — RIKEN)"
         @test eltype(z) == UInt16
         @test ndims(z) == 5
         @test size(z) == (522693, 244215, 1, 3, 1)
-            @test z.metadata.chunks[] == (2048, 2048, 1, 1, 1)
+            @test DiskArrays.max_chunksize.(z.metadata.chunks[].chunks) == (2048, 2048, 1, 1, 1)
 
         sharding = z.metadata.pipeline.array_bytes
         @test sharding isa Zarr.Codecs.V3Codecs.ShardingCodec
