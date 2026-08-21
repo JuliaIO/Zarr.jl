@@ -143,6 +143,10 @@ function boundint(r1, s2, o2)
   UnitRange(f1 > f2 ? f1 : f2, l1 < l2 ? l1 : l2)
 end
 
+chunk_unbounded(gc::GridChunks, i) = map(chunk_unbounded, gc.chunks, i.I)
+chunk_unbounded(r::RegularChunks, i) = ((i-1)*r.chunksize+1-r.offset):(i*r.chunksize-r.offset)
+chunk_unbounded(chunks::IrregularChunks, i) = (chunks.offsets[i]+1):chunks.offsets[i+1]
+
 function getchunkarray(z::ZArray{>:Missing})
   # temporary workaround to use strings as data values
   inner = fill(z.metadata.fill_value, DiskArrays.max_chunksize.(eachchunk(z).chunks))
@@ -259,9 +263,11 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
 
       bI, chunk_compressed = take!(c)
 
-      current_chunks_size = length.(chunks[bI])
+      current_chunk_inds = chunk_unbounded(chunks, bI)
 
-      current_chunk_offsets = first.(chunks[bI]) .- 1
+      current_chunks_size = length.(current_chunk_inds)
+
+      current_chunk_offsets = first.(current_chunk_inds) .- 1
 
       indranges = map(boundint, r.indices, current_chunks_size, current_chunk_offsets)
       #If the chunk size is smaller than the buffer size we need to write a smaller buffer
@@ -319,9 +325,11 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
 
       bI, chunk_compressed = take!(readchannel)
 
-      current_chunk_offsets = first.(chunks[bI]) .- 1
+      current_chunk_inds = chunk_unbounded(chunks, bI)
 
-      current_chunks_size = length.(chunks[bI])
+      current_chunk_offsets = first.(current_chunk_inds) .- 1
+
+      current_chunks_size = length.(current_chunk_inds)
 
       indranges = map(boundint, r.indices, size(a), current_chunk_offsets)
 
@@ -337,7 +345,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
 
 
       if current_chunks_size != size(a)
-        inds_reduced = Base.OneTo.(length.(chunks[bI]))
+        inds_reduced = Base.OneTo.(length.(current_chunk_inds))
 
         if chunk_compressed !== nothing
           uncompress_raw!(view(a, inds_reduced...), z, chunk_compressed)
@@ -347,7 +355,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
 
         #If the chunk size is smaller than the buffer size we need to write a smaller buffer
 
-        inds_reduced = Base.OneTo.(length.(chunks[bI]))
+        inds_reduced = Base.OneTo.(length.(current_chunk_inds))
         put!(writechannel, bI=>compress_raw(maybeinner(a)[inds_reduced...], z))
 
       else
@@ -629,7 +637,7 @@ function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks::Disk
   for idim in dimstoshorten
     nchunks_new = DiskArrays.findchunk(chunks.chunks[idim], max(newsize[idim], 1))
     nchunks_old = DiskArrays.findchunk(chunks.chunks[idim], oldsize[idim])
-    delrange = (nchunks_new + 1):nchunks_old
+    delrange = (nchunks_new+1):nchunks_old
     allchunkranges = map(i -> 1:DiskArrays.findchunk(chunks.chunks[i], oldsize[i]), 1:length(oldsize))
     r = (allchunkranges[1:(idim-1)]..., delrange, allchunkranges[(idim+1):end]...)
     for cI in CartesianIndices(r)
