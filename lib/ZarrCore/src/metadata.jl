@@ -1,5 +1,6 @@
 import Dates: Date, DateTime
-using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
+using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring
+using DiskArrays: GridChunks
 
 """NumPy array protocol type string (typestr) format
 
@@ -22,7 +23,7 @@ Base.codepoint(x::ASCIIChar) = UInt8(x)
 Base.show(io::IO, x::ASCIIChar) = print(io, Char(x))
 Base.zero(::Union{ASCIIChar,Type{ASCIIChar}}) = ASCIIChar(Base.zero(UInt8))
 
-Base.zero(t::Union{String, Type{String}}) = ""
+Base.zero(t::Union{String,Type{String}}) = ""
 
 typestr(t::Type) = string('<', 'V', sizeof(t))
 typestr(t::Type{>:Missing}) = typestr(Base.nonmissingtype(t))
@@ -40,7 +41,7 @@ typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
-const typemap = Dict{Tuple{Char, Int}, DataType}(
+const typemap = Dict{Tuple{Char,Int},DataType}(
     ('b', 1) => Bool,
     ('S', 1) => ASCIIChar,
 )
@@ -49,10 +50,10 @@ typecharf(::Type{<:Signed}) = 'i'
 typecharf(::Type{<:Unsigned}) = 'u'
 typecharf(::Type{<:AbstractFloat}) = 'f'
 typecharf(::Type{<:Complex}) = 'c'
-foreach([Float16,Float32,Float64,Int8,Int16,Int32,Int64,Int128,
-  UInt8,UInt16,UInt32,UInt64,UInt128,
-  Complex{Float16},Complex{Float32},Complex{Float64}]) do t
-    typemap[(typecharf(t),sizemapf(t))] = t
+foreach([Float16, Float32, Float64, Int8, Int16, Int32, Int64, Int128,
+    UInt8, UInt16, UInt32, UInt64, UInt128,
+    Complex{Float16}, Complex{Float32}, Complex{Float64}]) do t
+    typemap[(typecharf(t), sizemapf(t))] = t
 end
 
 function typestr(s::AbstractString, filterlist=nothing)
@@ -81,7 +82,7 @@ function typestr(s::AbstractString, filterlist=nothing)
             return datetime_from_pystring(s)
         end
         # convert typecode to Char and typesize to Int
-        typemap[(tc,ts)]
+        typemap[(tc, ts)]
     end
 end
 
@@ -102,29 +103,29 @@ value of the ".zarray" key within an array store.
 
 https://zarr.readthedocs.io/en/stable/spec/v2.html#metadata
 """
-abstract type AbstractMetadata{T,N,E <: AbstractChunkKeyEncoding} end
+abstract type AbstractMetadata{T,N,E<:AbstractChunkKeyEncoding} end
 Base.ndims(::AbstractMetadata{<:Any,N}) where N = N
 
 
 """Metadata for Zarr version 2 arrays"""
-struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,ChunkKeyEncoding}
+struct MetadataV2{T,N,C,F,CT<:GridChunks{N}} <: AbstractMetadata{T,N,ChunkKeyEncoding}
     zarr_format::Int
     node_type::String
-    shape::Base.RefValue{NTuple{N, Int}}
-    chunks::NTuple{N, Int}
+    shape::Base.RefValue{NTuple{N,Int}}
+    chunks::Base.RefValue{CT}
     dtype::String  # structured data types not yet supported
     compressor::C
-    fill_value::Union{T, Nothing}
+    fill_value::Union{T,Nothing}
     order::Char
     filters::F  # not yet supported
     chunk_key_encoding::ChunkKeyEncoding
-    function MetadataV2{T2,N,C,F}(zarr_format, node_type, shape, chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding) where {T2,N,C,F}
+    function MetadataV2{T2,N,C,F,CT}(zarr_format, node_type, shape, chunks::CT, dtype, compressor, fill_value, order, filters, chunk_key_encoding) where {T2,N,C,F,CT<:GridChunks{N}}
         zarr_format == 2 || throw(ArgumentError("MetadataV2 only functions if zarr_format == 2"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
-        any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
+        any(<(1), DiskArrays.max_chunksize.(chunks.chunks)) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
         order === 'C' || throw(ArgumentError("Currently only 'C' storage order is supported"))
-        new{T2,N,C,F}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, compressor, fill_value, order, filters, chunk_key_encoding)
+        new{T2,N,C,F,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), Ref(chunks), dtype, compressor, fill_value, order, filters, chunk_key_encoding)
     end
 end
 zarr_format(::MetadataV2) = ZarrFormat(Val(2))
@@ -134,29 +135,29 @@ const Metadata = AbstractMetadata
 
 #To make unit tests pass with ref shape
 function Base.:(==)(m1::MetadataV2, m2::MetadataV2)
-  m1.zarr_format == m2.zarr_format &&
-  m1.node_type == m2.node_type &&
-  m1.shape[] == m2.shape[] &&
-  m1.chunks == m2.chunks &&
-  m1.dtype == m2.dtype &&
-  m1.compressor == m2.compressor &&
-  m1.fill_value == m2.fill_value &&
-  m1.order == m2.order &&
-  m1.filters == m2.filters &&
-  m1.chunk_key_encoding == m2.chunk_key_encoding
+    m1.zarr_format == m2.zarr_format &&
+        m1.node_type == m2.node_type &&
+        m1.shape[] == m2.shape[] &&
+        m1.chunks[] == m2.chunks[] &&
+        m1.dtype == m2.dtype &&
+        m1.compressor == m2.compressor &&
+        m1.fill_value == m2.fill_value &&
+        m1.order == m2.order &&
+        m1.filters == m2.filters &&
+        m1.chunk_key_encoding == m2.chunk_key_encoding
 end
 
 
 "Construct Metadata based on your data"
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
-        node_type::String="array",
-        compressor::C=BloscCompressor(),
-        fill_value::Union{T, Nothing}=nothing,
-        order::Char='C',
-        filters=nothing,
-        fill_as_missing = false,
-        dimension_separator::Char = '.'
-    ) where {T, N, C}
+function Metadata(A::AbstractArray{T,N}, chunks, zarr_format=DV;
+    node_type::String="array",
+    compressor::C=BloscCompressor(),
+    fill_value::Union{T,Nothing}=nothing,
+    order::Char=('C'),
+    filters=nothing,
+    fill_as_missing=false,
+    dimension_separator::Char=('.')
+) where {T,N,C}
     return Metadata(A, chunks, ZarrFormat(zarr_format);
         node_type=node_type,
         compressor=compressor,
@@ -169,17 +170,20 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
 end
 
 # V2 constructor
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
-        node_type::String="array",
-        compressor::C=BloscCompressor(),
-        fill_value::Union{T, Nothing}=nothing,
-        order::Char='C',
-        filters::F=nothing,
-        fill_as_missing = false,
+function Metadata(A::AbstractArray{T,N}, chunks::Union{NTuple{N,Int},GridChunks{N}}, ::ZarrFormat{2};
+    node_type::String="array",
+    compressor::C=BloscCompressor(),
+    fill_value::Union{T,Nothing}=nothing,
+    order::Char=('C'),
+    filters::F=nothing,
+    fill_as_missing=false,
     chunk_key_encoding=ChunkKeyEncoding('.', false)
-    ) where {T, N, C, F}
+) where {T,N,C,F}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-    MetadataV2{T2,N,C,typeof(filters)}(
+    if chunks isa NTuple
+        chunks = GridChunks(size(A), chunks)
+    end
+    MetadataV2{T2,N,C,typeof(filters),typeof(chunks)}(
         2,
         node_type,
         size(A),
@@ -193,7 +197,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
     )
 end
 
-Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict{String,Any}), fill_as_missing)
+Metadata(s::Union{AbstractString,IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict{String,Any}), fill_as_missing)
 
 "Construct Metadata from Dict"
 function Metadata(d::AbstractDict, fill_as_missing)
@@ -229,11 +233,14 @@ function Metadata(d::AbstractDict, fill_as_missing, ::ZarrFormat{2})
 
     dim_sep = only(get(d, "dimension_separator", '.'))
 
-    MetadataV2{TU,N,C,F}(
+    shape_jl = NTuple{N,Int}(d["shape"]) |> reverse
+    chunks_tuple = NTuple{N,Int}(d["chunks"]) |> reverse
+    chunks_jl = GridChunks(shape_jl, chunks_tuple)
+    MetadataV2{TU,N,C,F,typeof(chunks_jl)}(
         d["zarr_format"],
         node_type,
-        NTuple{N, Int}(d["shape"]) |> reverse,
-        NTuple{N, Int}(d["chunks"]) |> reverse,
+        shape_jl,
+        chunks_jl,
         d["dtype"],
         compressor,
         fv,
@@ -246,11 +253,11 @@ end
 
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::MetadataV2)
-    Dict{String, Any}(
+    Dict{String,Any}(
         "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
-        "chunks" => md.chunks |> reverse,
+        "chunks" => reverse(DiskArrays.max_chunksize.(md.chunks[].chunks)),
         "dtype" => md.dtype,
         "compressor" => md.compressor,
         "fill_value" => fill_value_encoding(md.fill_value),
@@ -265,7 +272,7 @@ end
 # https://zarr.readthedocs.io/en/stable/spec/v2.html#fill-value-encoding
 
 fill_value_encoding(v) = v
-fill_value_encoding(::Nothing)=nothing
+fill_value_encoding(::Nothing) = nothing
 function fill_value_encoding(v::AbstractFloat)
     if isnan(v)
         "NaN"

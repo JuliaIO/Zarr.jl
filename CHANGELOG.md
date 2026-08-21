@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Drop HTTP.jl 2.x support
+- Support irregular (rectilinear) chunking: `zcreate`, `zzeros` and the `ZArray(a; chunks=...)` constructor now accept a `DiskArrays.GridChunks` object for the `chunks` keyword in addition to a tuple of chunk sizes. Irregular grids round-trip through Zarr v3's `rectilinear` chunk grid; Zarr v2 persists only the maximum chunk size per axis [#326](https://github.com/JuliaIO/Zarr.jl/pull/326)
 - Move code to ZarrCore.jl with low dependencies
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
 

@@ -85,7 +85,7 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     # getmetadata v3 reads from cons["metadata"][key]
     meta = ZarrCore.getmetadata(ZarrCore.ZarrFormat(3), cs.storage, "1d.chunked.i2", false)
     @test eltype(meta) == Int16
-    @test meta.chunks == (2,)
+    @test meta.chunks[] == ZarrCore.DiskArrays.GridChunks((4,), (2,))
   end
 
   @testset "is_zarray / is_zgroup v3 on ConsolidatedStore" begin
@@ -232,7 +232,7 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     V2 = ZarrCore.ZarrFormat(2)
     meta = ZarrCore.getmetadata(V2, cs, "arr", false)
     @test meta.dtype == Int32 || eltype(meta) == Int32
-    @test meta.chunks == (5, 5)
+    @test meta.chunks[] == ZarrCore.DiskArrays.GridChunks((10, 20), (5, 5))
   end
 
   @testset "v3 getattrs" begin

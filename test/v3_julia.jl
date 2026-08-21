@@ -3,6 +3,7 @@
 
 using Zarr
 import Zarr: ZarrCore
+using DiskArrays: GridChunks
 using JSON
 
 # Paths
@@ -230,9 +231,11 @@ function create_sharded(store, name, data, outer_chunk_shape, inner_chunk_shape;
     )
     sharding = Zarr.Codecs.V3Codecs.ShardingCodec(inner_chunk_shape, inner_pipeline, index_pipeline, index_location)
     pipeline = ZarrCore.V3Pipeline((), sharding, ())
-    md = ZarrCore.MetadataV3{T, N, typeof(pipeline)}(
-        3, "array", size(data), outer_chunk_shape, ZarrCore.typestr3(T), pipeline, zero(T),
-        Zarr.ChunkKeyEncoding('/', true),
+    ch = GridChunks(size(data), outer_chunk_shape)
+    cke = Zarr.ChunkKeyEncoding('/', true)
+    md = ZarrCore.MetadataV3{T, N, typeof(pipeline), typeof(cke), typeof(ch)}(
+        3, "array", size(data), ch, ZarrCore.typestr3(T), pipeline, zero(T),
+        cke,
     )
     z = Zarr.ZArray(md, store, name, Dict(), true)
     ZarrCore.writemetadata(ZarrCore.zarr_format(md), store, name, md)
