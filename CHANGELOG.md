@@ -1,7 +1,6 @@
 # Changelog
 
 ## Unreleased
-- Support HTTP.jl 2.x and drop 1.x
 - Move code to ZarrCore.jl with low dependencies
 - Split the zip backend out into a `ZarrZip` subpackage (`lib/ZarrZip`), so `ZarrCore` no longer depends on ZipArchives.jl. `Zarr` hard-depends on `ZarrZip` and re-exports it, so `Zarr.ZipStore` and `Zarr.writezip` are unchanged; the `Zarr` facade now re-exports the API of every subpackage in `Zarr.REEXPORTED_MODULES`
 - Split the three compressors out into `ZarrBlosc` (`lib/ZarrBlosc`), `ZarrZlib` (`lib/ZarrZlib`) and `ZarrZstd` (`lib/ZarrZstd`), so `ZarrCore` no longer depends on Blosc.jl, ChunkCodecCore.jl, ChunkCodecLibZlib.jl or ChunkCodecLibZstd.jl. Each package holds both the zarr v2 compressor and the matching zarr v3 codec (`BloscCompressor`/`BloscV3Codec`, `ZlibCompressor`/`GzipV3Codec`, `ZstdCompressor`/`ZstdV3Codec`) and registers them at load time. `Zarr` hard-depends on all three and re-exports them, so `Zarr.BloscCompressor` & co. are unchanged. `Zarr` also sets the default compressor to `BloscCompressor()` in its `__init__`; a bare `ZarrCore` now defaults to `NoCompressor()`
@@ -12,8 +11,14 @@
 - `Zarr.DateTime64` and `Zarr.PermanentZarrCache` are no longer public. Depend on DateTimes64.jl directly for `DateTime64`
 - Removed the unused `BloscCodec` and `GzipCodec` v3 codec names; the registered codecs are `BloscV3Codec` (ZarrBlosc) and `GzipV3Codec` (ZarrZlib)
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
+
+## v0.10.2 - 2026-08-19
+
+- Support HTTP.jl 2.x and drop 1.x [#322](https://github.com/JuliaIO/Zarr.jl/pull/322)
 - Add logo and favicon to docs [#307](https://github.com/JuliaIO/Zarr.jl/pull/307)
 - Support reading and writing variable-length strings [#311](https://github.com/JuliaIO/Zarr.jl/pull/311)
+- Add more informative show method for S3Store [#320](https://github.com/JuliaIO/Zarr.jl/pull/320/)
+- Fix complex fill values in python interop tests [#316](https://github.com/JuliaIO/Zarr.jl/pull/316)
 - Remove lru keyword from zopen, should use DiskArrays.cache instead
 
 ## v0.10.1 - 2026-07-07
