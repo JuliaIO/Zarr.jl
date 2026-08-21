@@ -252,16 +252,25 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
   end
   bind(c, task)
 
+  chunks = eachchunk(z)
+
   try
     for i in 1:length(blockr)
 
       bI, chunk_compressed = take!(c)
 
-      current_chunk_offsets = map((s, i)->s*(i-1), size(a), Tuple(bI))
+      current_chunks_size = length.(chunks[bI])
 
-      indranges = map(boundint, r.indices, size(a), current_chunk_offsets)
+      current_chunk_offsets = first.(chunks[bI]) .- 1
 
-      uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, current_chunk_offsets, a, indranges)
+      indranges = map(boundint, r.indices, current_chunks_size, current_chunk_offsets)
+      #If the chunk size is smaller than the buffer size we need to write a smaller buffer
+      if current_chunks_size != size(a)
+        inds_reduced = Base.OneTo.(current_chunks_size)
+        uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, current_chunk_offsets, view(a, inds_reduced...), indranges)
+      else
+        uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, current_chunk_offsets, a, indranges)
+      end
       nothing
     end
   finally
@@ -303,12 +312,16 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
   end
   bind(writechannel, writetask)
 
+  chunks = eachchunk(z)
+
   try
     for i in 1:length(blockr)
 
       bI, chunk_compressed = take!(readchannel)
 
-      current_chunk_offsets = map((s, i)->s*(i-1), size(a), Tuple(bI))
+      current_chunk_offsets = first.(chunks[bI]) .- 1
+
+      current_chunks_size = length.(chunks[bI])
 
       indranges = map(boundint, r.indices, size(a), current_chunk_offsets)
 
@@ -322,13 +335,29 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any,N}, r::Cartesi
         a
       end
 
-      if chunk_compressed !== nothing
-        uncompress_raw!(a, z, chunk_compressed)
+
+      if current_chunks_size != size(a)
+        inds_reduced = Base.OneTo.(length.(chunks[bI]))
+
+        if chunk_compressed !== nothing
+          uncompress_raw!(view(a, inds_reduced...), z, chunk_compressed)
+        end
+
+        curchunk .= view(ain, dotminus.(indranges, input_base_offsets)...)
+
+        #If the chunk size is smaller than the buffer size we need to write a smaller buffer
+
+        inds_reduced = Base.OneTo.(length.(chunks[bI]))
+        put!(writechannel, bI=>compress_raw(maybeinner(a)[inds_reduced...], z))
+
+      else
+
+        if chunk_compressed !== nothing
+          uncompress_raw!(a, z, chunk_compressed)
+        end
+        curchunk .= view(ain, dotminus.(indranges, input_base_offsets)...)
+        put!(writechannel, bI=>compress_raw(maybeinner(a), z))
       end
-
-      curchunk .= view(ain, dotminus.(indranges, input_base_offsets)...)
-
-      put!(writechannel, bI=>compress_raw(maybeinner(a), z))
       nothing
     end
   finally
@@ -366,7 +395,6 @@ dotminus(x, y) = x .- y
 function uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, current_chunk_offsets, a, indranges)
 
   uncompress_raw!(a, z, chunk_compressed)
-
   if length.(indranges) == size(a)
     aout[dotminus.(indranges, output_base_offsets)...] = ndims(a) == 0 ? a[1] : a
   else
@@ -376,7 +404,6 @@ function uncompress_to_output!(aout, output_base_offsets, z, chunk_compressed, c
 end
 
 function compress_raw(a, z)
-  length(a) == prod(DiskArrays.max_chunksize.(eachchunk(z).chunks)) || throw(DimensionMismatch("Array size does not equal chunk size"))
   pipeline_encode(get_pipeline(z.metadata), a, z.metadata.fill_value)
 end
 

@@ -308,3 +308,64 @@ for unit in ["Week", "Day", "Hour", "Minute", "Second",
 end
 
 end
+
+@testset "Python zarr v3 irregular (rectilinear) chunks" begin
+    # Irregular (rectilinear) chunks are an experimental python-zarr feature,
+    # gated behind a config flag that must be enabled before opening/creating
+    # any rectilinear store. Irregular chunk grids only exist in zarr v3.
+    zarr = pyimport("zarr")
+    numpy = pyimport("numpy")
+    pybuiltins = pyimport("builtins")
+    zarr.config.set(pydict(Dict("array.rectilinear_chunks" => true)))
+
+    import Zarr: ZarrCore
+    using DiskArrays: GridChunks, RegularChunks, IrregularChunks
+
+    # Julia-side storage for irregular chunks pads every chunk to the global
+    # max chunk size, whereas python-zarr stores each rectilinear chunk at its
+    # exact data extent. The two on-disk layouts are therefore incompatible:
+    #   - python cannot reshape Julia's padded chunks back to their extents,
+    #   - Julia cannot decode python's exact-size chunks into its padded buffer.
+    # The metadata round-trips correctly in both directions; only the *data*
+    # read is broken. Those data assertions are marked `@test_broken` until the
+    # Julia chunk I/O writes exact-size chunks per grid position.
+
+    pjulia = tempname()
+    ppython = tempname()
+
+    # ---- Direction A: Julia writes an irregular grid, python reads it ----
+    za = zcreate(Int32, 20, 20; zarr_format=3, path=pjulia,
+                 chunks=GridChunks(RegularChunks(4, 0, 20),
+                                   IrregularChunks(chunksizes=[3, 4, 5, 6, 2])))
+    data = reshape(Int32.(1:400), 20, 20)
+    za[:, :] = data
+
+    # Metadata round-trips: python sees a rectilinear grid.
+    b = zarr.open_array(pjulia, mode="r")
+    grid = pyconvert(Dict, b.metadata.chunk_grid.to_dict())
+    @test grid["name"] == "rectilinear"
+    @test grid["configuration"]["kind"] == "inline"
+    # The irregular dimension serializes as a bare int (regular) + a list.
+    cshapes = grid["configuration"]["chunk_shapes"]
+    @test cshapes[1] isa AbstractVector
+    @test collect(cshapes[1]) == [3, 4, 5, 6, 2]
+    @test cshapes[2] == 4
+
+    # Data read: currently broken (python cannot reshape Julia's padded chunks).
+    @test_broken pyconvert(Bool, (b[pybuiltins.Ellipsis] == numpy.array(data)).all())
+
+    # ---- Direction B: python writes an irregular grid, Julia reads it ----
+    pd = reshape(Int32.(0:399), 20, 20)
+    a = zarr.create_array(ppython; zarr_format=3, shape=(20, 20),
+                          chunks=pylist([pylist([3, 4, 5, 6, 2]), pylist([4, 4, 4, 4, 4])]),
+                          dtype="int32")
+    a.__setitem__(pybuiltins.Ellipsis, numpy.array(pd))
+
+    # Metadata round-trips: Julia parses the rectilinear grid.
+    z = zopen(ppython)
+    @test any(c -> c isa IrregularChunks, ZarrCore.eachchunk(z).chunks)
+
+    # Data read: currently broken (Julia cannot decode exact-size chunks into
+    # its padded buffer).
+    @test_broken z[:, :] == pd
+end
