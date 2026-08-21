@@ -1,5 +1,4 @@
 using HTTP
-using OpenSSL: OpenSSL
 
 """
     HTTPStore
@@ -19,7 +18,7 @@ end
 Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
 
 function Base.getindex(s::HTTPStore, k::String)
-r = HTTP.request("GET",string(s.url,"/",k),status_exception = false,socket_type_tls=OpenSSL.SSLStream)
+r = HTTP.request("GET", string(s.url, "/", k), status_exception = false)
 if r.status >= 300
     if r.status in s.allowed_codes
         nothing
@@ -95,5 +94,8 @@ function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   end
 end
 
-
 HTTP.serve(s::AbstractStore, p, args...; kwargs...) = HTTP.serve(zarr_req_handler(s,p),args...;kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, args...; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), args...; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, host::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), host, port_num; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, host::AbstractString; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), host; kwargs...)
+HTTP.serve!(s::AbstractStore, p::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(zarr_req_handler(s,p), port_num; kwargs...)

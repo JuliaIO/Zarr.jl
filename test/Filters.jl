@@ -1,5 +1,5 @@
 using Test
-using Zarr: DateTime64 # for datetime reinterpret
+using DateTimes64: DateTime64 # for datetime reinterpret
 
 using Zarr: zencode, zdecode
 using Zarr: Fletcher32Filter, FixedScaleOffsetFilter, ShuffleFilter, QuantizeFilter, DeltaFilter
@@ -60,6 +60,7 @@ end
 end
 
 @testset "ShuffleFilter" begin
+    using DateTimes64: DateTime64
 
     codecs = [
         ShuffleFilter(),

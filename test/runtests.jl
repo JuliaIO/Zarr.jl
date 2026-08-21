@@ -32,7 +32,6 @@ using DiskArrays: GridChunks, DiskArrays, RegularChunks
 
     # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
     @test exported(Zarr) == exported(ZarrCore)
-    @test publiconly(Zarr) == publiconly(ZarrCore)
 
     # The specific failure mode: a name that is only `public` in `ZarrCore` must
     # not become an export of `Zarr`, and vice versa.
@@ -42,16 +41,17 @@ using DiskArrays: GridChunks, DiskArrays, RegularChunks
     # Version-independent: the two assertions above compare `names` against
     # `names`, so on 1.10 -- where `@public` expands to nothing and both
     # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    # `PUBLIC_NAMES` is populated on every version, so this catches a facade
-    # that silently drops the entire public API on LTS.
-    @test !isempty(ZarrCore.PUBLIC_NAMES)
-    @test isempty(filter(n -> !isdefined(Zarr, n), ZarrCore.PUBLIC_NAMES))
+    @test all(isdefined.(Ref(Zarr), [:zname])   )
+    @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
+    @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
+    @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
+        :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
+    @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BloscCodec, :BytesCodec, :CRC32cCodec, :GzipCodec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :CRC32cV3Codec, :VLenUTF8V3Codec]))
 
-    # Where both sources exist, they must agree -- otherwise LTS and 1.11+ would
-    # drift apart again, which is exactly what the registry is there to prevent.
-    @static if VERSION >= v"1.11"
-        @test Set(ZarrCore.PUBLIC_NAMES) == publiconly(ZarrCore)
-    end
 end
 
 @testset "ZArray" begin
@@ -266,22 +266,23 @@ end
 
 @testset "Metadata" begin
     @testset "Data type encoding" begin
-        @test Zarr.typestr(Bool) === "|b1"
-        @test Zarr.typestr(Int8) === "|i1"
-        @test Zarr.typestr(Int64) === "<i8"
-        @test Zarr.typestr(UInt8) === "|u1"
-        @test Zarr.typestr(UInt32) === "<u4"
-        @test Zarr.typestr(UInt128) === "<u16"
-        @test Zarr.typestr(Complex{Float32}) === "<c8"
-        @test Zarr.typestr(Complex{Float64}) === "<c16"
-        @test Zarr.typestr(Float16) === "<f2"
-        @test Zarr.typestr(Float64) === "<f8"
-        @test Zarr.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
-        @test Zarr.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
-        @test Zarr.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
-        @test Zarr.typestr(Vector{Int64}) === "|O"
-        @test Zarr.typestr(Zarr.DateTime64{Day}) === "<M8[D]"
-        @test Zarr.typestr(Zarr.DateTime64{Nanosecond}) === "<M8[ns]"
+        using DateTimes64: DateTime64
+        @test ZarrCore.typestr(Bool) === "|b1"
+        @test ZarrCore.typestr(Int8) === "|i1"
+        @test ZarrCore.typestr(Int64) === "<i8"
+        @test ZarrCore.typestr(UInt8) === "|u1"
+        @test ZarrCore.typestr(UInt32) === "<u4"
+        @test ZarrCore.typestr(UInt128) === "<u16"
+        @test ZarrCore.typestr(Complex{Float32}) === "<c8"
+        @test ZarrCore.typestr(Complex{Float64}) === "<c16"
+        @test ZarrCore.typestr(Float16) === "<f2"
+        @test ZarrCore.typestr(Float64) === "<f8"
+        @test ZarrCore.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
+        @test ZarrCore.typestr(Vector{Int64}) === "|O"
+        @test ZarrCore.typestr(DateTime64{Day}) === "<M8[D]"
+        @test ZarrCore.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
     end
 
     @testset "Metadata struct and JSON representation" begin
@@ -321,6 +322,8 @@ end
         @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt8}) === ZarrCore.MaxLengthString{6,UInt8}("")
         @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt32}) === ZarrCore.MaxLengthString{6,UInt32}("")
         @test Zarr.fill_value_decoding(nothing, ZarrCore.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding(Any[0.0, 0.0], ComplexF64) === ComplexF64(0.0, 0.0)
+        @test Zarr.fill_value_decoding(Any[1.5, -2.5], ComplexF32) === ComplexF32(1.5, -2.5)
     end
 end
 

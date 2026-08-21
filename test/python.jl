@@ -194,6 +194,8 @@ end
 
 ## Now the other way around, we create a zarr array using the python lib and read back into julia
 data = rand(Int32,2,6,10)
+cdata = rand(ComplexF64,2,3)
+cfill = ComplexF64(1.5,-2.5)
 
 numpy = pyimport("numpy")
 numcodecs = pyimport("numcodecs")
@@ -206,6 +208,8 @@ z2 = g.require_array("a2", shape=(5,), chunks=(5,), dtype="S1", compressor=numco
 z2[pybuiltins.Ellipsis] = pylist([k for k in "hallo"])
 z3 = g.require_array("a3", shape=(2,), dtype=pybuiltins.str)
 z3[pybuiltins.Ellipsis]=numpy.asarray(["test1", "test234"], dtype="O")
+z4 = g.require_array("a4", shape=(2,3), chunks=(2,3), dtype="c16", fill_value=cfill)
+z4[pybuiltins.Ellipsis] = numpy.array(cdata)
 zarr.consolidate_metadata(ppython)
 
 #Open in Julia
@@ -219,6 +223,10 @@ a1 = g["a1"]
 # Test reading the string array
 @test String(g["a2"][:])=="hallo"
 @test g["a3"] == ["test1", "test234"]
+a4 = g["a4"]
+@test eltype(a4) === ComplexF64
+@test a4.metadata.fill_value === cfill
+@test a4[:,:] == permutedims(cdata,(2,1))
 
 # And test for consolidated metadata
 # Delete files so we make sure they are not accessed
@@ -270,12 +278,13 @@ end
 
 @testset "Python datetime types" begin
 using Dates, Test, Zarr, PythonCall
+using DateTimes64: DateTime64
 vd = Date(1970,1,1):Day(1):Date(1970,6,30) |> collect
 vt = DateTime(1970,1,1):Second(1):DateTime(1970,1,1,2,0,0)|> collect
 ad = ZArray(vd)
 at = ZArray(vt)
-@test eltype(ad)==Zarr.DateTime64{Day} 
-@test eltype(at)==Zarr.DateTime64{Millisecond}
+@test eltype(ad)==DateTime64{Day} 
+@test eltype(at)==DateTime64{Millisecond}
 @test DateTime.(at[:]) == vt[:]
 @test Date.(ad[:]) == vd[:]
 
@@ -286,11 +295,11 @@ for pt in [Week, Day, Hour, Minute, Second,
     
     if pt <: DatePeriod
         vd = range(Date(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     else
         vd = range(DateTime(1970,1,1),step = pt(1), length=100)
-        a = zcreate(Zarr.DateTime64{pt},g,string(pt),100)
+        a = zcreate(DateTime64{pt},g,string(pt),100)
         a[:] = vd
     end
 end
