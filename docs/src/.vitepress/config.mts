@@ -24,6 +24,7 @@ const userGuideItems = [
   // { text: 'Data Types',           link: '/UserGuide/data_types' },
   // { text: 'Codecs & Performance', link: '/UserGuide/performance' },
   { text: 'Operations', link: '/UserGuide/operations'},
+  { text: 'Chunking', link: '/UserGuide/chunking' },
   // { text: 'Sharding', link: '/UserGuide/sharding' },
   { text: 'Missing Values',       link: '/UserGuide/missings' },
 ]
