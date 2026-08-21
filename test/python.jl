@@ -376,5 +376,5 @@ end
 
     # Data read: currently broken (Julia cannot decode exact-size chunks into
     # its padded buffer).
-    @test z[:, :] == pd
+    @test permutedims(z[:, :], (2, 1)) == pd
 end
