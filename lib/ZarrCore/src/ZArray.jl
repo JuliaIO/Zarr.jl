@@ -418,7 +418,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `name=""` name of the zarr array, defaults to the directory name
 * `zarr_format`=$(DV) Zarr format version (2 or 3)
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
-* `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
+* `chunks=dims` size of the individual array chunks. Either a tuple of length `length(dims)` specifying the chunk size along each axis (regular chunking), or a `DiskArrays.GridChunks` object for full control over the chunk grid, which also enables irregular (rectilinear) chunking where chunk sizes vary along an axis. See [Chunking](../UserGuide/chunking) for details.
 * `fill_value=nothing` value to represent missing values
 * `fill_as_missing=false` set to `true` shall fillvalue s be converted to `missing`s
 * `filters`=filters to be applied

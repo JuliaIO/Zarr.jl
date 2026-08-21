@@ -80,6 +80,20 @@ z = ZArray(rand(Float64, 100, 100))
 zinfo(z)
 ```
 
+For irregular chunking — where chunk sizes vary along an axis instead of being
+uniform — pass a `GridChunks` object (from DiskArrays) as the `chunks` keyword
+instead of a tuple of sizes:
+
+```@example irregular-chunks
+using Zarr
+using DiskArrays: GridChunks, IrregularChunks, RegularChunks
+chunks = GridChunks(RegularChunks(2, 0, 5), IrregularChunks(chunksizes=[3, 4, 5, 6, 2]));
+z = zcreate(Int, 5, 20; zarr_format=3, chunks=chunks)
+```
+
+Irregular grids are preserved end-to-end with Zarr v3. See the
+[Chunking](./UserGuide/chunking) page for details and caveats.
+
 ## Reading and Writing
 ```@example rw
 using Zarr
