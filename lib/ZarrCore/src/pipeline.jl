@@ -42,7 +42,8 @@ function pipeline_decode!(p::V3Pipeline, output::AbstractArray, compressed::Vect
         (sz, codec) -> Codecs.V3Codecs.encoded_shape(codec, sz),
         p.array_array; init=size(output)
     )
-    arr = Codecs.V3Codecs.codec_decode(p.array_bytes, bytes, eltype(output), intermediate_shape; fill_value)
+    # `fill_as_missing` output has eltype `Union{T,Missing}` but the stored elements are plain `T`
+    arr = Codecs.V3Codecs.codec_decode(p.array_bytes, bytes, Base.nonmissingtype(eltype(output)), intermediate_shape; fill_value)
     # Phase 1 reverse: array->array codecs (reverse order)
     for codec in reverse(collect(p.array_array))
         arr = Codecs.V3Codecs.codec_decode(codec, arr)
