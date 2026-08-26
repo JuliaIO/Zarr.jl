@@ -2,12 +2,14 @@ using DocumenterVitepress
 using Documenter, Zarr
 # Load implementation modules for Documenter.
 using Zarr: ZarrCore, ZarrHTTP, ZarrGCS, ZarrS3, ZarrZip, ZarrBlosc, ZarrZlib, ZarrZstd
+# ZarrTrimmable is an opt-in subpackage, not re-exported by the Zarr facade.
+using ZarrTrimmable
 
 cp(joinpath(@__DIR__, "..", "CHANGELOG.md"), joinpath(@__DIR__, "src", "changelog.md"), force = true)
 cp(joinpath(@__DIR__, "..", "CONTRIBUTING.md"), joinpath(@__DIR__, "src", "contributing.md"), force = true)
 
 makedocs(
-    modules = [Zarr, ZarrCore, ZarrHTTP, ZarrGCS, ZarrS3, ZarrZip, ZarrBlosc, ZarrZlib, ZarrZstd],
+    modules = [Zarr, ZarrCore, ZarrHTTP, ZarrGCS, ZarrS3, ZarrZip, ZarrBlosc, ZarrZlib, ZarrZstd, ZarrTrimmable],
     clean = false,
     doctest = true,
     format = DocumenterVitepress.MarkdownVitepress(

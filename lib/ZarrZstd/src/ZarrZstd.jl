@@ -41,7 +41,28 @@ function ZarrCore.getCompressor(::Type{ZstdCompressor}, d::Dict)
     )
 end
 
-function ZarrCore.zuncompress(a, z::ZstdCompressor, T)
+# The numcodecs id that `ZstdCompressor` is stored under in a v2 `.zarray` document.
+ZarrCore.codec_id(::Type{ZstdCompressor}) = "zstd"
+
+# Statically typed counterpart of the `Dict` method above, for the juliac
+# `--trim=safe` open path (`zopen(::Type{T}, ::Val{N}, ...)`). Every branch of
+# an absent optional key returns the same concrete type - a ternary with
+# differently typed branches would widen to `Any` under `--trim`.
+function ZarrCore.getCompressor(::Type{ZstdCompressor}, c::ZarrCore.CompressorJSON)
+    c.id == ZarrCore.codec_id(ZstdCompressor) || throw(ArgumentError(string(
+        "expected a \"zstd\" compressor in the stored metadata, got \"", c.id, "\"")))
+    lvl = 0
+    if c.level !== nothing
+        lvl = c.level::Int
+    end
+    chk = false
+    if c.checksum !== nothing
+        chk = c.checksum::Bool
+    end
+    return ZstdCompressor(; level=lvl, checksum=chk)
+end
+
+function ZarrCore.zuncompress(a, z::ZstdCompressor, ::Type{T}) where {T}
     result = decode(z.config.codec, a)
     _reinterpret(Base.nonmissingtype(T),result)
 end
@@ -59,10 +80,12 @@ function JSON.lower(z::ZstdCompressor)
     # Matching behavior in zarr-python to work with TensorStore
     # Ref https://github.com/JuliaIO/Zarr.jl/issues/193
     # Hotfix for https://github.com/zarr-developers/zarr-python/issues/2647
+    # NamedTuples (not `Dict`s) so that serialising array metadata stays
+    # statically typed - see `ZarrCore.print_metadata`. JSON output is unchanged.
     if z.config.checksum
-        Dict("id"=>"zstd", "level" => z.config.compressionLevel, "checksum" => z.config.checksum)
+        (; id = "zstd", level = z.config.compressionLevel, checksum = z.config.checksum)
     else
-        Dict("id"=>"zstd", "level" => z.config.compressionLevel)
+        (; id = "zstd", level = z.config.compressionLevel)
     end
 end
 
@@ -84,9 +107,29 @@ end
 ZstdV3Codec() = ZstdV3Codec(3)
 V3Codecs.name(::ZstdV3Codec) = "zstd"
 
-function JSON.lower(c::ZstdV3Codec)
-    Dict("name" => "zstd", "configuration" => Dict("level" => c.level))
+# The v3 spec name that `ZstdV3Codec` is stored under in a `zarr.json` document.
+V3Codecs.codec_name(::Type{ZstdV3Codec}) = "zstd"
+
+# Statically typed counterpart of the `register_codec` parser in `__init__`, for
+# the juliac `--trim=safe` v3 open path
+# (`zopen(::Type{T}, ::Val{N}, ...; pipeline = ...)`). Every branch of an absent
+# optional key returns the same concrete type.
+function V3Codecs.getCodec(::Type{ZstdV3Codec}, c::ZarrCore.CodecJSON, ctx)
+    V3Codecs._check_codec_name(ZstdV3Codec, c)
+    lvl = 3
+    cfg = c.configuration
+    if cfg !== nothing
+        l = (cfg::ZarrCore.CodecConfigJSON).level
+        if l !== nothing
+            lvl = l::Int
+        end
+    end
+    return ZstdV3Codec(lvl)
 end
+
+# NamedTuple (not `Dict`) so that lowering v3 array metadata stays statically
+# typed - see `ZarrCore.print_metadata`. The emitted JSON is unchanged.
+JSON.lower(c::ZstdV3Codec) = (; name = "zstd", configuration = (; level = c.level))
 
 function V3Codecs.codec_encode(c::ZstdV3Codec, data::Vector{UInt8})
     comp = ZstdCompressor(level=c.level)

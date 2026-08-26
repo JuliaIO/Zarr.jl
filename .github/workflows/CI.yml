@@ -40,7 +40,7 @@ jobs:
       - name: Develop the lib/ subpackages (Pkg < 1.11 ignores [sources])
         # Bash preserves the embedded quotes on Windows.
         shell: bash
-        run: julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")])'
+        run: julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3"), PackageSpec(path="lib/ZarrTrimmable")])'
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
@@ -54,7 +54,7 @@ jobs:
           # Bash preserves the embedded quotes on Windows.
           shell: bash
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3"), PackageSpec(path="lib/ZarrTrimmable")]); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
       # Julia 1.10 cannot merge developed fixture packages into the test sandbox.

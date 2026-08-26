@@ -493,6 +493,10 @@ end
   end
 
 
+include("typed_open.jl")
+include("typed_open_v3.jl")
+include("trimmable.jl")
+
 include("storage.jl")
 
 include("Filters.jl")

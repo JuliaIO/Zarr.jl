@@ -14,7 +14,7 @@ ZarrZlib = { path = "lib/ZarrZlib" }
 ZarrZstd = { path = "lib/ZarrZstd" }
 
 [workspace]
-projects = ["test", "lib/ZarrCore", "lib/ZarrZip", "lib/ZarrBlosc", "lib/ZarrZlib", "lib/ZarrZstd", "lib/ZarrHTTP", "lib/ZarrGCS", "lib/ZarrS3"]
+projects = ["test", "lib/ZarrCore", "lib/ZarrZip", "lib/ZarrBlosc", "lib/ZarrZlib", "lib/ZarrZstd", "lib/ZarrHTTP", "lib/ZarrGCS", "lib/ZarrS3", "lib/ZarrTrimmable"]
 
 [deps]
 ZarrBlosc = "5717d1f5-dd42-40cd-8e77-00dfad1079f5"

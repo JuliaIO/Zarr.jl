@@ -129,6 +129,121 @@ end
 zarr_format(z::ZArray) = zarr_format(z.metadata)
 dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
+"""
+    zopen(::Type{T}, ::Val{N}, s::AbstractStore, path::AbstractString = "";
+          compressor = nothing, pipeline = nothing, mode = "r", fill_as_missing = false)
+    zopen(::Type{T}, ::Val{N}, path::AbstractString; compressor|pipeline, kwargs...)
+
+Statically typed open of a Zarr array whose element type `T`, dimensionality
+`N` and codec configuration are known to the caller. The on-disk metadata is
+*validated* against them rather than being used to infer them, so the result is
+a fully concrete `ZArray` (or, with `fill_as_missing=true` on an array that has
+a fill value, a `ZArray{Union{T,Missing},...}`).
+
+Exactly one of the two codec keywords selects the format and must be given:
+
+- `compressor::Type{C}` opens a **v2** array (`.zarray`), giving
+  `ZArray{T,N,typeof(s),MetadataV2{T,N,C,Nothing}}`. Pass
+  `ZarrCore.NoCompressor` for uncompressed arrays.
+- `pipeline::Type{P}`, `P<:V3Pipeline`, opens a **v3** array (`zarr.json`),
+  giving `ZArray{T,N,typeof(s),MetadataV3{T,N,P,ChunkKeyEncoding}}`. `P` spells
+  out the whole codec chain, e.g.
+  `V3Pipeline{Tuple{},BytesCodec,Tuple{ZstdV3Codec}}`.
+
+Neither has a default: `ZarrCore` cannot name the compressor and codec types
+that live in `ZarrBlosc`/`ZarrZstd`/`ZarrZlib`, and a wrong default would only
+fail later.
+
+Because nothing about the array's type depends on runtime values, this path is
+juliac `--trim=safe` clean, unlike the dynamic [`zopen`](@ref) which parses the
+metadata into a `Dict{String,Any}`.
+
+Throws `ArgumentError` if neither or both codec keywords are given, if there is
+no array at `path`, if the stored data type does not match `T`, if the stored
+rank is not `N`, or if the stored codecs do not match `C`/`P`. The v2 path also
+rejects arrays with filters, the v3 path arrays with a sharding, vlen-utf8 or
+unknown codec, a non-`"regular"` chunk grid, a `"suffix"` chunk key encoding,
+non-empty `storage_transformers` or a `null` fill value.
+
+# Examples
+
+```julia
+z = zopen(Float64, Val(2), DirectoryStore("data.zarr"), ""; compressor = ZarrCore.NoCompressor)
+a = z[:, :]::Matrix{Float64}
+
+P = ZarrCore.V3Pipeline{Tuple{},ZarrCore.BytesCodec,Tuple{ZstdV3Codec}}
+z3 = zopen(Float64, Val(2), DirectoryStore("data3.zarr"), ""; pipeline = P)
+a3 = z3[:, :]::Matrix{Float64}
+```
+"""
+# `@inline`: keyword arguments are passed through a `NamedTuple`, and a
+# `NamedTuple` field holding a *type* is typed `DataType`, not `Type{C}` - so
+# without inlining the keyword body the codec type is lost and the call to the
+# inner method is a runtime dispatch (an "unresolved call" for `--trim`).
+# Inlining the (trivial) keyword wrapper lets the literal type at the call site
+# flow into the positional `_zopen_typed`/`_zopen_typed_v3` barriers, which then
+# specialise on it.
+#
+# There is deliberately only *one* keyword method per positional signature: a
+# second one taking `pipeline` instead of `compressor` would have the identical
+# positional signature `zopen(::Type{T}, ::Val{N}, ::AbstractStore, ::AbstractString)`
+# and so replace the first.
+@inline function zopen(::Type{T}, ::Val{N}, s::AbstractStore, path::AbstractString = "";
+                       compressor = nothing, pipeline = nothing,
+                       mode::AbstractString = "r",
+                       fill_as_missing::Bool = false) where {T,N}
+  if compressor === nothing
+    pipeline === nothing && throw(ArgumentError(_TYPED_ZOPEN_CODEC_MSG))
+    return _zopen_typed_v3(T, Val(N), pipeline, s, path, mode, fill_as_missing)
+  else
+    pipeline === nothing || throw(ArgumentError(_TYPED_ZOPEN_CODEC_MSG))
+    return _zopen_typed(T, Val(N), compressor, s, path, mode, fill_as_missing)
+  end
+end
+
+@inline function zopen(::Type{T}, ::Val{N}, path::AbstractString;
+                       compressor = nothing, pipeline = nothing,
+                       mode::AbstractString = "r",
+                       fill_as_missing::Bool = false) where {T,N}
+  if compressor === nothing
+    pipeline === nothing && throw(ArgumentError(_TYPED_ZOPEN_CODEC_MSG))
+    return _zopen_typed_v3(T, Val(N), pipeline, DirectoryStore(path), "", mode, fill_as_missing)
+  else
+    pipeline === nothing || throw(ArgumentError(_TYPED_ZOPEN_CODEC_MSG))
+    return _zopen_typed(T, Val(N), compressor, DirectoryStore(path), "", mode, fill_as_missing)
+  end
+end
+
+const _TYPED_ZOPEN_CODEC_MSG =
+  "the statically typed `zopen(::Type{T}, ::Val{N}, ...)` needs exactly one of the " *
+  "`compressor` (Zarr v2 compressor type) and `pipeline` (Zarr v3 `V3Pipeline` type) keywords"
+
+function _zopen_typed(::Type{T}, ::Val{N}, ::Type{C}, s::AbstractStore, path::AbstractString,
+                      mode::AbstractString, fill_as_missing::Bool) where {T,N,C<:Compressor}
+  startswith(path, "/") && throw(ArgumentError("Paths should never start with a leading '/'"))
+  zv = ZarrFormat(Val(2))
+  metadata = getmetadata(T, Val(N), C, zv, s, path, fill_as_missing)
+  attrs = getattrs_typed(zv, s, path)
+  return ZArray(metadata, s, String(path), attrs, mode == "w")
+end
+
+"""
+    _zopen_typed_v3(::Type{T}, ::Val{N}, ::Type{P}, s, path, mode, fill_as_missing)
+
+Positional barrier behind the `pipeline = P` form of the typed [`zopen`](@ref),
+the v3 counterpart of `_zopen_typed`. `P` arrives as a static type parameter, so
+`getmetadata` and the resulting `ZArray` are fully concretely typed.
+"""
+function _zopen_typed_v3(::Type{T}, ::Val{N}, ::Type{P}, s::AbstractStore, path::AbstractString,
+                         mode::AbstractString, fill_as_missing::Bool) where {T,N,P<:V3Pipeline}
+  startswith(path, "/") && throw(ArgumentError("Paths should never start with a leading '/'"))
+  zv = ZarrFormat(Val(3))
+  metadata = getmetadata(T, Val(N), P, zv, s, path, fill_as_missing)
+  attrs = getattrs_typed(zv, s, path)
+  return ZArray(metadata, s, String(path), attrs, mode == "w")
+end
+
+
 
 """
     trans_ind(r, bs)
@@ -146,10 +261,16 @@ function boundint(r1, s2, o2)
   UnitRange(f1 > f2 ? f1 : f2, l1 < l2 ? l1 : l2)
 end
 
-function getchunkarray(z::ZArray{>:Missing})
+function getchunkarray(z::ZArray{T,N}) where {T>:Missing,N}
   # temporary workaround to use strings as data values
-  inner = fill(z.metadata.fill_value, z.metadata.chunks)
-  a = SenMissArray(inner,z.metadata.fill_value)
+  # `fill_value` is declared as `Union{T,Nothing}`; for a `fill_as_missing`
+  # array it is always an actual sentinel value. Asserting that here keeps
+  # `inner` (and hence the returned `SenMissArray`) concretely typed, which
+  # both avoids a dynamic dispatch and is required by juliac `--trim`.
+  TN = Base.nonmissingtype(T)
+  fv = z.metadata.fill_value::TN
+  inner = fill(fv, z.metadata.chunks)
+  SenMissArray{TN,N}(inner, fv)
 end
 _zero(T) = zero(T)
 _zero(T::Type{<:MaxLengthString}) = zero(T)
@@ -247,6 +368,18 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # fill-value path (which calls `fill!` itself), so we don't need to
   # pre-zero it.
   a = getchunkarray_undef(z)
+  # Sequential stores (the default, e.g. DirectoryStore/DictStore) read the
+  # chunks straight through: no Channel, no task, no prefetch. This is both
+  # cheaper and a prerequisite for statically compiled (juliac) binaries,
+  # where the `@async` + `Channel` handshake cannot be used.
+  if store_read_strategy(z.storage) isa SequentialRead
+    e = z.metadata.chunk_key_encoding
+    for bI in blockr
+      chunk_compressed = store_readchunk(z.storage, z.path, bI, e)
+      read_chunk_to_output!(aout, output_base_offsets, z, r, a, bI, chunk_compressed)
+    end
+    return aout
+  end
   # Now loop through the chunks
   c = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
@@ -260,18 +393,25 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       
       bI,chunk_compressed = take!(c)
       
-      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
-
-      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-      
-      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
-      nothing
+      read_chunk_to_output!(aout, output_base_offsets, z, r, a, bI, chunk_compressed)
     end
   finally
     close(c)
   end
   
   aout
+end
+
+"""
+Decode one chunk (`chunk_compressed`, possibly `nothing` for a missing chunk)
+into the scratch buffer `a` and copy the part of it covered by `r` into `aout`.
+Shared by the sequential and the concurrent read paths.
+"""
+function read_chunk_to_output!(aout, output_base_offsets, z, r, a, bI, chunk_compressed)
+  current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
+  indranges = map(boundint,r.indices,size(a),current_chunk_offsets)
+  uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
+  nothing
 end
 
 function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::CartesianIndices{N}) where {N}
@@ -291,6 +431,18 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   # zero-fill of `getchunkarray`). Preserve that. Otherwise `resetbuffer!`
   # handles initialisation explicitly and we save the dead memset.
   a = z.metadata.fill_value === nothing ? getchunkarray(z) : getchunkarray_undef(z)
+  # Sequential stores (the default, e.g. DirectoryStore/DictStore) do the
+  # read-modify-write chunk by chunk without Channels or tasks; see the
+  # comment in `readblock!`.
+  if store_read_strategy(z.storage) isa SequentialRead
+    e = z.metadata.chunk_key_encoding
+    for bI in blockr
+      chunk_compressed = store_readchunk(z.storage, z.path, bI, e)
+      data = write_chunk_from_input!(ain, input_base_offsets, z, r, a, bI, chunk_compressed)
+      store_putchunk(z.storage, z.path, bI, e, data)
+    end
+    return ain
+  end
   # Now loop through the chunks
   readchannel = Channel{Pair{eltype(blockr),Union{Nothing,Vector{UInt8}}}}(channelsize(z.storage))
   
@@ -311,28 +463,7 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       
       bI,chunk_compressed = take!(readchannel)
       
-      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
-
-      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-
-      if isnothing(chunk_compressed) || (length.(indranges) != size(a))
-        resetbuffer!(z.metadata.fill_value,a)
-      end
-
-      curchunk = if length.(indranges) != size(a)
-        view(a,dotminus.(indranges,current_chunk_offsets)...)
-      else
-        a
-      end
-      
-      if chunk_compressed !== nothing
-        uncompress_raw!(a,z,chunk_compressed)
-      end
-
-      curchunk .= view(ain,dotminus.(indranges,input_base_offsets)...)
-
-      put!(writechannel,bI=>compress_raw(maybeinner(a),z))
-      nothing
+      put!(writechannel, bI=>write_chunk_from_input!(ain, input_base_offsets, z, r, a, bI, chunk_compressed))
     end
   finally
     close(readchannel)
@@ -340,6 +471,36 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
     wait(writetask)
   end
   ain
+end
+
+"""
+Read-modify-write of a single chunk into the scratch buffer `a`: reset/decode
+the existing chunk content, overwrite the part covered by `r` with the matching
+part of `ain`, and return the re-encoded chunk (`nothing` if the chunk equals
+the fill value). Shared by the sequential and the concurrent write paths.
+"""
+function write_chunk_from_input!(ain, input_base_offsets, z, r, a, bI, chunk_compressed)
+  current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
+
+  indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
+
+  if isnothing(chunk_compressed) || (length.(indranges) != size(a))
+    resetbuffer!(z.metadata.fill_value,a)
+  end
+
+  curchunk = if length.(indranges) != size(a)
+    view(a,dotminus.(indranges,current_chunk_offsets)...)
+  else
+    a
+  end
+
+  if chunk_compressed !== nothing
+    uncompress_raw!(a,z,chunk_compressed)
+  end
+
+  curchunk .= view(ain,dotminus.(indranges,input_base_offsets)...)
+
+  compress_raw(maybeinner(a),z)
 end
 
 DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
@@ -359,7 +520,10 @@ function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
     end
     fill!(a, z.metadata.fill_value)
   else
-    pipeline_decode!(get_pipeline(z.metadata), a, curchunk; fill_value=z.metadata.fill_value)
+    # `fill_value` is passed positionally: as a keyword it forces a `Core.kwcall`
+    # with a non-concrete `NamedTuple` (fill_value::Union{T,Nothing}), which juliac
+    # `--trim` cannot resolve.
+    pipeline_decode!(get_pipeline(z.metadata), a, curchunk, z.metadata.fill_value)
   end
   a
 end
@@ -404,13 +568,15 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
 * `dimension_separator='.'` sets how chunks are encoded. The Zarr v2 default is '.' such that the first 3D chunk would be `0.0.0`. The Zarr v3 default is `/`.
 """
-function zcreate(::Type{T}, dims::Integer...;
+# `@inline` for the same reason as the `AbstractStore` method below: it lets a
+# literal `zarr_format = 3` at the call site fold through `ZarrFormat(Val(v))`.
+@inline function zcreate(::Type{T}, dims::Vararg{Integer,N};
   name="",
   path=nothing,
   zarr_format=DV,
   dimension_separator=default_sep(zarr_format),
   kwargs...
-  ) where T
+  ) where {T,N}
 
   if path===nothing
     store = DictStore()
@@ -427,20 +593,27 @@ Base.size(a::ShapeOnlyArray) = a.sz
 Base.getindex(::ShapeOnlyArray, ::Vararg{Any}) =
     error("ShapeOnlyArray carries no data")
 
-function zcreate(::Type{T},storage::AbstractStore,
-  dims...;
+# `@inline`: `zarr_format` is usually a literal (`3`), but a keyword argument
+# arrives typed `Int`, so `ZarrFormat(zarr_format)` = `ZarrFormat(Val(v))` would
+# be a runtime `Core.apply_type` and every downstream `ZarrFormat{V}` dispatch
+# (`Metadata`, `write_new_metadata`) a runtime dispatch. Inlining the keyword
+# body lets the literal at the call site reach `Val`, which then folds - the
+# same reason the typed `zopen` is `@inline`d. Passing an already-built
+# `ZarrFormat` (e.g. the `DV` default) is static without inlining.
+@inline function zcreate(::Type{T},storage::AbstractStore,
+  dims::Vararg{Integer,N};
   path = "",
   zarr_format = DV,
   chunks=dims,
   fill_value=nothing,
-  fill_as_missing=false,
+  fill_as_missing::Bool=false,
   compressor=default_compressor(),
   filters = filterfromtype(T), 
-  attrs=Dict(),
+  attrs=NoAttrs(),
   writeable=true,
   indent_json=false,
   dimension_separator=nothing
-  ) where {T}
+  ) where {T,N}
 
   v = ZarrFormat(zarr_format)
   if isnothing(dimension_separator)
@@ -453,7 +626,6 @@ function zcreate(::Type{T},storage::AbstractStore,
   chunk_key_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
   
   length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
-  N = length(dims)
   C = typeof(compressor)
   
   # Create a dummy array to use with Metadata constructor
@@ -470,13 +642,11 @@ function zcreate(::Type{T},storage::AbstractStore,
   # Extract the element type from the metadata (handles T2 calculation)
   T2 = eltype(metadata)
   
-  isemptysub(storage,path) || error("$storage $path is not empty")
+  isemptysub(storage,path) || error("Store at path '", path, "' is not empty")
   
-  writemetadata(v, storage, path, metadata, indent_json=indent_json)
-  
-  writeattrs(v, storage, path, attrs, indent_json=indent_json)
-  
-  ZArray(metadata, storage, path, attrs, writeable)
+  write_new_metadata(v, storage, path, metadata, attrs; indent_json=indent_json)
+
+  ZArray(metadata, storage, path, attrsdict(attrs), writeable)
 end
 
 filterfromtype(::Type{<:Any}) = nothing

@@ -1,0 +1,22 @@
+name = "ZarrTrimmable"
+uuid = "efc1946d-859c-4e57-b481-34aae2daa941"
+version = "0.10.1"
+authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
+
+[deps]
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
+
+[compat]
+JSON = "1"
+ZarrCore = "0.10"
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+ZarrBlosc = "5717d1f5-dd42-40cd-8e77-00dfad1079f5"
+ZarrZlib = "5ee7c756-6ac8-46ad-a53f-994846513443"
+ZarrZstd = "1a1ab68b-db27-4b87-8dee-6752e2bcfa1e"
+
+[targets]
+test = ["Test", "ZarrZstd", "ZarrZlib", "ZarrBlosc"]

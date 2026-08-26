@@ -26,6 +26,7 @@ const userGuideItems = [
   { text: 'Operations', link: '/UserGuide/operations'},
   // { text: 'Sharding', link: '/UserGuide/sharding' },
   { text: 'Missing Values',       link: '/UserGuide/missings' },
+  { text: 'Compiling with juliac', link: '/UserGuide/trimming' },
 ]
 
 const tutorialItems = [

@@ -195,8 +195,8 @@ end
             ]}"""
         md = ZarrCore.Metadata(json_str, false)
         lowered = JSON.lower(md)
-        blosc_config = lowered["codecs"][2]["configuration"]
-        @test blosc_config["shuffle"] == expected_str
+        blosc_config = lowered[:codecs][2][:configuration]
+        @test blosc_config[:shuffle] == expected_str
     end
 
     # --- serialization: unknown shuffle integer raises ArgumentError via lower3 ---
@@ -452,9 +452,9 @@ end
 
     # Serialize back to JSON
     lowered = JSON.lower(md)
-    @test lowered["zarr_format"] == 3
-    @test lowered["codecs"][1]["name"] == "bytes"
-    @test lowered["codecs"][2]["name"] == "blosc"
+    @test lowered[:zarr_format] == 3
+    @test lowered[:codecs][1][:name] == "bytes"
+    @test lowered[:codecs][2][:name] == "blosc"
 end
 
 @testset "V3 Group Metadata Parsing" begin
@@ -614,10 +614,10 @@ end
 
     # Serialization round-trip
     lowered = JSON.lower(md)
-    cke = lowered["chunk_key_encoding"]
-    @test cke["name"] == "suffix"
-    @test cke["configuration"]["suffix"] == ".tiff"
-    @test cke["configuration"]["base_encoding"]["name"] == "default"
+    cke = lowered[:chunk_key_encoding]
+    @test cke[:name] == "suffix"
+    @test cke[:configuration][:suffix] == ".tiff"
+    @test cke[:configuration][:base_encoding][:name] == "default"
 
     # ZArray round-trip: chunks are stored with the suffix in their keys
     store = Zarr.DictStore()
@@ -642,8 +642,8 @@ end
         {"name":"zstd","configuration":{"level":5}}]}"""
     md = ZarrCore.Metadata(json_zstd, false)
     lowered = JSON.lower(md)
-    @test lowered["codecs"][2]["name"] == "zstd"
-    @test lowered["codecs"][2]["configuration"]["level"] == 5
+    @test lowered[:codecs][2][:name] == "zstd"
+    @test lowered[:codecs][2][:configuration][:level] == 5
 
     # CRC32cV3Codec serialization
     json_crc = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",
@@ -653,7 +653,7 @@ end
         {"name":"crc32c"}]}"""
     md = ZarrCore.Metadata(json_crc, false)
     lowered = JSON.lower(md)
-    @test lowered["codecs"][2]["name"] == "crc32c"
+    @test lowered[:codecs][2][:name] == "crc32c"
 
     # TransposeCodec serialization
     json_trans = """{"zarr_format":3,"node_type":"array","shape":[3,4],"data_type":"int32",
@@ -663,8 +663,8 @@ end
         {"name":"bytes","configuration":{"endian":"little"}}]}"""
     md = ZarrCore.Metadata(json_trans, false)
     lowered = JSON.lower(md)
-    @test lowered["codecs"][1]["name"] == "transpose"
-    @test lowered["codecs"][1]["configuration"]["order"] == [1, 0]
+    @test lowered[:codecs][1][:name] == "transpose"
+    @test lowered[:codecs][1][:configuration][:order] == [1, 0]
 end
 
 @testset "MetadataV3 convenience constructor" begin
@@ -712,7 +712,7 @@ end
     
     # Test lowering back to JSON preserves the dict structure
     lowered = JSON.lower(md)
-    @test lowered["data_type"] == Dict{String, Any}("name" => "fixed_length_utf32", "configuration" => Dict{String, Any}("length_bytes" => 40))
+    @test lowered[:data_type] == Dict{String, Any}("name" => "fixed_length_utf32", "configuration" => Dict{String, Any}("length_bytes" => 40))
 end
 
 @testset "V3 ZArray round-trip" begin
@@ -1116,9 +1116,9 @@ end
 
     # JSON round-trip
     lowered = JSON.lower(c)
-    @test lowered["name"] == "sharding_indexed"
-    @test lowered["configuration"]["chunk_shape"] == [2]
-    @test lowered["configuration"]["index_location"] == "end"
+    @test lowered[:name] == "sharding_indexed"
+    @test lowered[:configuration][:chunk_shape] == [2]
+    @test lowered[:configuration][:index_location] == "end"
 end
 
 @testset "ShardingCodec ragged inner chunks" begin

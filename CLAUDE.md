@@ -64,6 +64,7 @@ The repo is a Pkg workspace:
 - `ZarrS3` — `S3Store`; AWSS3 methods load through a weak extension.
 - `ZarrZip` — `ZipStore` and `writezip`.
 - `ZarrBlosc`, `ZarrZlib`, `ZarrZstd` — v2 compressors and matching v3 codecs; `ZarrBlosc` provides the default compressor.
+- `ZarrTrimmable` — opt-in `juliac --trim=safe` front end: `@zarr_reader` closed-set reader over the typed `zopen`/`zcreate`, plus the `ArrayMeta` mirror of `.zarray`. Depends only on `ZarrCore` and `JSON`; codec types enter through the macro's `codecs=` tuple. Deliberately **not** re-exported by `Zarr` (it is in `[workspace]`/`[sources]` but not in `Zarr`'s `[deps]`).
 - `Zarr` — facade that re-exports `REEXPORTED_MODULES`.
 
 Package rules:
@@ -73,7 +74,15 @@ Package rules:
 - Mutate cross-package registries in `__init__` so entries survive precompilation.
 - Keep AWSS3 as a weak dependency of `ZarrS3`.
 - New subpackages require root project entries, a `public_names_*.jl`, a
-  `REEXPORTED_MODULES` entry, CI develop paths, and a Documenter module entry.
+  `REEXPORTED_MODULES` entry (except opt-in packages such as `ZarrTrimmable`),
+  CI develop paths, and a Documenter module entry.
+- Compressor packages implement `codec_id(::Type{C})` next to
+  `getCompressor(::Type{C}, ::CompressorJSON)`; both are needed for a compressor
+  to join a `ZarrTrimmable` codec pool.
+- Codec packages implement `codec_name(::Type{C})` next to
+  `getCodec(::Type{C}, ::CodecJSON, ctx)` for their v3 codecs; both are needed
+  for a codec to appear in a `V3Pipeline` type on the statically typed v3 open
+  path.
 
 ### Public API Policy
 
@@ -91,6 +100,9 @@ are internal.
   normalization helpers, codec pipelines, and `store_*` helpers.
 
 Tests use `Zarr.foo` for public names and `ZarrCore.foo` for internals.
+`ZarrTrimmable` tests live in `lib/ZarrTrimmable/test/runtests.jl` (self-contained,
+also included from `test/trimmable.jl`); `@zarr_reader` must be expanded at file top
+level, never inside a `@testset`.
 
 ### Module/File Layout
 

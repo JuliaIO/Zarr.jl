@@ -20,7 +20,15 @@ end
 function Base.getindex(d::DirectoryStore, i::String)
   fname=joinpath(d.folder,i)
   if isfile(fname)
-    read(fname)
+    # Explicit open/close instead of `read(fname)`: the latter routes through
+    # `open(f, args...; kwargs...)`, whose `Core._apply_iterate` splat cannot be
+    # statically resolved (juliac `--trim`).
+    io = open(fname, "r")
+    try
+      read(io)
+    finally
+      close(io)
+    end
   else
     nothing
   end
@@ -32,7 +40,15 @@ function Base.setindex!(d::DirectoryStore,v,i::String)
   isdir(folder) || mkpath(folder)
   tmp = tempname(folder)
   try
-    write(tmp, v)
+    # Explicit open/close instead of `write(tmp, v)`: the latter routes through
+    # `open(f, args...; kwargs...)`, whose `Core._apply_iterate` splat cannot be
+    # statically resolved (juliac `--trim`).
+    io = open(tmp, "w")
+    try
+      write(io, v)
+    finally
+      close(io)
+    end
     mv(tmp, fname, force=true)  # atomic on POSIX
     return v
   catch

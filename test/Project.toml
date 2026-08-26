@@ -11,9 +11,11 @@ PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+ZarrTrimmable = "efc1946d-859c-4e57-b481-34aae2daa941"
 
 [sources]
 Zarr = {path = ".."}
+ZarrTrimmable = {path = "../lib/ZarrTrimmable"}
 
 [compat]
 CondaPkg = ">= 0.2.35"

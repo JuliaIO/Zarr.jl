@@ -47,20 +47,28 @@ SuffixChunkKeyEncoding(suffix::String; sep::Char='/', prefix::Bool=true) =
 @inline citostring(e::SuffixChunkKeyEncoding, i::CartesianIndex) =
     citostring(e.base_encoding, i) * e.suffix
 
-"""Serialize an `AbstractChunkKeyEncoding` to a JSON-compatible dict."""
+"""
+Serialize an `AbstractChunkKeyEncoding` to a JSON-compatible value.
+
+NamedTuples (not `Dict`s) so that lowering v3 array metadata stays statically
+typed - see `ZarrCore.print_metadata`. The emitted JSON is unchanged.
+"""
 function lower_chunk_key_encoding(e::ChunkKeyEncoding)
-    Dict{String,Any}(
-        "name" => e.prefix ? "default" : "v2",
-        "configuration" => Dict{String,Any}("separator" => string(e.sep))
-    )
+    local nm::String
+    if e.prefix
+        nm = "default"
+    else
+        nm = "v2"
+    end
+    return (; name = nm, configuration = (; separator = string(e.sep)))
 end
 
 function lower_chunk_key_encoding(e::SuffixChunkKeyEncoding)
-    Dict{String,Any}(
-        "name" => "suffix",
-        "configuration" => Dict{String,Any}(
-            "suffix" => e.suffix,
-            "base_encoding" => lower_chunk_key_encoding(e.base_encoding)
+    return (;
+        name = "suffix",
+        configuration = (;
+            suffix = e.suffix,
+            base_encoding = lower_chunk_key_encoding(e.base_encoding)
         )
     )
 end
