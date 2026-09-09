@@ -267,7 +267,7 @@ end
 fill_value_encoding(v) = v
 fill_value_encoding(::Nothing)=nothing
 # spec: complex fill values are `[real, imag]`; without this the JSON lowering is `{"re":..,"im":..}`
-fill_value_encoding(v::Complex) = Any[real(v), imag(v)]
+fill_value_encoding(v::Complex) = [real(v), imag(v)]
 function fill_value_encoding(v::AbstractFloat)
     if isnan(v)
         "NaN"
