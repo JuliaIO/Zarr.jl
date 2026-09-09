@@ -31,7 +31,7 @@ end
 function zdecode(data::AbstractArray, filter::DeltaFilter{DecodingType, EncodingType}) where {DecodingType, EncodingType}
     encoded = reinterpret(EncodingType, vec(data))
     decoded = similar(encoded, DecodingType)
-    accumulate!(+, encoded, decoded; init=zero(DecodingType))
+    accumulate!(+, decoded, encoded; init=zero(DecodingType))
     return decoded
 end
 
