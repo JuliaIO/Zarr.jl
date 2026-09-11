@@ -23,8 +23,11 @@ Subtypes of `Compressor` MAY also implement the following methods:
   using the compressor `c` and store the result in the array `data`.
 
 Register each compressor under its Zarr specification name in
-[`compressortypes`](@ref). External packages must register from `__init__` so
-the entry is restored after precompilation.
+[`compressortypes`](@ref). External packages must perform registry mutations
+from their runtime `__init__` so entries are restored after precompilation.
+Packages that support optional automatic registration should guard that call
+with [`should_register_at_init`](@ref) and expose a qualified `register!`
+function for explicit registration.
 
 To be usable with Zarr v3 a compressor SHOULD additionally implement
 [`v2_to_v3_codecs`](@ref), mapping it onto the equivalent v3 codecs.
@@ -49,3 +52,20 @@ end
 # Implemented in pipeline.jl after Codecs loads.
 function pipeline_encode end
 function pipeline_decode! end
+
+"""
+    should_register_at_init()::Bool
+
+Return the compile-time `ZarrCore` preference that controls automatic
+cross-package registry updates.
+
+Extension packages should call this function from their runtime `__init__` and
+register only when it returns `true`. The preference defaults to `true`. Users
+who disable it can still call an extension package's qualified `register!`
+function explicitly for the current Julia process. Restart Julia after changing
+`RegisterAtInit`. Downstream packages that require an extension should call its
+`register!` from their own runtime `__init__`, rather than while precompiling.
+"""
+function should_register_at_init()
+    return Preferences.@load_preference("RegisterAtInit", true)
+end

@@ -2,6 +2,7 @@ module ZarrCore
 
 import JSON
 import Unicode
+import Preferences
 using OrderedCollections: OrderedDict
 
 struct ZarrFormat{V}

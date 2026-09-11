@@ -36,3 +36,6 @@ public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,
 
 # Data type and fill value encoding, needed to map Zarr dtypes to Julia types.
 public typestr, fill_value_encoding, fill_value_decoding
+
+# Preferences
+public should_register_at_init
