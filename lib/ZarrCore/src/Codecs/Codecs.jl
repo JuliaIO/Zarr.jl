@@ -27,9 +27,11 @@ Subtypes of `Codec` MAY also implement the following methods:
   using the codec `c` and store the result in the array `data`.
 
 Register each codec under its Zarr specification name. External packages must
-register from `__init__` so the entry is restored after precompilation.
+perform registry mutations from their runtime `__init__` so the entries are
+restored after precompilation. Packages that support optional automatic
+registration should guard that call with [`ZarrCore.should_register_at_init`](@ref)
+and expose a qualified `register!` function for explicit registration.
 """
-
 abstract type Codec end
 
 zencode(a, c::Codec) = error("Unimplemented")

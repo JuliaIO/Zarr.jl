@@ -98,11 +98,11 @@ v2_to_v3_codecs(::NoCompressor, typesize::Int) = ()
 
 struct _DefaultCompressorFallback end
 
+# The fallback remains less specific than a package's zero-argument method.
 """
     default_compressor()
 
 Return the compressor used when none is specified. Bare `ZarrCore` returns
 [`NoCompressor`](@ref); compressor packages may provide a zero-argument method.
 """
-# The fallback remains less specific than a package's zero-argument method.
 default_compressor(::_DefaultCompressorFallback...) = NoCompressor()

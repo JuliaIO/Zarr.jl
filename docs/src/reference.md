@@ -26,4 +26,20 @@ Pages = ["Compressors/Compressors.jl"]
 
 ```@autodocs
 Modules = [ZarrBlosc, ZarrZlib, ZarrZstd]
+Filter = item -> !(item in (ZarrBlosc.register!, ZarrZlib.register!, ZarrZstd.register!))
+```
+
+## Extension registration
+
+Each extension package exposes its own qualified registration function:
+
+```@docs
+ZarrCore.should_register_at_init
+ZarrBlosc.register!
+ZarrZlib.register!
+ZarrZstd.register!
+ZarrHTTP.register!
+ZarrGCS.register!
+ZarrS3.register!
+ZarrZip.register!
 ```

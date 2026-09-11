@@ -70,7 +70,21 @@ Package rules:
 
 - Subpackages depend on `ZarrCore`; `ZarrCore` does not depend on them.
 - Extend ZarrCore generics with qualified definitions. Declare shared generics in ZarrCore.
-- Mutate cross-package registries in `__init__` so entries survive precompilation.
+- Mutate cross-package registries in runtime `__init__` so entries survive
+  precompilation. Guard optional automatic registration with
+  `ZarrCore.should_register_at_init() && register!()` and expose a documented,
+  public, package-qualified `register!` that works regardless of the preference.
+- `RegisterAtInit` defaults to `true`. To disable it, set
+  `[ZarrCore] RegisterAtInit = false` in the active environment's
+  `LocalPreferences.toml`, then restart Julia. Manual registration affects only
+  the current process. Core built-ins remain registered, and the preference
+  does not unload types or methods or disable Blosc default-compressor dispatch.
+- Downstream packages that register explicitly must call the qualified
+  `register!` from their runtime `__init__`; calls made only during
+  precompilation do not restore registry entries when loaded.
+- Do not re-export extension `register!` functions from the `Zarr` facade;
+  callers use `Zarr.ZarrBlosc.register!()` (and the corresponding package
+  module) or import the extension package directly.
 - Keep AWSS3 as a weak dependency of `ZarrS3`.
 - New subpackages require root project entries, a `public_names_*.jl`, a
   `REEXPORTED_MODULES` entry, CI develop paths, and a Documenter module entry.
@@ -122,7 +136,8 @@ Core paths below are relative to `lib/ZarrCore/`. Backend implementations are in
 
 New stores implement `getindex`, `setindex!`, `storagesize`, `subdirs`,
 `subkeys`, `isinitialized`, and `storefromstring`. URL-addressable stores
-register their pattern from `__init__`; longer patterns take precedence.
+expose a qualified `register!` and invoke it from runtime `__init__`, guarded by
+`ZarrCore.should_register_at_init()`; longer URL patterns take precedence.
 
 ### V3 Status
 
