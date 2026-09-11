@@ -162,6 +162,19 @@ ZarrCore.store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
 
 # Register after precompilation; GCS URLs outrank generic HTTP URLs.
 function __init__()
+  ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrGCS.register!()
+
+Register the `https://storage.googleapis.com`,
+`http://storage.googleapis.com`, and `gs://` URL schemes with ZarrCore.
+Registration runs automatically by default according to the ZarrCore
+`RegisterAtInit` preference. Call `ZarrGCS.register!()` explicitly when
+automatic registration is disabled.
+"""
+function register!()
   push!(storageregexlist, r"^https://storage.googleapis.com" => GCStore)
   push!(storageregexlist, r"^http://storage.googleapis.com" => GCStore)
   push!(storageregexlist, r"^gs://" => GCStore)

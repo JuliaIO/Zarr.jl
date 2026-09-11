@@ -100,6 +100,21 @@ end
 
 # Cross-package registrations must run after precompilation.
 function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrZstd.register!()
+
+Register the Zstandard compressor with ZarrCore under the Zarr v2 compressor
+name `"zstd"` and the Zarr v3 codec name `"zstd"`.
+
+Registration runs automatically during package initialization when the
+ZarrCore `RegisterAtInit` preference is enabled (the default). When automatic
+registration is disabled, call this function explicitly. Calling it again
+restores or overwrites ZarrZstd's own registry entries.
+"""
+function register!()
     ZarrCore.compressortypes["zstd"] = ZstdCompressor
     V3Codecs.register_codec("zstd", ZstdV3Codec) do config, ctx
         ZstdV3Codec(get(config, "level", 3))

@@ -91,6 +91,21 @@ end
 
 # Cross-package registrations must run after precompilation.
 function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrZlib.register!()
+
+Register the zlib compressor with ZarrCore under the Zarr v2 compressor name
+`"zlib"` and the Zarr v3 codec name `"gzip"`.
+
+Registration runs automatically during package initialization when the
+ZarrCore `RegisterAtInit` preference is enabled (the default). When automatic
+registration is disabled, call this function explicitly. Calling it again
+restores or overwrites ZarrZlib's own registry entries.
+"""
+function register!()
     ZarrCore.compressortypes["zlib"] = ZlibCompressor
     V3Codecs.register_codec("gzip", GzipV3Codec) do config, ctx
         GzipV3Codec(get(config, "level", 6))

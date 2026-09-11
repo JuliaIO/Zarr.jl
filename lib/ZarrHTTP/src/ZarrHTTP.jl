@@ -100,6 +100,18 @@ HTTP.serve!(s::Union{ZArray,ZGroup}; kwargs...) = HTTP.serve!(s.storage, s.path;
 
 # Register after precompilation; specific URL patterns take precedence.
 function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrHTTP.register!()
+
+Register the `https://` and `http://` URL schemes with ZarrCore.
+Registration runs automatically by default according to the ZarrCore
+`RegisterAtInit` preference. Call `ZarrHTTP.register!()` explicitly when
+automatic registration is disabled.
+"""
+function register!()
     push!(storageregexlist, r"^https://" => HTTPStore)
     push!(storageregexlist, r"^http://" => HTTPStore)
 end

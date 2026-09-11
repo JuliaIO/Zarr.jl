@@ -106,6 +106,20 @@ function _writezip(w::ZipArchives.ZipWriter, s::AbstractStore, p::String)
     end
 end
 
+function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrZip.register!()
+
+Provide a registration entry point for ZarrZip. ZarrZip has no registry
+entries, so this function does nothing and returns nothing. It participates in
+the same `RegisterAtInit` initialization hook as other extension packages;
+calling it explicitly is optional and does not affect `ZipStore` or `writezip`.
+"""
+register!() = nothing
+
 @static if VERSION >= v"1.11"
     include("public_names_zip.jl")
 end

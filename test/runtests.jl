@@ -20,6 +20,7 @@ using Dates
     allexported = mapreduce(exported, union, mods)
     allpublic = mapreduce(publiconly, union, mods)
     alldeclared = mapreduce(declared, union, mods)
+    facade_declared = setdiff(alldeclared, Set([:register!]))
 
     @test all(m -> isdefined(Zarr, nameof(m)), mods)
     @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
@@ -37,7 +38,7 @@ using Dates
 
     # Individual packages may have no public-only names; the combined set may not.
     @test !isempty(alldeclared)
-    @test isempty(filter(n -> !isdefined(Zarr, n), alldeclared))
+    @test isempty(filter(n -> !isdefined(Zarr, n), facade_declared))
     @test !isempty(declared(Zarr))
     @test isempty(filter(n -> !isdefined(Zarr, n), declared(Zarr)))
 
@@ -51,6 +52,12 @@ using Dates
     @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
         :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
         :CRC32cV3Codec, :VLenUTF8V3Codec]))
+    @test !isdefined(Zarr, :register!)
+    for mod in (Zarr.ZarrBlosc, Zarr.ZarrZlib, Zarr.ZarrZstd, Zarr.ZarrHTTP,
+                Zarr.ZarrGCS, Zarr.ZarrS3, Zarr.ZarrZip)
+        @test :register! in declared(mod)
+        @test Base.Docs.doc(Base.Docs.Binding(mod, :register!)) !== nothing
+    end
 end
 
 @testset "default compressor" begin
@@ -62,6 +69,8 @@ end
         """
     @test success(`$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $core_only`)
 end
+
+include("registration.jl")
 
 @testset "ZArray" begin
     @testset "fields" begin

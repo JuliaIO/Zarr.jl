@@ -80,6 +80,9 @@ let seen = Set{Symbol}()
             Core.eval(@__MODULE__, Expr(:public, modname))
         end
         for name in _reexported_names(mod)
+            # Registration is package-specific; there is no meaningful
+            # unqualified Zarr.register! when several extensions provide it.
+            name === :register! && continue
             name in seen && continue
             push!(seen, name)
             @eval import $modname: $name

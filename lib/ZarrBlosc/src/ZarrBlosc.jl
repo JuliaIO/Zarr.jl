@@ -118,6 +118,21 @@ end
 
 # Cross-package registrations must run after precompilation.
 function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrBlosc.register!()
+
+Register the Blosc compressor with ZarrCore under the Zarr v2 compressor name
+`"blosc"` and the Zarr v3 codec name `"blosc"`.
+
+Registration runs automatically during package initialization when the
+ZarrCore `RegisterAtInit` preference is enabled (the default). When automatic
+registration is disabled, call this function explicitly. Calling it again
+restores or overwrites ZarrBlosc's own registry entries.
+"""
+function register!()
     ZarrCore.compressortypes["blosc"] = BloscCompressor
     V3Codecs.register_codec("blosc", BloscV3Codec) do config, ctx
         cname = get(config, "cname", "lz4")

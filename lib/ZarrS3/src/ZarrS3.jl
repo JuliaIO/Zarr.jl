@@ -28,6 +28,18 @@ end
 
 # Register without AWSS3 so `s3://` URLs resolve to the fallback constructor.
 function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrS3.register!()
+
+Register the `s3://` URL scheme with ZarrCore. Registration runs automatically
+by default according to the ZarrCore `RegisterAtInit` preference. Call
+`ZarrS3.register!()` explicitly when automatic registration is disabled.
+AWSS3 is still required to operate on S3 stores.
+"""
+function register!()
     push!(storageregexlist, r"^s3://" => S3Store)
 end
 
