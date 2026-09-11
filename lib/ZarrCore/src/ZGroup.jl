@@ -191,13 +191,9 @@ function zcreate(::Type{T},g::ZGroup, name::AbstractString, addargs...; kwargs..
   return z
 end
 
-HTTP.serve(s::Union{ZArray,ZGroup}, args...; kwargs...) = HTTP.serve(s.storage, s.path, args...; kwargs...)
-HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, host, port_num; kwargs...)
-HTTP.serve!(s::Union{ZArray,ZGroup}, host::AbstractString; kwargs...) = HTTP.serve!(s.storage, s.path, host; kwargs...)
-HTTP.serve!(s::Union{ZArray,ZGroup}, port_num::Integer; kwargs...) = HTTP.serve!(s.storage, s.path, port_num; kwargs...)
-HTTP.serve!(s::Union{ZArray,ZGroup}; kwargs...) = HTTP.serve!(s.storage, s.path; kwargs...)
-writezip(io::IO, s::Union{ZArray,ZGroup}; kwargs...) = writezip(io, s.storage, s.path; kwargs...)
-function consolidate_metadata(z::Union{ZArray,ZGroup}) 
+# `HTTP.serve(::Union{ZArray,ZGroup}, ...)` lives in ZarrHTTP, together with the
+# `AbstractStore` method it forwards to and the rest of the HTTP backend.
+function consolidate_metadata(z::Union{ZArray,ZGroup})
   z.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
   consolidate_metadata(z.storage,z.path)
 end

@@ -1,10 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-Zarr.jl is a Julia implementation of the Zarr specification for chunked, compressed, N-dimensional arrays. It supports Zarr v2 (stable) and v3 (experimental, in development on `as/continue_v3` branch). The package provides multiple storage backends (filesystem, in-memory, S3, GCS, HTTP, ZIP) and compressors (Blosc, zlib, Zstandard).
+Zarr.jl implements Zarr v2 and experimental v3 arrays with filesystem, memory, HTTP, GCS, S3, and ZIP storage.
 
 ## Build & Test Commands
 
@@ -24,11 +22,14 @@ julia --project=test test/v3_julia.jl
 julia --project=test test/v3_python.jl
 ```
 
-Julia version requirement: 1.10+. CI tests against Julia LTS, stable (`1`), nightly, and pre-release on Ubuntu, macOS, and Windows.
+Julia version requirement: 1.10+. CI tests LTS, stable, nightly, and prerelease Julia on Ubuntu, plus stable Julia on macOS and Windows.
 
-Because 1.10 is still supported, the `public` keyword (Julia 1.11+) cannot be used directly. Use the `ZarrCore.@public` macro instead — it expands to `public` on 1.11+ and to nothing on 1.10.
+### Public names
 
-Since there is no `public` on 1.10, `names()` cannot report public names there, so `@public` *also* appends to the calling module's `PUBLIC_NAMES::Vector{Symbol}`. **Any module that uses `@public` must define its own `const PUBLIC_NAMES = Symbol[]`** (per-module, exactly like `public` itself); forgetting it is a load-time `UndefVarError`. The `Zarr` facade unions `names(ZarrCore)` with `ZarrCore.PUBLIC_NAMES`, which is what keeps the public API present on LTS — without it, every public-but-not-exported name silently vanishes from `Zarr` on 1.10 while 1.11+ looks fine.
+Each module stores public-only declarations in an adjacent `public_names_*.jl`
+containing only `public` statements and comments. Include it only on Julia 1.11+;
+`Zarr._declared_public_names` parses it on Julia 1.10.
+`src/public_names_zarr.jl` defines the facade's public subset.
 
 ## Architecture
 
@@ -42,11 +43,12 @@ AbstractMetadata{T,N}
 AbstractStore
 ├── DirectoryStore          # Filesystem
 ├── DictStore               # In-memory Dict{String,Vector{UInt8}}
-├── S3Store                 # AWS S3 (via AWSS3 extension)
-├── GCStore                 # Google Cloud Storage
+├── S3Store                 # S3 via ZarrS3/AWSS3
 ├── ConsolidatedStore       # Consolidated metadata wrapper
-├── HTTPStore               # HTTP-based read-only
-└── ZipStore                # ZIP archive read-only
+├── CachingStore            # Local cache in front of a remote store
+├── GCStore                 # GCS via ZarrGCS
+├── HTTPStore               # HTTP via ZarrHTTP
+└── ZipStore                # ZIP via ZarrZip
 
 ZArray{T,N,S<:AbstractStore,M<:AbstractMetadata} <: AbstractDiskArray{T,N}
 ZGroup{S<:AbstractStore}
@@ -54,76 +56,91 @@ ZGroup{S<:AbstractStore}
 
 ### Package Layout
 
-The repo is a Pkg workspace with two packages:
+The repo is a Pkg workspace:
 
-- `ZarrCore` (`lib/ZarrCore/`) — the entire implementation. Every type, method and docstring lives here.
-- `Zarr` (`src/Zarr.jl`) — a thin facade that re-exports `ZarrCore`'s API. It mirrors the export/public split: names `ZarrCore` exports are re-exported, names it only marks `@public` stay public (not exported). Nothing else is forwarded, so internals must be reached as `Zarr.ZarrCore.foo`.
+- `ZarrCore` — core types, metadata, filters, storage interfaces, and codec interfaces.
+- `ZarrHTTP` — `HTTPStore` and HTTP serving methods.
+- `ZarrGCS` — `GCStore` and GCS credentials.
+- `ZarrS3` — `S3Store`; AWSS3 methods load through a weak extension.
+- `ZarrZip` — `ZipStore` and `writezip`.
+- `ZarrBlosc`, `ZarrZlib`, `ZarrZstd` — v2 compressors and matching v3 codecs; `ZarrBlosc` provides the default compressor.
+- `Zarr` — facade that re-exports `REEXPORTED_MODULES`.
+
+Package rules:
+
+- Subpackages depend on `ZarrCore`; `ZarrCore` does not depend on them.
+- Extend ZarrCore generics with qualified definitions. Declare shared generics in ZarrCore.
+- Mutate cross-package registries in runtime `__init__` so entries survive
+  precompilation. Guard optional automatic registration with
+  `ZarrCore.should_register_at_init() && register!()` and expose a documented,
+  public, package-qualified `register!` that works regardless of the preference.
+- `RegisterAtInit` defaults to `true`. To disable it, set
+  `[ZarrCore] RegisterAtInit = false` in the active environment's
+  `LocalPreferences.toml`, then restart Julia. Manual registration affects only
+  the current process. Core built-ins remain registered, and the preference
+  does not unload types or methods or disable Blosc default-compressor dispatch.
+- Downstream packages that register explicitly must call the qualified
+  `register!` from their runtime `__init__`; calls made only during
+  precompilation do not restore registry entries when loaded.
+- Do not re-export extension `register!` functions from the `Zarr` facade;
+  callers use `Zarr.ZarrBlosc.register!()` (and the corresponding package
+  module) or import the extension package directly.
+- Keep AWSS3 as a weak dependency of `ZarrS3`.
+- New subpackages require root project entries, a `public_names_*.jl`, a
+  `REEXPORTED_MODULES` entry, CI develop paths, and a Documenter module entry.
 
 ### Public API Policy
 
-Set by [a maintainer comment on PR #317](https://github.com/JuliaIO/Zarr.jl/pull/317#issuecomment-5314176722). Anything a downstream consumer could need, plus every documented extension point, is part of the public API; everything else is internal and may change.
+Set by [a maintainer comment on PR #317](https://github.com/JuliaIO/Zarr.jl/pull/317#issuecomment-5314176722).
+Downstream functionality and documented extension points are public; other names
+are internal.
 
-- **Exported** (in scope after `using Zarr`): `ZArray`, `ZGroup`, `zopen`, `zzeros`, `zcreate`, `zgroup`, `zarrcache`, `storagesize`, `storageratio`, `zinfo`, `DirectoryStore`, `S3Store`, `GCStore`.
-- **Public but not exported**: every store, codec, filter and compressor type; the store/filter/compressor/codec/chunk-key-encoding extension interfaces; `typestr`, `fill_value_encoding`, `fill_value_decoding`, `zname`, `writezip`, `consolidate_metadata`, `DateTime64`.
-- **Internal**: `Metadata`/`MetadataV2`/`MetadataV3`, `ZarrFormat`, `DV`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, `ASCIIChar`, `ShapeOnlyArray` (should be removed), `getattrs`/`writeattrs`/`getmetadata`/`writemetadata`, `V2Pipeline`/`V3Pipeline`/`pipeline_encode`/`pipeline_decode!`, and the `store_*` helpers.
+- **Exported**: `ZArray`, `ZGroup`, `zopen`, `zzeros`, `zcreate`, `zgroup`,
+  `zarrcache`, `storagesize`, `storageratio`, `zinfo`, `DirectoryStore`,
+  `S3Store`, `GCStore`.
+- **Public but not exported**: store, codec, filter, and compressor types;
+  extension interfaces; `typestr`, fill-value functions, `zname`, `writezip`,
+  `consolidate_metadata`, `missing_chunk_return_code!`, and `gcs_credentials`.
+- **Internal**: metadata structs, `ZarrFormat`, `PermanentZarrCache`, detection and
+  normalization helpers, codec pipelines, and `store_*` helpers.
 
-Tests follow the same rule: public names are used as `Zarr.foo`, internals as `ZarrCore.foo` (each test file does `import Zarr: ZarrCore`). If a test needs `ZarrCore.` for something a downstream user would plausibly need, that is a signal the name should be made public rather than the test qualified.
+Tests use `Zarr.foo` for public names and `ZarrCore.foo` for internals.
 
 ### Module/File Layout
 
-All paths below are relative to `lib/ZarrCore/`.
+Core paths below are relative to `lib/ZarrCore/`. Backend implementations are in
+`lib/<Name>/src/<Name>.jl`; S3 data-access methods are in `lib/ZarrS3/ext/`.
 
-- `src/ZarrCore.jl` — Module entry point, defines `ZarrFormat{V}` (Val-parameterized version tag, default `DV = ZarrFormat(Val(2))`), the `@public` macro, and the export/public declarations
-- `src/metadata.jl` — `MetadataV2` struct, type string encoding (`typestr`), fill value encoding/decoding, `Metadata()` constructors for V2; dispatches V3 to `metadata3.jl`
-- `src/metadata3.jl` — All V3-specific code: `MetadataV3` struct and constructors, `Metadata3(dict)` parsing, `lower3` serialization, codec pipeline parsing, `get_order`, `JSON.lower(::MetadataV3)`
-- `src/chunkkeyencoding.jl` — `ChunkKeyEncoding` struct (separator char + prefix bool), `citostring()` for chunk path generation, plus the `register_chunk_key_encoding` registry. V2 default: `'.'` separator, no prefix. V3 default: `'/'` separator, `"c/"` prefix
+- `src/ZarrCore.jl` — module entry point, `ZarrFormat`, exports, and public names.
+- `src/metadata.jl` — v2 metadata, dtype conversion, and fill-value conversion.
+- `src/metadata3.jl` — v3 metadata, codec pipelines, ordering, and serialization.
+- `src/chunkkeyencoding.jl` — chunk-key encodings and registry.
 - `src/ZArray.jl` — Core array type, `readblock!`/`writeblock!` (DiskArrays interface), `zcreate`, `zzeros`, `zopen`, resize/append
 - `src/ZGroup.jl` — Hierarchical group support, `zopen`, `zgroup`, auto-detection of zarr version via `ZarrFormat(store, path)`
-- `src/Compressors/` — `Compressor` abstract type, `compressortypes` registry (keyed by spec name string), implementations: `blosc.jl`, `zlib.jl`, `zstd.jl`
-- `src/Codecs/` — V3 codec system (`Codec` abstract type), `V3/V3.jl` defines `V3Codec{In,Out}` with `BloscV3Codec`, `BytesCodec`, `CRC32cV3Codec`, `GzipV3Codec`, `ShardingCodec`, `TransposeCodec`, `ZstdV3Codec`, and the `register_codec` registry
-- `src/Filters/` — `Filter{T,TENC}` abstract type, implementations for variable-length arrays, strings, Fletcher32, shuffle, delta, quantize
-- `src/Storage/Storage.jl` — `AbstractStore` interface, I/O strategy (`SequentialRead`/`ConcurrentRead`), chunk read/write/delete helpers, metadata read/write dispatched on `ZarrFormat{2}` vs `ZarrFormat{3}`
+- `src/Compressors/Compressors.jl` — compressor interface, registry, and default.
+- `src/Codecs/` — core v3 codecs and codec registry.
+- `src/Filters/` — filter interface and implementations.
+- `src/Storage/Storage.jl` — store interface, I/O strategies, chunk operations,
+  URL registry, and shared backend generics.
 
 ### Key Design Patterns
 
-- **Format version dispatch**: `ZarrFormat{V}` (where V is 2 or 3) used throughout for multiple dispatch on version-specific behavior (metadata file names, chunk encoding, serialization format)
+- **Format version dispatch**: `ZarrFormat{V}` selects version-specific behavior
 - **Shape is mutable**: `metadata.shape` is `Base.RefValue{NTuple{N,Int}}` to allow `resize!` without replacing the metadata struct
-- **Column-major ↔ row-major**: Zarr stores shapes/chunks in row-major (C order); Julia uses column-major. All conversions happen via `reverse()` at metadata boundaries
-- **Compressor registry**: `compressortypes` dict maps spec names (e.g., `"blosc"`, `"zlib"`) to compressor types. V3 uses `Compressor_v3{C}` wrapper to change JSON serialization format
+- **Column-major ↔ row-major**: reverse dimensions at metadata boundaries
+- **Compressor registry**: `compressortypes` maps v2 names to compressor types; `v2_to_v3_codecs` maps compressors to v3 codecs by dispatch
 - **DiskArrays integration**: `ZArray <: AbstractDiskArray`, chunk-aware I/O via `readblock!`/`writeblock!`, `eachchunk`, `haschunks`
 - **Async chunk I/O**: Channel-based parallel chunk reads/writes for stores supporting `ConcurrentRead`
 
 ### Storage Interface Requirements
 
-New store backends must implement: `getindex(store, key)::Union{Vector{UInt8}, Nothing}`, `setindex!(store, data, key)`, `storagesize(store, path)`, `subdirs(store, path)`, `subkeys(store, path)`, `isinitialized(store, key)`, `storefromstring(Type, string, create)`.
+New stores implement `getindex`, `setindex!`, `storagesize`, `subdirs`,
+`subkeys`, `isinitialized`, and `storefromstring`. URL-addressable stores
+expose a qualified `register!` and invoke it from runtime `__init__`, guarded by
+`ZarrCore.should_register_at_init()`; longer URL patterns take precedence.
 
-### V3 Status (Experimental)
+### V3 Status
 
-V3 support is under active development. Current state:
-
-**Codecs (`lib/ZarrCore/src/Codecs/V3/V3.jl`)**
-- `BytesCodec` — stores `endian::Symbol` (`:little` or `:big`); encode/decode byte-swap elements when the target endian differs from the system byte order (`Base.ENDIAN_BOM`). Default is `:little`.
-- `TransposeCodec` — array→array permutation codec (renamed from `TransposeCodecImpl`)
-- `BloscV3Codec` — shuffle stored as integer (0=noshuffle, 1=shuffle, 2=bitshuffle); parsed from spec strings (`"noshuffle"`, `"shuffle"`, `"bitshuffle"`) and serialized back to strings
-- Sharding codec (`sharding_indexed`) has struct definitions and encode/decode logic but is not yet wired into the main read/write pipeline (throws `ArgumentError` when encountered)
-- `crc32c` codec has encode/decode implementations and is parseable from metadata
-
-**Metadata (`lib/ZarrCore/src/metadata3.jl`)**
-- `MetadataV3{T,N,P}` has no `order` field; storage order is encoded in the pipeline via `TransposeCodec`
-- Two constructors:
-  - Primary inner constructor: `MetadataV3{T,N,P}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_encoding)` — takes a pre-built pipeline, no `order` argument
-  - Convenience outer constructor: `MetadataV3{T,N}(...; order, endian, compressor, chunk_encoding)` — builds the pipeline from `order` (→ `TransposeCodec`), `endian` (→ `BytesCodec`), and `compressor` (→ bytes→bytes codecs)
-- `get_order(md::MetadataV3)` — derives `'C'`/`'F'` from the pipeline; throws `ArgumentError` when order is ambiguous: multiple array→array codecs, an unrecognized array→array codec, or a `TransposeCodec` with a permutation that is neither the identity (C) nor the full reversal (F)
-- `get_order(md::MetadataV2)` — returns `md.order`
-- `==` for `MetadataV3` compares `pipeline` (not `order`)
-
-**Other V3 status**
-- V3 groups work via `zarr.json` with `node_type: "group"`
-- `zgroup()` currently always creates v2 groups (hardcoded `DV` format)
-- Filters are not implemented for v3 (`filters = nothing` hardcoded in `Metadata3`)
-- Test fixtures: `test/v3_julia.jl` (Julia-generated), `test/v3_python.jl` (Python-generated via PythonCall)
-- V3 codec tests are in `test/v3_codecs.jl`
-
-### Extension System
-
-S3 support is a weak dependency extension (`ext/ZarrAWSS3Ext.jl`), loaded only when `AWSS3` is imported. The extension registers a regex in `storageregexlist` for auto-detection of `s3://` URLs.
+V3 support is experimental. Arrays, groups, codec pipelines, sharding, endian
+conversion, and Julia/Python fixtures are implemented. `zgroup()` still creates
+v2 groups, and v3 filters are unsupported.

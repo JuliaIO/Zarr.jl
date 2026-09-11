@@ -6,17 +6,22 @@ _reinterpret(::Type{T}, x::AbstractArray) where T = reinterpret(T, x)
 
 const compressortypes = Dict{Union{String,Nothing}, Type{<: Compressor}}()
 
-# function getCompressor end
-# function zcompress end
-# function zuncompress end
-# function zcompress! end
-# function zuncompress! end
-# JSON.lower is neither defined nor documented here, since that would be documentation piracy :yarr:
+# Extension points implemented by compressor packages.
+function getCompressor end
+function zcompress end
+function zuncompress end
+function zcompress! end
+function zuncompress! end
 
-# Include the compressor implementations
-include("blosc.jl")
-include("zlib.jl")
-include("zstd.jl")
+"""
+    v2_to_v3_codecs(compressor, typesize::Int)
+
+Return the v3 codec tuple equivalent to a v2 compressor. `typesize` is the
+element size in bytes. Unsupported compressor types throw `ArgumentError`.
+"""
+function v2_to_v3_codecs(compressor, typesize::Int)
+    throw(ArgumentError("Unsupported compressor type for v3: $(typeof(compressor))"))
+end
 
 # ## Fallback definitions for the compressor interface
 # Define fallbacks and generic methods for the compressor interface
@@ -88,3 +93,16 @@ end
 JSON.lower(::NoCompressor) = nothing
 
 compressortypes[nothing] = NoCompressor
+
+v2_to_v3_codecs(::NoCompressor, typesize::Int) = ()
+
+struct _DefaultCompressorFallback end
+
+# The fallback remains less specific than a package's zero-argument method.
+"""
+    default_compressor()
+
+Return the compressor used when none is specified. Bare `ZarrCore` returns
+[`NoCompressor`](@ref); compressor packages may provide a zero-argument method.
+"""
+default_compressor(::_DefaultCompressorFallback...) = NoCompressor()

@@ -1,4 +1,18 @@
+"""
+    ZarrGCS
+
+Google Cloud Storage support.
+"""
+module ZarrGCS
+
+using HTTP: HTTP
 using URIs: URI
+import JSON
+
+# Qualify methods that extend ZarrCore generics.
+import ZarrCore
+using ZarrCore: AbstractStore, ConcurrentRead, concurrent_io_tasks,
+    storageregexlist
 
 const GOOGLE_STORAGE_API = "https://storage.googleapis.com"
 const GOOGLE_STORAGE_REST_API = GOOGLE_STORAGE_API * "/storage/v1"
@@ -7,8 +21,7 @@ const GOOGLE_STORAGE_CREDENTIALS = Dict{String,String}()
 """
     gcs_credentials(user_project,access_token,token_type)
 
-Set the user project, access token and and token type for the Google Cloud
-Store.
+Set credentials for Google Cloud Storage requests.
 """
 function gcs_credentials(user_project,access_token,token_type)
   GOOGLE_STORAGE_CREDENTIALS["user_project"] = user_project
@@ -20,11 +33,7 @@ end
 """
     gcs_credentials(; metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
 
-Set (or renew) the user project, access token and and token type for the Google
-Cloud Store from the Metadata server (assuming the function is executed from
-the Google Cloud).
-For some data sets, the error message "Bucket is requester pays bucket but no
-user project provided" is returned if the credentials are not provided.
+Load Google Cloud Storage credentials from a metadata server.
 """
 function gcs_credentials(;metadata_url = "http://metadata.google.internal/computeMetadata/v1/")
   headers = Dict("Metadata-Flavor" => "Google")
@@ -56,6 +65,12 @@ function _gcs_request_headers()
   return headers
 end
 
+"""
+    GCStore(url::String)
+
+A read-only store for a Google Cloud Storage bucket. `url` may be either a
+`gs://bucket/path` URL or an `https://storage.googleapis.com/bucket/path` one.
+"""
 struct GCStore <: AbstractStore
   bucket::String
 
@@ -91,7 +106,7 @@ function Base.getindex(s::GCStore, k::String)
   end
 end
 
-function cloud_list_objects(s::GCStore,p)
+function ZarrCore.cloud_list_objects(s::GCStore,p)
   prefix = (isempty(p) || endswith(p,"/")) ? p : string(p,"/")
 
   url = string(GOOGLE_STORAGE_REST_API, "/b/", s.bucket, "/o")
@@ -105,8 +120,8 @@ function cloud_list_objects(s::GCStore,p)
   return r
 end
 
-function storagesize(s::GCStore,p)
-  r = cloud_list_objects(s,p)
+function ZarrCore.storagesize(s::GCStore,p)
+  r = ZarrCore.cloud_list_objects(s,p)
   items = r["items"]
   datafiles = filter(entry -> !any(filename -> endswith(entry["name"], filename), [".zattrs",".zarray",".zgroup"]), items)
   if isempty(datafiles)
@@ -118,23 +133,19 @@ function storagesize(s::GCStore,p)
   end
 end
 
-function subkeys(s::GCStore, p)
-  r = cloud_list_objects(s, p)
+function ZarrCore.subkeys(s::GCStore, p)
+  r = ZarrCore.cloud_list_objects(s, p)
   keys = map(item -> String(split(item["name"],'/')[end]),  r["items"])
   return keys
 end
 
-function subdirs(s::GCStore, p)
-  r = cloud_list_objects(s,p)
+function ZarrCore.subdirs(s::GCStore, p)
+  r = ZarrCore.cloud_list_objects(s,p)
   dirs = map(prefix -> String(split(prefix,'/')[end-1]), r["prefixes"])
   return dirs
 end
 
-pushfirst!(storageregexlist,r"^https://storage.googleapis.com"=>GCStore)
-pushfirst!(storageregexlist,r"^http://storage.googleapis.com"=>GCStore)
-push!(storageregexlist,r"^gs://"=>GCStore)
-
-function storefromstring(::Type{<:GCStore}, url,_)
+function ZarrCore.storefromstring(::Type{<:GCStore}, url,_)
   uri = URI(url)
   if uri.scheme == "gs"
     p = lstrip(uri.path,'/')
@@ -147,4 +158,31 @@ function storefromstring(::Type{<:GCStore}, url,_)
   return GCStore(url),p
 end
 
-store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
+ZarrCore.store_read_strategy(::GCStore) = ConcurrentRead(concurrent_io_tasks[])
+
+# Register after precompilation; GCS URLs outrank generic HTTP URLs.
+function __init__()
+  ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrGCS.register!()
+
+Register the `https://storage.googleapis.com`,
+`http://storage.googleapis.com`, and `gs://` URL schemes with ZarrCore.
+Registration runs automatically by default according to the ZarrCore
+`RegisterAtInit` preference. Call `ZarrGCS.register!()` explicitly when
+automatic registration is disabled.
+"""
+function register!()
+  push!(storageregexlist, r"^https://storage.googleapis.com" => GCStore)
+  push!(storageregexlist, r"^http://storage.googleapis.com" => GCStore)
+  push!(storageregexlist, r"^gs://" => GCStore)
+end
+
+export GCStore
+@static if VERSION >= v"1.11"
+    include("public_names_gcs.jl")
+end
+
+end # module

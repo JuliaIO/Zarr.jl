@@ -26,15 +26,12 @@ Subtypes of `Codec` MAY also implement the following methods:
 - `zdecode!(data, encoded, c::Codec)`: decode the array `encoded` 
   using the codec `c` and store the result in the array `data`.
 
-Finally, an entry MUST be added to the `VN.codectypes` dictionary for each codec type where N is the
-Zarr format version.
-This must also follow the Zarr specification's name for that compressor.  The name of the compressor
-is the key, and the value is the compressor type (e.g. `BloscCodec` or `NoCodec`).
-
-For example, the Blosc codec is named "blosc" in the Zarr spec, so the entry for [`BloscCodec`](@ref) 
-must be added to `codectypes` as `codectypes["blosc"] = BloscCodec`.
+Register each codec under its Zarr specification name. External packages must
+perform registry mutations from their runtime `__init__` so the entries are
+restored after precompilation. Packages that support optional automatic
+registration should guard that call with [`ZarrCore.should_register_at_init`](@ref)
+and expose a qualified `register!` function for explicit registration.
 """
-
 abstract type Codec end
 
 zencode(a, c::Codec) = error("Unimplemented")
@@ -46,7 +43,7 @@ getCodec(::Type{<:Codec}, d::Dict) = error("Unimplemented")
 
 include("V3/V3.jl")
 
-@static if VERSION ≥ v"1.11"
+@static if VERSION >= v"1.11"
     include("public_names_codecs.jl")
 end
 

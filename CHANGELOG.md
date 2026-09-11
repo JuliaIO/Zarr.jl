@@ -2,7 +2,15 @@
 
 ## Unreleased
 - Move code to ZarrCore.jl with low dependencies
+- Move HTTP, GCS, S3, and ZIP backends into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`.
+- Move Blosc, zlib, and Zstandard support into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`; each provides its v2 compressor and v3 codec.
+- Loading `ZarrBlosc` makes `default_compressor()` return `BloscCompressor()`; bare `ZarrCore` returns `NoCompressor()`.
+- Register external compressors, codecs, and URL stores at load time. URL patterns are matched by specificity.
+- AWSS3 remains an optional dependency of `ZarrS3`.
+- Make `missing_chunk_return_code!` and `gcs_credentials` public. Stop exposing
+  `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` through `Zarr`.
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
+- Fixed `fill_as_missing=true` on zarr v3 arrays, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}` when decoding an initialized chunk.
 
 ## v0.10.2 - 2026-08-19
 

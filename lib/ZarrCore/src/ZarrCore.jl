@@ -1,8 +1,8 @@
 module ZarrCore
 
 import JSON
-import Blosc
 import Unicode
+import Preferences
 using OrderedCollections: OrderedDict
 
 struct ZarrFormat{V}
@@ -28,27 +28,16 @@ include("ZGroup.jl")
 include("caching.jl")
 
 import .Codecs: Codec
-import .Codecs.V3Codecs: V3Codec, BloscCodec, BytesCodec, CRC32cCodec, GzipCodec,
-    ShardingCodec, TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec,
-    CRC32cV3Codec, VLenUTF8V3Codec
+import .Codecs.V3Codecs: V3Codec, BytesCodec, CRC32cCodec,
+    ShardingCodec, TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec
 
-# ## Public API
-#
-# The rule of thumb is: anything a downstream consumer could need, and every
-# documented extension point, is part of the public API. `export` is reserved
-# for the handful of names that are convenient to have in scope after
-# `using Zarr`; everything else is marked `public` and must be qualified.
-#
-# Things that are deliberately *not* public (and may change without notice):
-# `Metadata`/`MetadataV2`/`MetadataV3`, `ZarrFormat`, `is_zarray`, `is_zgroup`,
-# `normalize_path`, `MaxLengthString`, `ShapeOnlyArray` and the various
-# `pipeline_*`/`store_*` internals.
+# User-facing exports. Extension APIs are declared in public_names_core.jl.
 
 export ZArray, ZGroup, zopen, zzeros, zcreate, zgroup, zarrcache,
   storagesize, storageratio, zinfo,
-  DirectoryStore, S3Store, GCStore
+  DirectoryStore
 
 @static if VERSION >= v"1.11"
     include("public_names_core.jl")
-  end
+end
 end # module

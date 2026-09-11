@@ -18,9 +18,8 @@ If the filter has type parameters, it MUST also implement:
 - [`sourcetype(::Filter)::T`](@ref sourcetype): equivalent to `dtype` in the Python Zarr implementation.
 - [`desttype(::Filter)::T`](@ref desttype): equivalent to `atype` in the Python Zarr implementation.
 
-Finally, an entry MUST be added to the `filterdict` dictionary for each filter type.  
-This must also follow the Zarr specification's name for that filter.  The name of the filter
-is the key, and the value is the filter type (e.g. `VLenUInt8Filter` or `Fletcher32Filter`).
+Register each filter type under its Zarr `"id"` with
+[`register_filter`](@ref).
 
 
 Subtypes include: [`VLenArrayFilter`](@ref), [`VLenUTF8Filter`](@ref), [`Fletcher32Filter`](@ref).
@@ -62,7 +61,17 @@ Returns the destination type of the filter.
 """
 function desttype end
 
-filterdict = Dict{String,Type{<:Filter}}()
+"""Filter types keyed by their Zarr specification `"id"`."""
+const filterdict = Dict{String,Type{<:Filter}}()
+
+"""
+    register_filter(name::String, ::Type{T}) where {T<:Filter}
+
+Register filter type `T` under the Zarr specification name `name`.
+"""
+function register_filter(name::String, ::Type{T}) where {T<:Filter}
+    filterdict[name] = T
+end
 
 function getfilters(d::Dict) 
     if !haskey(d,"filters")

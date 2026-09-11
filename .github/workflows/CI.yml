@@ -36,18 +36,11 @@ jobs:
           arch: ${{ matrix.arch }}
           show-versioninfo: true
       - uses: julia-actions/cache@v3
-      # Pkg only understands `[sources]`/`[workspace]` from Julia 1.11 on, so on
-      # LTS (1.10) the unregistered path dependency on ZarrCore is invisible and
-      # resolution fails with "expected package ZarrCore to be registered".
-      # Dev'ing it explicitly fixes that; on 1.11+ it is a no-op because
-      # `[sources]` already points at the same path. This only affects developing
-      # from a checkout -- once both packages are registered, users resolve
-      # ZarrCore normally on any supported Julia.
-      - name: Develop ZarrCore (Pkg < 1.11 ignores [sources])
-        # bash on every platform: PowerShell mangles the embedded double quotes
-        # when forwarding them to a native executable.
+      # Julia 1.10 ignores `[sources]`; develop workspace packages explicitly.
+      - name: Develop the lib/ subpackages (Pkg < 1.11 ignores [sources])
+        # Bash preserves the embedded quotes on Windows.
         shell: bash
-        run: julia --project=. -e 'using Pkg; Pkg.develop(path="lib/ZarrCore")'
+        run: julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")])'
       - uses: julia-actions/julia-buildpkg@v1
         env:
           PYTHON:
@@ -58,22 +51,13 @@ jobs:
         with:
           timeout_minutes: 5
           max_attempts: 3
-          # bash on every platform, for the same quoting reason as above (and so
-          # `rm`-style POSIX commands added here behave consistently).
+          # Bash preserves the embedded quotes on Windows.
           shell: bash
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
             julia --project=test test/v3_julia.jl
             julia --project=test test/v3_python.jl
-      # The step above dev's ZarrCore into the test environment so the fixture
-      # scripts can `using Zarr` on LTS, which makes ZarrCore a *direct* dep of
-      # test/Project.toml. `Pkg.test` then builds its sandbox by merging the
-      # active manifest (where ZarrCore is also dev'd, hence fixed) with the
-      # fixed deps of the test manifest, and refuses to merge a package that
-      # appears in both: "ERROR: can not merge projects". Dropping the test
-      # manifest leaves nothing to merge; the sandbox resolves ZarrCore from the
-      # active manifest instead. On 1.11+ the workspace keeps the only manifest
-      # at the repo root, so this is a no-op there.
+      # Julia 1.10 cannot merge developed fixture packages into the test sandbox.
       - name: Drop the test manifest so Pkg.test can build its sandbox
         shell: bash
         run: rm -f test/Manifest.toml

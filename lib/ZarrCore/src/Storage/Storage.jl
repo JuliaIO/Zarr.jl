@@ -29,20 +29,6 @@ abstract type AbstractStore end
 # Define the interface
 
 """
-    S3Store(bucket::String; aws=nothing)
- 
-An S3-backed Zarr store. Available after loading the `ZarrAWSS3Ext` extension.
-"""
-struct S3Store <: AbstractStore
-    bucket::String
-    aws::Any
-end
-
-function S3Store(args...)
-    error("AWSS3 must be loaded to use S3Store. Try `using AWSS3`.")
-end
-
-"""
     storagesize(d::AbstractStore, p::AbstractString)
 
 This function shall return the size of all data files in a store at path `p`.
@@ -76,7 +62,14 @@ function subdirs end
 
 Returns the keys of files in the given store.
 """
-function subkeys end 
+function subkeys end
+
+"""
+    cloud_list_objects(s::AbstractStore, p)
+
+Backend extension point for listing objects and prefixes below `p`.
+"""
+function cloud_list_objects end
 
 # Function to construct the full path to a chunk given the base path, Cartesian Index i, and the chunk ecoding
 store_readchunk(s::AbstractStore, p, i::CartesianIndex, e::AbstractChunkKeyEncoding) = s[p, citostring(e, i)]
@@ -231,6 +224,13 @@ Returns `false` by default. HTTP-based stores that support this should return `t
 """
 has_configurable_missing_chunks(::AbstractStore) = false
 
+"""
+    missing_chunk_return_code!(s, code)
+
+Add HTTP status codes that `s` should treat as missing keys.
+"""
+function missing_chunk_return_code! end
+
 channelsize(s) = channelsize(store_read_strategy(s))
 channelsize(::SequentialRead) = 0
 channelsize(c::ConcurrentRead) = c.ntasks
@@ -287,16 +287,46 @@ end
 
 isemptysub(s::AbstractStore, p) = isempty(subkeys(s,p)) && isempty(subdirs(s,p))
 
-#Here different storage backends can register regexes that are checked against
-#during auto-check of storage format when doing zopen
-storageregexlist = Pair[]
-push!(storageregexlist, r"^s3://" => S3Store)
+"""
+    StoreRegexList <: AbstractVector{Pair}
+
+URL-pattern registry used by [`storefromstring`](@ref). The first match wins.
+Entries are sorted by decreasing pattern length; equal-length entries retain
+insertion order.
+"""
+struct StoreRegexList <: AbstractVector{Pair}
+  entries::Vector{Pair}
+end
+StoreRegexList() = StoreRegexList(Pair[])
+
+Base.size(l::StoreRegexList) = size(l.entries)
+Base.getindex(l::StoreRegexList, i::Int) = l.entries[i]
+Base.IndexStyle(::Type{StoreRegexList}) = IndexLinear()
+
+# Longer regex patterns take precedence.
+_regex_specificity(r::Regex) = ncodeunits(r.pattern)
+_regex_specificity(x) = ncodeunits(string(x))
+_entry_specificity(p::Pair) = _regex_specificity(first(p))
+
+function _insert_by_specificity!(l::StoreRegexList, p::Pair, ties_first::Bool)
+  s = _entry_specificity(p)
+  i = if ties_first
+    findfirst(e -> _entry_specificity(e) <= s, l.entries)
+  else
+    findfirst(e -> _entry_specificity(e) < s, l.entries)
+  end
+  i === nothing ? push!(l.entries, p) : insert!(l.entries, i, p)
+  return l
+end
+
+Base.push!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, false)
+# Preserve pushfirst! precedence for equal-length patterns.
+Base.pushfirst!(l::StoreRegexList, p::Pair) = _insert_by_specificity!(l, p, true)
+
+const storageregexlist = StoreRegexList()
 
 #include("formattedstore.jl")
 include("directorystore.jl")
 include("dictstore.jl")
-include("gcstore.jl")
 include("consolidated.jl")
-include("http.jl")
 include("cachingstore.jl")
-include("zipstore.jl")

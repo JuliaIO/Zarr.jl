@@ -5,7 +5,7 @@
     a .= reshape(1:200, 10, 20)
 
     # Start HTTP server
-    using Zarr.ZarrCore.HTTP: HTTP
+    using Zarr.ZarrHTTP.HTTP: HTTP
     server = HTTP.serve!(g, "127.0.0.1", 0)
     port = server.bound_port
 

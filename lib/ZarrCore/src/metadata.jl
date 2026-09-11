@@ -150,7 +150,7 @@ end
 "Construct Metadata based on your data"
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         node_type::String="array",
-        compressor::C=BloscCompressor(),
+        compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters=nothing,
@@ -171,7 +171,7 @@ end
 # V2 constructor
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         node_type::String="array",
-        compressor::C=BloscCompressor(),
+        compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::F=nothing,

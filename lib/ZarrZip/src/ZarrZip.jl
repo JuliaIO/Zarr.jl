@@ -1,4 +1,15 @@
+"""
+    ZarrZip
+
+Read-only ZIP storage and archive writing.
+"""
+module ZarrZip
+
 import ZipArchives
+
+# Qualify methods that extend ZarrCore generics.
+import ZarrCore
+using ZarrCore: AbstractStore, ZArray, ZGroup, subdirs, subkeys
 
 """
     ZipStore
@@ -25,7 +36,7 @@ end
 
 _make_prefix(p)::String =(isempty(p) || endswith(p,'/')) ? p : p*'/'
 
-function storagesize(d::ZipStore, p)::Int64
+function ZarrCore.storagesize(d::ZipStore, p)::Int64
     prefix::String = _make_prefix(p)
     s::Int128 = Int128(0)
     for i in 1:ZipArchives.zip_nentries(d.r)
@@ -40,7 +51,7 @@ function storagesize(d::ZipStore, p)::Int64
     s
 end
 
-function subdirs(d::ZipStore, p)::Vector{String}
+function ZarrCore.subdirs(d::ZipStore, p)::Vector{String}
     prefix::String = _make_prefix(p)
     o = Set{String}()
     for i in 1:ZipArchives.zip_nentries(d.r)
@@ -54,7 +65,7 @@ function subdirs(d::ZipStore, p)::Vector{String}
     end
     collect(o)
 end
-function subkeys(d::ZipStore, p)::Vector{String}
+function ZarrCore.subkeys(d::ZipStore, p)::Vector{String}
     prefix::String = _make_prefix(p)
     o = Set{String}()
     for i in 1:ZipArchives.zip_nentries(d.r)
@@ -69,20 +80,19 @@ function subkeys(d::ZipStore, p)::Vector{String}
     collect(o)
 end
 
-# Zip archives are generally append only
-# so it doesn't quite work to make ZipStore writable. 
-# The idea is if you want a zipfile, you should first use one of the 
-# regular mutable stores, then save it to a zip archive.
+# Write mutable stores to ZIP after updates are complete.
 """
     writezip(io::IO, s::AbstractStore, p)
+    writezip(io::IO, s::Union{ZArray,ZGroup})
 
-Write an AbstractStore to an IO as a zip archive.
+Write a store, array, or group to a ZIP archive.
 """
 function writezip(io::IO, s::AbstractStore, p=""; kwargs...)
     ZipArchives.ZipWriter(io; kwargs...) do w
         _writezip(w, s, String(p))
     end
 end
+writezip(io::IO, s::Union{ZArray,ZGroup}; kwargs...) = writezip(io, s.storage, s.path; kwargs...)
 function _writezip(w::ZipArchives.ZipWriter, s::AbstractStore, p::String)
     for subkey in subkeys(s, p)
         fullname = _make_prefix(p)*subkey
@@ -95,3 +105,23 @@ function _writezip(w::ZipArchives.ZipWriter, s::AbstractStore, p::String)
         _writezip(w, s, _make_prefix(p)*subdir)
     end
 end
+
+function __init__()
+    ZarrCore.should_register_at_init() && register!()
+end
+
+"""
+    ZarrZip.register!()
+
+Provide a registration entry point for ZarrZip. ZarrZip has no registry
+entries, so this function does nothing and returns nothing. It participates in
+the same `RegisterAtInit` initialization hook as other extension packages;
+calling it explicitly is optional and does not affect `ZipStore` or `writezip`.
+"""
+register!() = nothing
+
+@static if VERSION >= v"1.11"
+    include("public_names_zip.jl")
+end
+
+end # module

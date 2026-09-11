@@ -1,5 +1,3 @@
-import JSON
-import OffsetArrays: OffsetArray
 import DiskArrays: AbstractDiskArray
 import DiskArrays
 using DateTimes64: DateTime64
@@ -400,7 +398,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `fill_value=nothing` value to represent missing values
 * `fill_as_missing=false` set to `true` shall fillvalue s be converted to `missing`s
 * `filters`=filters to be applied
-* `compressor=BloscCompressor()` compressor type and properties
+* `compressor` compressor type and properties, defaulting to `default_compressor()`
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
@@ -436,7 +434,7 @@ function zcreate(::Type{T},storage::AbstractStore,
   chunks=dims,
   fill_value=nothing,
   fill_as_missing=false,
-  compressor=BloscCompressor(),
+  compressor=default_compressor(),
   filters = filterfromtype(T), 
   attrs=Dict(),
   writeable=true,

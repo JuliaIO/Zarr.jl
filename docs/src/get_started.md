@@ -196,6 +196,37 @@ storageratio(z)
 
 :::
 
+### Controlling extension registration
+
+By default, Zarr's compressor and storage extension packages register their
+codecs, compressors, and URL handlers when Julia loads them. To manage those
+registries yourself, add this preference to `LocalPreferences.toml` in the
+active Julia environment:
+
+```toml
+[ZarrCore]
+RegisterAtInit = false
+```
+
+Restart Julia after changing the preference. You can then register only the
+packages needed by the current process, using qualified calls such as:
+
+```julia
+Zarr.ZarrBlosc.register!()
+Zarr.ZarrS3.register!()
+```
+
+The same functions are available when importing a package directly, for
+example `ZarrBlosc.register!()`. Explicit calls work regardless of the
+preference and affect only the current process. Disabling automatic
+registration does not unload package types or methods, and it does not change
+Blosc's default-compressor dispatch. ZarrCore's built-in registry entries also
+remain available.
+
+If a downstream package requires one of these registrations, call the
+qualified `register!` from that package's runtime `__init__`. Registry changes
+made only while precompiling are not preserved when the package is loaded.
+
 ## Resizing and Appending
 
 ```@example resize

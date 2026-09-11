@@ -1,4 +1,4 @@
-function ZarrCore.S3Store(bucket::String;
+function ZarrS3.S3Store(bucket::String;
     aws = nothing,
   )
   if aws === nothing
@@ -89,7 +89,8 @@ end
 allstrings(v::AbstractArray,prefixkey) = map(i -> rstrip(String(i[prefixkey]),'/'), v)
 allstrings(v,prefixkey) = [rstrip(String(v[prefixkey]),'/')]
 
-# push!(storageregexlist,r"^s3://"=>S3Store)
+# ZarrS3 registers the URL before this extension loads when automatic
+# registration is enabled; otherwise the user can call ZarrS3.register!().
 
 function ZarrCore.storefromstring(::Type{<:S3Store}, s, _)
   decomp = split(s,"/",keepempty=false)

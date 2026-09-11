@@ -10,53 +10,71 @@ using Dates
 @testset "Zarr" begin
 
 @testset "public API surface" begin
-    # `names(M)` returns exported *and* public names, so `Zarr`'s re-export loop
-    # has to split them with `Base.isexported`; using `names` alone would export
-    # the whole extension API, and using `Base.ispublic` would export nothing.
-    # These tests pin that split down so it cannot regress silently.
-    #
-    # On Julia 1.10 there is no `public`, so `names` yields only exports and the
-    # public-only sets are empty; the assertions still hold. The final pair of
-    # tests covers what that blind spot hides.
-    # A module always lists its own name, and `Zarr` additionally carries the
-    # `ZarrCore` binding (public, so `Zarr.ZarrCore` is a documented escape hatch
-    # rather than something `using Zarr` drags in). Both are structural, not API.
-    modnames = Set((:Zarr, :ZarrCore))
+    # Zarr exports the union of subpackage exports and exposes a smaller public API.
+    mods = Zarr.REEXPORTED_MODULES
+    modnames = Set((:Zarr, map(nameof, mods)...))
     exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
     publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+    # Declaration files also expose public names on Julia 1.10.
+    declared(m) = setdiff(Set(Zarr._declared_public_names(m)), modnames)
+    allexported = mapreduce(exported, union, mods)
+    allpublic = mapreduce(publiconly, union, mods)
+    alldeclared = mapreduce(declared, union, mods)
+    facade_declared = setdiff(alldeclared, Set([:register!]))
 
-    # `Zarr.ZarrCore` is reachable, but `using Zarr` must not bring it into scope.
-    @test isdefined(Zarr, :ZarrCore)
-    @test !Base.isexported(Zarr, :ZarrCore)
+    @test all(m -> isdefined(Zarr, nameof(m)), mods)
+    @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
 
-    # `Zarr` mirrors `ZarrCore`'s API surface exactly, split intact.
-    @test exported(Zarr) == exported(ZarrCore)
+    @test exported(Zarr) == allexported
 
-    # The specific failure mode: a name that is only `public` in `ZarrCore` must
-    # not become an export of `Zarr`, and vice versa.
-    @test isempty(intersect(publiconly(ZarrCore), exported(Zarr)))
-    @test isempty(intersect(exported(ZarrCore), publiconly(Zarr)))
+    @test isempty(intersect(allpublic, exported(Zarr)))
+    @test isempty(intersect(allexported, publiconly(Zarr)))
 
-    # Version-independent: the two assertions above compare `names` against
-    # `names`, so on 1.10 -- where `@public` expands to nothing and both
-    # public-only sets are empty -- they pass no matter what `Zarr` re-exports.
-    @test all(isdefined.(Ref(Zarr), [:zname])   )
+    @static if VERSION >= v"1.11"
+        @test all(m -> declared(m) == publiconly(m), mods)
+        @test declared(Zarr) == publiconly(Zarr)
+        @test issubset(publiconly(Zarr), allpublic)
+    end
+
+    # Individual packages may have no public-only names; the combined set may not.
+    @test !isempty(alldeclared)
+    @test isempty(filter(n -> !isdefined(Zarr, n), facade_declared))
+    @test !isempty(declared(Zarr))
+    @test isempty(filter(n -> !isdefined(Zarr, n), declared(Zarr)))
+
+    @test all(isdefined.(Ref(Zarr), [:zname]))
     @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
-    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip, :missing_chunk_return_code!, :gcs_credentials]))
     @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
     @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
         :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
     @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
-    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BloscCodec, :BytesCodec, :CRC32cCodec, :GzipCodec,
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
         :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
         :CRC32cV3Codec, :VLenUTF8V3Codec]))
-
+    @test !isdefined(Zarr, :register!)
+    for mod in (Zarr.ZarrBlosc, Zarr.ZarrZlib, Zarr.ZarrZstd, Zarr.ZarrHTTP,
+                Zarr.ZarrGCS, Zarr.ZarrS3, Zarr.ZarrZip)
+        @test :register! in declared(mod)
+    end
 end
+
+@testset "default compressor" begin
+    @test @inferred(ZarrCore.default_compressor()) == Zarr.BloscCompressor()
+    core_only = """
+        using ZarrCore
+        @assert ZarrCore.default_compressor() isa ZarrCore.NoCompressor
+        @assert ZarrCore.Metadata(zeros(UInt8, 1), (1,)).compressor isa ZarrCore.NoCompressor
+        """
+    @test success(`$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $core_only`)
+end
+
+include("registration.jl")
 
 @testset "ZArray" begin
     @testset "fields" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test :a ∈ propertynames(z.storage)
         @test length(z.storage.a) === 3
         @test length(z.storage.a["0.0"]) === 64
@@ -82,7 +100,7 @@ end
 
     @testset "methods" begin
         z = zzeros(Int64, 2, 3)
-            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,ZarrCore.BloscCompressor,Nothing}}
+            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
         @test eltype(z) === Int64
         @test ndims(z) === 2
         @test size(z) === (2, 3)

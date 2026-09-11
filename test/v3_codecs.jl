@@ -114,7 +114,7 @@ end
 end
 
 @testset "GzipV3Codec" begin
-    codec = Zarr.Codecs.V3Codecs.GzipV3Codec(6)
+    codec = Zarr.GzipV3Codec(6)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
     encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
     @test encoded isa Vector{UInt8}
@@ -123,7 +123,7 @@ end
 end
 
 @testset "BloscV3Codec" begin
-    codec = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, 0, 0, 4)
+    codec = Zarr.BloscV3Codec("lz4", 5, 0, 0, 4)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
     encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
     @test encoded isa Vector{UInt8}
@@ -136,7 +136,7 @@ end
 
     # --- encode/decode round-trip for each shuffle mode ---
     for (shuffle_str, shuffle_int) in (("noshuffle", 0), ("shuffle", 1), ("bitshuffle", 2))
-        codec = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, shuffle_int, 0, 4)
+        codec = Zarr.BloscV3Codec("lz4", 5, shuffle_int, 0, 4)
         encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
         @test encoded isa Vector{UInt8}
         decoded = Zarr.Codecs.V3Codecs.codec_decode(codec, encoded)
@@ -155,7 +155,7 @@ end
         md = ZarrCore.Metadata(json_str, false)
         pipeline = ZarrCore.get_pipeline(md)
         blosc = pipeline.bytes_bytes[1]
-        @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
+        @test blosc isa Zarr.BloscV3Codec
         @test blosc.shuffle == expected_int
     end
 
@@ -200,7 +200,7 @@ end
     end
 
     # --- serialization: unknown shuffle integer raises ArgumentError via lower3 ---
-    let bad_blosc = Zarr.Codecs.V3Codecs.BloscV3Codec("lz4", 5, 99, 0, 4),
+    let bad_blosc = Zarr.BloscV3Codec("lz4", 5, 99, 0, 4),
         bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec(),
         bad_pipeline = ZarrCore.V3Pipeline((), bytes_codec, (bad_blosc,))
         bad_md = ZarrCore.MetadataV3{Int32,1,typeof(bad_pipeline)}(
@@ -212,7 +212,7 @@ end
 end
 
 @testset "ZstdV3Codec" begin
-    codec = Zarr.Codecs.V3Codecs.ZstdV3Codec(3)
+    codec = Zarr.ZstdV3Codec(3)
     data = reinterpret(UInt8, Float64[1.5, 2.5, 3.5, 4.5]) |> collect
     encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
     @test encoded isa Vector{UInt8}
@@ -238,7 +238,7 @@ end
             "configuration" => Dict("cname" => "lz4", "clevel" => 5,
                 "shuffle" => "noshuffle", "blocksize" => 0, "typesize" => 4)
         ))
-        @test codec isa Zarr.Codecs.V3Codecs.BloscV3Codec
+        @test codec isa Zarr.BloscV3Codec
         @test codec.cname == "lz4"
     end
 
@@ -248,7 +248,7 @@ end
             "name" => "numcodecs.zstd",
             "configuration" => Dict("level" => 3)
         ))
-        @test codec isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+        @test codec isa Zarr.ZstdV3Codec
     end
 
     @testset "numcodecs.gzip parses as GzipV3Codec" begin
@@ -256,7 +256,7 @@ end
             "name" => "numcodecs.gzip",
             "configuration" => Dict("level" => 6)
         ))
-        @test codec isa Zarr.Codecs.V3Codecs.GzipV3Codec
+        @test codec isa Zarr.GzipV3Codec
     end
 
     # A full Metadata parse of a zarr.json using "numcodecs.blosc" must not throw.
@@ -271,7 +271,7 @@ end
             ]}"""
         md = @test_nowarn ZarrCore.Metadata(json_str, false)
         pipeline = ZarrCore.get_pipeline(md)
-        @test pipeline.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.BloscV3Codec
+        @test pipeline.bytes_bytes[1] isa Zarr.BloscV3Codec
     end
 
     # Round-trip: Python-style zarr.json → Metadata → encode/decode data correctly.
@@ -397,7 +397,7 @@ end
 
 @testset "V3Pipeline encode/decode round-trip" begin
     bytes_codec = Zarr.Codecs.V3Codecs.BytesCodec()
-    gzip_codec = Zarr.Codecs.V3Codecs.GzipV3Codec(6)
+    gzip_codec = Zarr.GzipV3Codec(6)
     pipeline = ZarrCore.V3Pipeline((), bytes_codec, (gzip_codec,))
 
     data = Int32[1, 2, 3, 4]
@@ -545,7 +545,7 @@ end
         {"name":"zstd","configuration":{"level":3}}]}"""
     md = ZarrCore.Metadata(json_zstd, false)
     pipeline = ZarrCore.get_pipeline(md)
-    @test pipeline.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+    @test pipeline.bytes_bytes[1] isa Zarr.ZstdV3Codec
     @test pipeline.bytes_bytes[1].level == 3
 
     # crc32c codec parses correctly
@@ -679,7 +679,7 @@ end
     # ZstdCompressor translates to ZstdV3Codec
     md_zstd = ZarrCore.Metadata3(data, (4,4); compressor=Zarr.ZstdCompressor())
     pipeline_zstd = ZarrCore.get_pipeline(md_zstd)
-    @test pipeline_zstd.bytes_bytes[1] isa Zarr.Codecs.V3Codecs.ZstdV3Codec
+    @test pipeline_zstd.bytes_bytes[1] isa Zarr.ZstdV3Codec
 
     # fill_value=nothing defaults to zero(T)
     md_nofv = ZarrCore.Metadata3(data, (4,4))
@@ -893,6 +893,25 @@ end
 
         g2 = zopen(store)
         @test g2["myarray"][:] == Float64.(1:10)
+    end
+
+    @testset "fill_as_missing for v3 arrays" begin
+        mktempdir() do dir
+            path = joinpath(dir, "fillmiss.zarr")
+            a = zcreate(Float64, 4, 6; path=path, zarr_format=3,
+                chunks=(2, 3), fill_value=0.0)
+            a[1:2, 1:3] = reshape(1.0:6.0, 2, 3)
+
+            b = zopen(path; fill_as_missing=true)
+            @test eltype(b) == Union{Missing,Float64}
+            @test b[1:2, 1:3] == reshape(1.0:6.0, 2, 3)
+            @test all(ismissing, b[3:4, 4:6])
+
+            c = zopen(path)
+            @test eltype(c) == Float64
+            @test c[1:2, 1:3] == reshape(1.0:6.0, 2, 3)
+            @test all(==(0.0), c[3:4, 4:6])
+        end
     end
 end
 
@@ -1178,7 +1197,7 @@ end
     inner_pipeline = ZarrCore.V3Pipeline(
         (),
         Zarr.Codecs.V3Codecs.BytesCodec(:little),
-        (Zarr.Codecs.V3Codecs.GzipV3Codec(6),)
+        (Zarr.GzipV3Codec(6),)
     )
     index_pipeline = ZarrCore.V3Pipeline(
         (),
@@ -1276,7 +1295,7 @@ end
     pipeline = ZarrCore.get_pipeline(md)
     sharding = pipeline.array_bytes
     blosc = sharding.codecs.bytes_bytes[1]
-    @test blosc isa Zarr.Codecs.V3Codecs.BloscV3Codec
+    @test blosc isa Zarr.BloscV3Codec
     @test blosc.typesize == 2
 end
 
