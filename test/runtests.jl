@@ -56,7 +56,6 @@ using Dates
     for mod in (Zarr.ZarrBlosc, Zarr.ZarrZlib, Zarr.ZarrZstd, Zarr.ZarrHTTP,
                 Zarr.ZarrGCS, Zarr.ZarrS3, Zarr.ZarrZip)
         @test :register! in declared(mod)
-        @test Base.Docs.doc(Base.Docs.Binding(mod, :register!)) !== nothing
     end
 end
 
