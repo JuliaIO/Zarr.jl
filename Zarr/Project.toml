@@ -1,6 +1,6 @@
 name = "Zarr"
 uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
-version = "0.10.2"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -26,12 +26,12 @@ ZarrZstd = {path = "../ZarrZstd"}
 
 [compat]
 Preferences = "1.5.2"
-ZarrBlosc = "0.10"
-ZarrCore = "0.10"
-ZarrGCS = "0.10"
-ZarrHTTP = "0.10"
-ZarrS3 = "0.10"
-ZarrZip = "0.10"
-ZarrZlib = "0.10"
-ZarrZstd = "0.10"
+ZarrBlosc = "0.11.0"
+ZarrCore = "0.11.0"
+ZarrGCS = "0.11.0"
+ZarrHTTP = "0.11.0"
+ZarrS3 = "0.11.0"
+ZarrZip = "0.11.0"
+ZarrZlib = "0.11.0"
+ZarrZstd = "0.11.0"
 julia = "1.10"

@@ -1,6 +1,6 @@
 name = "ZarrZip"
 uuid = "54bcf1c8-e61d-4e4f-b375-463581846cca"
-version = "0.10.1"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -11,6 +11,6 @@ ZipArchives = "49080126-0e18-4c2a-b176-c102e4b3760c"
 ZarrCore = {path = "../ZarrCore"}
 
 [compat]
-ZarrCore = "0.10"
+ZarrCore = "0.11.0"
 ZipArchives = "2"
 julia = "1.10"

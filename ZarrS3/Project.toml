@@ -1,6 +1,6 @@
 name = "ZarrS3"
 uuid = "3ac672aa-0e94-41ce-be0d-2f83c20261dd"
-version = "0.10.1"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -17,5 +17,5 @@ ZarrCore = {path = "../ZarrCore"}
 
 [compat]
 AWSS3 = "0.10, 0.11"
-ZarrCore = "0.10"
+ZarrCore = "0.11.0"
 julia = "1.10"
