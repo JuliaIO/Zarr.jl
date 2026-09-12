@@ -3,7 +3,7 @@
 # These tests make real network requests and are skipped by default.
 # Set ZARR_TEST_REMOTE=true to enable them:
 #
-#   ZARR_TEST_REMOTE=true julia --project=test -e 'include("test/http_sharded.jl")'
+#   ZARR_TEST_REMOTE=true julia --project=Zarr/test -e 'include("Zarr/test/http_sharded.jl")'
 #
 # Datasets tested:
 #   TESSERA 2024 geospatial embedding store (https://dl2.geotessera.org)
