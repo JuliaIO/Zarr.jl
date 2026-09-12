@@ -3,9 +3,6 @@ uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 version = "0.10.2"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
-[workspace]
-projects = ["test", "lib/ZarrCore", "lib/ZarrZip", "lib/ZarrBlosc", "lib/ZarrZlib", "lib/ZarrZstd", "lib/ZarrHTTP", "lib/ZarrGCS", "lib/ZarrS3"]
-
 [deps]
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 ZarrBlosc = "5717d1f5-dd42-40cd-8e77-00dfad1079f5"
@@ -18,14 +15,14 @@ ZarrZlib = "5ee7c756-6ac8-46ad-a53f-994846513443"
 ZarrZstd = "1a1ab68b-db27-4b87-8dee-6752e2bcfa1e"
 
 [sources]
-ZarrBlosc = {path = "lib/ZarrBlosc"}
-ZarrCore = {path = "lib/ZarrCore"}
-ZarrGCS = {path = "lib/ZarrGCS"}
-ZarrHTTP = {path = "lib/ZarrHTTP"}
-ZarrS3 = {path = "lib/ZarrS3"}
-ZarrZip = {path = "lib/ZarrZip"}
-ZarrZlib = {path = "lib/ZarrZlib"}
-ZarrZstd = {path = "lib/ZarrZstd"}
+ZarrBlosc = {path = "../ZarrBlosc"}
+ZarrCore = {path = "../ZarrCore"}
+ZarrGCS = {path = "../ZarrGCS"}
+ZarrHTTP = {path = "../ZarrHTTP"}
+ZarrS3 = {path = "../ZarrS3"}
+ZarrZip = {path = "../ZarrZip"}
+ZarrZlib = {path = "../ZarrZlib"}
+ZarrZstd = {path = "../ZarrZstd"}
 
 [compat]
 Preferences = "1.5.2"

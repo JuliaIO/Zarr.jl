@@ -1,0 +1,14 @@
+[workspace]
+projects = [
+    "Zarr",
+    "ZarrCore",
+    "ZarrZip",
+    "ZarrBlosc",
+    "ZarrZlib",
+    "ZarrZstd",
+    "ZarrHTTP",
+    "ZarrGCS",
+    "ZarrS3",
+    "Zarr/test",
+    "docs",
+]

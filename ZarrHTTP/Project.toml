@@ -7,6 +7,9 @@ authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
 
+[sources]
+ZarrCore = {path = "../ZarrCore"}
+
 [compat]
 HTTP = "2"
 ZarrCore = "0.10"

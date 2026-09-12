@@ -12,6 +12,9 @@ AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
 [extensions]
 ZarrS3AWSS3Ext = "AWSS3"
 
+[sources]
+ZarrCore = {path = "../ZarrCore"}
+
 [compat]
 AWSS3 = "0.10, 0.11"
 ZarrCore = "0.10"
