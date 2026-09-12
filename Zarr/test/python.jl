@@ -90,6 +90,59 @@ for (filterstr, filter) in filters
     a[] = testzerodim
 end
 
+@testset "Python zarr v3 rectilinear chunks" begin
+    using DiskArrays: GridChunks, IrregularChunks, RegularChunks
+
+    zarr = pyimport("zarr")
+    numpy = pyimport("numpy")
+    pybuiltins = pyimport("builtins")
+    zarr.config.set(pydict(Dict("array.rectilinear_chunks" => true)))
+
+    julia_path = tempname()
+    python_path = tempname()
+
+    # Julia writes exact-size rectilinear chunks that zarr-python can read.
+    chunks = GridChunks(
+        RegularChunks(4, 0, 20),
+        IrregularChunks(; chunksizes=[3, 4, 5, 6, 2]),
+    )
+    z = zcreate(Int32, 20, 20;
+        zarr_format=3,
+        path=julia_path,
+        chunks,
+        compressor=Zarr.NoCompressor(),
+    )
+    julia_data = reshape(Int32.(1:400), 20, 20)
+    z[:, :] = julia_data
+
+    py_array = zarr.open_array(julia_path, mode="r")
+    py_grid = pyconvert(Any, py_array.metadata.chunk_grid.to_dict())
+    @test py_grid["name"] == "rectilinear"
+    @test py_grid["configuration"]["kind"] == "inline"
+    py_chunk_shapes = py_grid["configuration"]["chunk_shapes"]
+    @test collect(py_chunk_shapes[1]) == [3, 4, 5, 6, 2]
+    @test py_chunk_shapes[2] == 4
+    @test pyconvert(Array, py_array[pybuiltins.Ellipsis]) == permutedims(julia_data, (2, 1))
+
+    # zarr-python writes exact-size rectilinear chunks that Julia can read.
+    python_data = reshape(Int32.(0:399), 20, 20)
+    py_written = zarr.create_array(
+        python_path;
+        zarr_format=3,
+        shape=(20, 20),
+        chunks=pylist([
+            pylist([3, 4, 5, 6, 2]),
+            pylist([4, 4, 4, 4, 4]),
+        ]),
+        dtype="int32",
+    )
+    py_written.__setitem__(pybuiltins.Ellipsis, numpy.array(python_data))
+
+    reopened = zopen(python_path)
+    @test any(c -> c isa IrregularChunks, DiskArrays.eachchunk(reopened).chunks)
+    @test permutedims(reopened[:, :], (2, 1)) == python_data
+end
+
 #Also save as zip file.
 open(pjulia*".zip";write=true) do io
     Zarr.writezip(io, g)

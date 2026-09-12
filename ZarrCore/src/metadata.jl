@@ -1,4 +1,5 @@
 import Dates: Date, DateTime
+import DiskArrays
 using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
 
 """NumPy array protocol type string (typestr) format
@@ -148,7 +149,7 @@ end
 
 
 "Construct Metadata based on your data"
-function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
+function Metadata(A::AbstractArray{T,N}, chunks, zarr_format=DV;
         node_type::String="array",
         compressor::C=default_compressor(),
         fill_value::Union{T, Nothing}=nothing,
@@ -166,6 +167,27 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         fill_as_missing=fill_as_missing,
         chunk_key_encoding=ChunkKeyEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
     )
+end
+
+function validate_chunk_grid(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N}
+    for (axis, (chunk_axis, axis_length)) in enumerate(zip(chunks.chunks, shape))
+        DiskArrays.arraysize_from_chunksize(chunk_axis) == axis_length ||
+            throw(DimensionMismatch(
+                "Chunk grid axis $axis describes length " *
+                "$(DiskArrays.arraysize_from_chunksize(chunk_axis)), expected $axis_length"
+            ))
+        if chunk_axis isa DiskArrays.RegularChunks && chunk_axis.offset != 0
+            throw(ArgumentError("Zarr chunk grids cannot have a non-zero offset (axis $axis has offset $(chunk_axis.offset))"))
+        end
+    end
+    return chunks
+end
+
+function regular_chunk_shape(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N}
+    validate_chunk_grid(shape, chunks)
+    all(c -> c isa DiskArrays.RegularChunks, chunks.chunks) ||
+        throw(ArgumentError("Irregular chunk grids require Zarr format 3"))
+    return map(c -> c.chunksize, chunks.chunks)
 end
 
 # V2 constructor
@@ -191,6 +213,10 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         filters,
         chunk_key_encoding,
     )
+end
+
+function Metadata(A::AbstractArray{T,N}, chunks::DiskArrays.GridChunks{N}, v::ZarrFormat{2}; kwargs...) where {T,N}
+    return Metadata(A, regular_chunk_shape(size(A), chunks), v; kwargs...)
 end
 
 Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict{String,Any}), fill_as_missing)
