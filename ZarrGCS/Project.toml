@@ -1,6 +1,6 @@
 name = "ZarrGCS"
 uuid = "b0c5ce8f-018f-417d-9deb-9816b6363039"
-version = "0.10.1"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -9,9 +9,12 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
 
+[sources]
+ZarrCore = {path = "../ZarrCore"}
+
 [compat]
 HTTP = "2"
 JSON = "0.21, 1"
 URIs = "1"
-ZarrCore = "0.10"
+ZarrCore = "0.11.0"
 julia = "1.10"

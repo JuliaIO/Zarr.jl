@@ -7,29 +7,39 @@ Zarr.jl implements Zarr v2 and experimental v3 arrays with filesystem, memory, H
 ## Build & Test Commands
 
 ```bash
-# Run all tests
-julia --project -e 'using Pkg; Pkg.test()'
+# Instantiate the Julia 1.12+ monorepo workspace
+julia +1.12 --project=. -e 'using Pkg; Pkg.instantiate(; workspace=true)'
 
 # Run a single test file interactively (use the test/ project environment)
-julia --project=test -e 'using Test, Zarr, JSON; include("test/v3_codecs.jl")'
+julia +1.12 --project=Zarr/test -e 'using Test, Zarr, JSON; include("Zarr/test/v3_codecs.jl")'
 
 # Instantiate test dependencies (after Julia version change or first time setup)
-julia --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.resolve(); Pkg.instantiate()'
+julia +1.12 --project=Zarr/test -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
 
 # Generate the v3 test fixtures (required before running the suite; CI does this
 # in a separate step, `runtests.jl` does not do it for you)
-julia --project=test test/v3_julia.jl
-julia --project=test test/v3_python.jl
+julia +1.12 --project=Zarr/test Zarr/test/v3_julia.jl
+julia +1.12 --project=Zarr/test Zarr/test/v3_python.jl
+
+# Run all tests after generating fixtures
+julia +1.12 --project=Zarr -e 'using Pkg; Pkg.test()'
+
+# Build documentation
+julia +1.12 --project=docs docs/make.jl
 ```
 
-Julia version requirement: 1.10+. CI tests LTS, stable, nightly, and prerelease Julia on Ubuntu, plus stable Julia on macOS and Windows.
+The root workspace requires Julia 1.12+. Individual packages support Julia
+1.10+. On Julia 1.11+, each project's `[sources]` entries resolve local sibling
+dependencies. On Julia 1.10, develop them with explicit paths, for example
+`Pkg.develop(path="../ZarrCore")`. `docs/logo` and `Zarr/test/coverage` are
+standalone tooling environments, not root workspace members.
 
 ### Public names
 
 Each module stores public-only declarations in an adjacent `public_names_*.jl`
 containing only `public` statements and comments. Include it only on Julia 1.11+;
 `Zarr._declared_public_names` parses it on Julia 1.10.
-`src/public_names_zarr.jl` defines the facade's public subset.
+`Zarr/src/public_names_zarr.jl` defines the facade's public subset.
 
 ## Architecture
 
@@ -56,7 +66,9 @@ ZGroup{S<:AbstractStore}
 
 ### Package Layout
 
-The repo is a Pkg workspace:
+The repository is a Pkg workspace whose packages are sibling top-level
+directories. The facade source and tests are in `Zarr/src` and `Zarr/test`;
+documentation remains in `docs`.
 
 - `ZarrCore` — core types, metadata, filters, storage interfaces, and codec interfaces.
 - `ZarrHTTP` — `HTTPStore` and HTTP serving methods.
@@ -108,8 +120,8 @@ Tests use `Zarr.foo` for public names and `ZarrCore.foo` for internals.
 
 ### Module/File Layout
 
-Core paths below are relative to `lib/ZarrCore/`. Backend implementations are in
-`lib/<Name>/src/<Name>.jl`; S3 data-access methods are in `lib/ZarrS3/ext/`.
+Core paths below are relative to `ZarrCore/`. Backend implementations are in
+`<Name>/src/<Name>.jl`; S3 data-access methods are in `ZarrS3/ext/`.
 
 - `src/ZarrCore.jl` — module entry point, `ZarrFormat`, exports, and public names.
 - `src/metadata.jl` — v2 metadata, dtype conversion, and fill-value conversion.

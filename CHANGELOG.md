@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Move all packages to sibling top-level directories and make the root project workspace-only.
 - Move code to ZarrCore.jl with low dependencies
 - Move HTTP, GCS, S3, and ZIP backends into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`.
 - Move Blosc, zlib, and Zstandard support into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`; each provides its v2 compressor and v3 codec.

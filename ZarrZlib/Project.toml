@@ -1,6 +1,6 @@
 name = "ZarrZlib"
 uuid = "5ee7c756-6ac8-46ad-a53f-994846513443"
-version = "0.10.1"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -9,9 +9,12 @@ ChunkCodecLibZlib = "4c0bbee4-addc-4d73-81a0-b6caacae83c8"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
 
+[sources]
+ZarrCore = {path = "../ZarrCore"}
+
 [compat]
 ChunkCodecCore = "1"
 ChunkCodecLibZlib = "1"
 JSON = "0.21, 1"
-ZarrCore = "0.10"
+ZarrCore = "0.11.0"
 julia = "1.10"

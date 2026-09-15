@@ -29,6 +29,27 @@ Discussions are great for questions about usage, implementation, science, or any
 
 ## Good First Steps
 
+### Monorepo development
+
+The root `Project.toml` is a Julia 1.12+ workspace. Packages remain compatible
+with Julia 1.10+ and live in the top-level directories `Zarr`, `ZarrCore`,
+`ZarrBlosc`, `ZarrZlib`, `ZarrZstd`, `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and
+`ZarrZip`. The facade source and tests are in `Zarr/src` and `Zarr/test`, while
+documentation is in `docs`.
+
+```bash
+julia +1.12 --project=. -e 'using Pkg; Pkg.instantiate(; workspace=true)'
+julia +1.12 --project=Zarr/test Zarr/test/v3_julia.jl
+julia +1.12 --project=Zarr/test Zarr/test/v3_python.jl
+julia +1.12 --project=Zarr -e 'using Pkg; Pkg.test()'
+julia +1.12 --project=docs docs/make.jl
+```
+
+The two fixture commands are required before the test suite. On Julia 1.11+,
+each project's `[sources]` entries resolve its local dependencies. On Julia
+1.10, develop sibling packages with explicit relative paths, such as
+`Pkg.develop(path="../ZarrCore")`.
+
 * Try out `Zarr.jl` using the examples in our documentation, or create your own. If you hit any problems or have questions, please open an issue!
 * Write an example or tutorial showing how to use `Zarr.jl` for something interesting.
 * Suggest improvements to documentation or comments.

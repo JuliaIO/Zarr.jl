@@ -36,12 +36,14 @@ jobs:
           arch: ${{ matrix.arch }}
           show-versioninfo: true
       - uses: julia-actions/cache@v3
-      # Julia 1.10 ignores `[sources]`; develop workspace packages explicitly.
-      - name: Develop the lib/ subpackages (Pkg < 1.11 ignores [sources])
+      # Julia 1.10 ignores `[sources]`; develop sibling packages explicitly.
+      - name: Develop the sibling packages (Pkg < 1.11 ignores [sources])
         # Bash preserves the embedded quotes on Windows.
         shell: bash
-        run: julia --project=. -e 'using Pkg; Pkg.develop([PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")])'
+        run: julia --project=Zarr -e 'using Pkg; Pkg.develop([PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")])'
       - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: Zarr
         env:
           PYTHON:
       - name: Generate Julia and Python v3 fixtures
@@ -54,17 +56,21 @@ jobs:
           # Bash preserves the embedded quotes on Windows.
           shell: bash
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore"), PackageSpec(path="lib/ZarrZip"), PackageSpec(path="lib/ZarrBlosc"), PackageSpec(path="lib/ZarrZlib"), PackageSpec(path="lib/ZarrZstd"), PackageSpec(path="lib/ZarrHTTP"), PackageSpec(path="lib/ZarrGCS"), PackageSpec(path="lib/ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
-            julia --project=test test/v3_julia.jl
-            julia --project=test test/v3_python.jl
+            julia --project=Zarr/test -e 'using Pkg; Pkg.develop([PackageSpec(path="Zarr"), PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=Zarr/test Zarr/test/v3_julia.jl
+            julia --project=Zarr/test Zarr/test/v3_python.jl
       # Julia 1.10 cannot merge developed fixture packages into the test sandbox.
       - name: Drop the test manifest so Pkg.test can build its sandbox
         shell: bash
-        run: rm -f test/Manifest.toml
+        run: rm -f Zarr/test/Manifest.toml
       - uses: julia-actions/julia-runtest@v1
+        with:
+          project: Zarr
         env:
           PYTHON:
       - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: Zarr/src,ZarrCore/src,ZarrZip/src,ZarrBlosc/src,ZarrZlib/src,ZarrZstd/src,ZarrHTTP/src,ZarrGCS/src,ZarrS3/src
       - uses: codecov/codecov-action@v7
         with:
           files: lcov.info

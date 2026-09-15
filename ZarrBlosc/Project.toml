@@ -1,6 +1,6 @@
 name = "ZarrBlosc"
 uuid = "5717d1f5-dd42-40cd-8e77-00dfad1079f5"
-version = "0.10.1"
+version = "0.11.0"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
@@ -8,8 +8,11 @@ Blosc = "a74b3585-a348-5f62-a45c-50e91977d574"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
 
+[sources]
+ZarrCore = {path = "../ZarrCore"}
+
 [compat]
 Blosc = "0.5, 0.6, 0.7"
 JSON = "0.21, 1"
-ZarrCore = "0.10"
+ZarrCore = "0.11.0"
 julia = "1.10"
