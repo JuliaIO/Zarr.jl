@@ -42,7 +42,37 @@ function ZarrCore.getCompressor(::Type{BloscCompressor}, d::Dict)
     BloscCompressor(d["blocksize"], d["clevel"], d["cname"], d["shuffle"])
 end
 
-ZarrCore.zuncompress(a, ::BloscCompressor, T) = Blosc.decompress(Base.nonmissingtype(T), a)
+# The numcodecs id that `BloscCompressor` is stored under in a v2 `.zarray` document.
+ZarrCore.codec_id(::Type{BloscCompressor}) = "blosc"
+
+# Statically typed counterpart of the `Dict` method above, for the juliac
+# `--trim=safe` open path (`zopen(::Type{T}, ::Val{N}, ...)`). Absent keys fall
+# back to the `BloscCompressor(;...)` keyword defaults (the `Dict` method has
+# no defaults because a stored blosc configuration always carries all four).
+# Both branches of every optional key return the same concrete type.
+function ZarrCore.getCompressor(::Type{BloscCompressor}, c::ZarrCore.CompressorJSON)
+    c.id == ZarrCore.codec_id(BloscCompressor) || throw(ArgumentError(string(
+        "expected a \"blosc\" compressor in the stored metadata, got \"", c.id, "\"")))
+    blocksize = 0
+    if c.blocksize !== nothing
+        blocksize = c.blocksize::Int
+    end
+    clevel = 5
+    if c.clevel !== nothing
+        clevel = c.clevel::Int
+    end
+    cname = "lz4"
+    if c.cname !== nothing
+        cname = c.cname::String
+    end
+    shuffle = 1
+    if c.shuffle !== nothing
+        shuffle = c.shuffle::Int
+    end
+    return BloscCompressor(blocksize, clevel, cname, shuffle)
+end
+
+ZarrCore.zuncompress(a, ::BloscCompressor, ::Type{T}) where {T} = Blosc.decompress(Base.nonmissingtype(T), a)
 
 function ZarrCore.zuncompress!(data::DenseArray, compressed, ::BloscCompressor)
     Blosc.decompress!(vec(data),compressed)
@@ -66,8 +96,10 @@ function ZarrCore.zcompress(a, c::BloscCompressor)
     Blosc.compress(a; level=c.clevel, shuffle=shuffle)
 end
 
-JSON.lower(c::BloscCompressor) = Dict("id"=>"blosc", "cname"=>c.cname,
-    "clevel"=>c.clevel, "shuffle"=>c.shuffle, "blocksize"=>c.blocksize)
+# NamedTuple (not `Dict`) so that serialising array metadata stays statically
+# typed - see `ZarrCore.print_metadata`. The emitted JSON is unchanged.
+JSON.lower(c::BloscCompressor) = (; id = "blosc", cname = c.cname,
+    clevel = c.clevel, shuffle = c.shuffle, blocksize = c.blocksize)
 
 function ZarrCore.v2_to_v3_codecs(c::BloscCompressor, typesize::Int)
     (BloscV3Codec(c.cname, c.clevel, c.shuffle, c.blocksize, typesize),)
@@ -92,17 +124,77 @@ end
 BloscV3Codec() = BloscV3Codec("lz4", 5, 1, 0, 4)
 V3Codecs.name(::BloscV3Codec) = "blosc"
 
+# The v3 spec name that `BloscV3Codec` is stored under in a `zarr.json` document.
+V3Codecs.codec_name(::Type{BloscV3Codec}) = "blosc"
+
+# Statically typed counterpart of the `register_codec` parser in `__init__`, for
+# the juliac `--trim=safe` v3 open path
+# (`zopen(::Type{T}, ::Val{N}, ...; pipeline = ...)`). The defaults are exactly
+# the `Dict` parser's, so a typed open of a document with keys missing yields the
+# same codec as the dynamic one; every branch of an absent optional key returns
+# the same concrete type.
+function V3Codecs.getCodec(::Type{BloscV3Codec}, c::ZarrCore.CodecJSON, ctx)
+    V3Codecs._check_codec_name(BloscV3Codec, c)
+    cname = "lz4"
+    clevel = 5
+    shuffle = 0
+    blocksize = 0
+    typesize = ctx.elsize
+    cfg = c.configuration
+    if cfg !== nothing
+        cc = cfg::ZarrCore.CodecConfigJSON
+        cn = cc.cname
+        if cn !== nothing
+            cname = cn::String
+        end
+        cl = cc.clevel
+        if cl !== nothing
+            clevel = cl::Int
+        end
+        sh = cc.shuffle
+        if sh !== nothing
+            shs = sh::String
+            if shs == "noshuffle"
+                shuffle = 0
+            elseif shs == "shuffle"
+                shuffle = 1
+            elseif shs == "bitshuffle"
+                shuffle = 2
+            else
+                throw(ArgumentError(string("Unknown shuffle: \"", shs, "\".")))
+            end
+        end
+        bs = cc.blocksize
+        if bs !== nothing
+            blocksize = bs::Int
+        end
+        ts = cc.typesize
+        if ts !== nothing
+            typesize = ts::Int
+        end
+    end
+    return BloscV3Codec(cname, clevel, shuffle, blocksize, typesize)
+end
+
+# NamedTuple (not `Dict`) so that lowering v3 array metadata stays statically
+# typed - see `ZarrCore.print_metadata`. The emitted JSON is unchanged.
 function JSON.lower(c::BloscV3Codec)
-    shuffle_str = c.shuffle == 0 ? "noshuffle" :
-                  c.shuffle == 1 ? "shuffle" :
-                  c.shuffle == 2 ? "bitshuffle" :
-                  throw(ArgumentError("Unknown shuffle integer: $(c.shuffle)"))
-    Dict("name" => "blosc", "configuration" => Dict(
-        "cname"     => c.cname,
-        "clevel"    => c.clevel,
-        "shuffle"   => shuffle_str,
-        "blocksize" => c.blocksize,
-        "typesize"  => c.typesize
+    local shuffle_str::String
+    if c.shuffle == 0
+        shuffle_str = "noshuffle"
+    elseif c.shuffle == 1
+        shuffle_str = "shuffle"
+    elseif c.shuffle == 2
+        shuffle_str = "bitshuffle"
+    else
+        throw(ArgumentError("Unknown shuffle integer: $(c.shuffle)"))
+    end
+    return (; name = "blosc", configuration = (;
+        cname     = c.cname,
+        clevel    = c.clevel,
+        shuffle   = shuffle_str,
+        blocksize = c.blocksize,
+        typesize  = c.typesize
     ))
 end
 

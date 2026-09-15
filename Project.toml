@@ -9,6 +9,7 @@ projects = [
     "ZarrHTTP",
     "ZarrGCS",
     "ZarrS3",
+    "ZarrTrimmable",
     "Zarr/test",
     "docs",
 ]

@@ -175,22 +175,41 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::F=nothing,
-        fill_as_missing = false,
+        fill_as_missing::Bool = false,
     chunk_key_encoding=ChunkKeyEncoding('.', false)
     ) where {T, N, C, F}
-    T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
-    MetadataV2{T2,N,C,typeof(filters)}(
-        2,
-        node_type,
-        size(A),
-        chunks,
-        typestr(eltype(A)),
-        compressor,
-        fill_value,
-        order,
-        filters,
-        chunk_key_encoding,
-    )
+    # The two element types are spelled out in separate branches rather than
+    # computed as `T2 = cond ? T : Union{T,Missing}`: a value-dependent type
+    # would turn the `MetadataV2{T2,...}` constructor into a runtime
+    # `Core.apply_type`, which is unresolvable for juliac `--trim` and makes
+    # the return type of `zcreate` uninferable.
+    if fill_value === nothing || !fill_as_missing
+        MetadataV2{T,N,C,F}(
+            2,
+            node_type,
+            size(A),
+            chunks,
+            typestr(eltype(A)),
+            compressor,
+            fill_value,
+            order,
+            filters,
+            chunk_key_encoding,
+        )
+    else
+        MetadataV2{Union{T,Missing},N,C,F}(
+            2,
+            node_type,
+            size(A),
+            chunks,
+            typestr(eltype(A)),
+            compressor,
+            fill_value,
+            order,
+            filters,
+            chunk_key_encoding,
+        )
+    end
 end
 
 Metadata(s::Union{AbstractString, IO}, fill_as_missing) = Metadata(JSON.parse(s; dicttype=Dict{String,Any}), fill_as_missing)
@@ -246,17 +265,48 @@ end
 
 "Describes how to lower Metadata to JSON, used in json(::Metadata)"
 function JSON.lower(md::MetadataV2)
-    Dict{String, Any}(
-        "zarr_format" => Int(md.zarr_format),
-        "node_type" => md.node_type,
-        "shape" => md.shape[] |> reverse,
-        "chunks" => md.chunks |> reverse,
-        "dtype" => md.dtype,
-        "compressor" => md.compressor,
-        "fill_value" => fill_value_encoding(md.fill_value),
-        "order" => md.order,
-        "filters" => md.filters,
-        "dimension_separator" => md.chunk_key_encoding.sep
+    # A NamedTuple (rather than a `Dict{String,Any}`) keeps this lowering
+    # statically typed: JSON serialises the fields in declaration order and
+    # no dynamic `setindex!`/key-sorting is required. The emitted JSON is
+    # identical up to key order (JSON.jl sorts `Dict` keys alphabetically).
+    # `fill_value_encoding` returns a small `Union` (number / "NaN" / nothing);
+    # funnelling it through a helper specialised on its concrete type keeps
+    # every produced NamedTuple concrete.
+    _lower_v2(md, fill_value_encoding(md.fill_value))
+end
+
+"""
+    print_metadata(io, md, indent_json::Bool)
+
+Serialise array metadata as JSON. The `MetadataV2` method routes through a
+function barrier (`_print_metadata_v2`) that is specialised on the concrete
+type of the encoded fill value, so the lowered NamedTuple - and therefore the
+whole JSON writer - stays statically typed.
+"""
+print_metadata(io::IO, m, indent_json::Bool) =
+    indent_json ? JSON.print(io, m, 4) : JSON.print(io, m)
+
+print_metadata(io::IO, md::MetadataV2, indent_json::Bool) =
+    _print_metadata_v2(io, md, fill_value_encoding(md.fill_value), indent_json)
+
+function _print_metadata_v2(io::IO, md::MetadataV2, fill_value, indent_json::Bool)
+    nt = _lower_v2(md, fill_value)
+    indent_json ? JSON.print(io, nt, 4) : JSON.print(io, nt)
+    nothing
+end
+
+function _lower_v2(md::MetadataV2, fill_value)
+    (;
+        zarr_format = Int(md.zarr_format),
+        node_type = md.node_type,
+        shape = md.shape[] |> reverse,
+        chunks = md.chunks |> reverse,
+        dtype = md.dtype,
+        compressor = md.compressor,
+        fill_value = fill_value,
+        order = md.order,
+        filters = md.filters,
+        dimension_separator = md.chunk_key_encoding.sep,
     )
 end
 
@@ -294,3 +344,220 @@ fill_value_decoding(v::Vector, T::Type{<:Complex}) = T(v[1], v[2])
 # However, we have to apply this correction only if the integer is negative.  
 # If it's positive, then the value might be out of range of the signed integer type.
 fill_value_decoding(v::Integer, T::Type{<: Unsigned}) = sign(v) < 0 ? reinterpret(T, signed(T)(v)) : T(v)
+
+
+# ## Statically typed `.zarray` parsing (juliac `--trim=safe` clean path)
+#
+# The dynamic `Metadata(::AbstractDict, ...)` path above parses `.zarray` into a
+# `Dict{String,Any}` and derives `T`, `N` and the compressor type from the
+# parsed values. That is inherently dynamic: the element type of the resulting
+# `ZArray` is a runtime value, so juliac's `--trim` verifier cannot resolve the
+# downstream chunk-decoding calls.
+#
+# The types below mirror the v2 `.zarray` schema exactly and with fully concrete
+# field types, so `JSON.parse(bytes, ZarrayJSON)` is statically resolvable.
+# `MetadataV2(T, Val(N), C, ::ZarrayJSON, fill_as_missing)` then *checks* the
+# on-disk schema against the caller-supplied `T`/`N`/`C` instead of inferring
+# them. See `zopen(::Type{T}, ::Val{N}, ...)`.
+
+# `JSON.@defaults` / `JSON.@choosetype` expand to code that names `StructUtils`
+# directly, so the binding has to be visible here (`ZarrCore` only `import`s JSON).
+using JSON: StructUtils
+
+"""
+    FillValueJSON
+
+A small tagged union holding the Zarr v2 `fill_value` exactly as it appears on
+disk: JSON `null`, a number (kept as `Int64` when integral, `Float64`
+otherwise), a string (`"NaN"` / `"Infinity"` / `"-Infinity"`, or a base64 blob
+for `|Vn` dtypes) or a boolean. Decode it for a known element type with
+[`fill_value_typed`](@ref).
+
+# Why not a `Union` field with `JSON.@choosetype`
+
+`JSON.@choosetype U f` expands to `make(style, f(source), source, tags)`, i.e.
+dispatch on a *value* of type `Type` whose possible values are `U`'s members.
+Inference only recovers a static call by union-splitting that phi node, which
+holds for a three-member union but widens to plain `Type` at four or more - and
+a widened `Type` there makes the whole `.zarray` parse an unresolved dynamic
+call under juliac `--trim=safe`. Dispatching `JSON.lift` on the *parsed value*
+instead is statically resolvable for any number of alternatives, and (unlike
+the `@choosetype` route) preserves full `Int64` precision, since
+`JSON.gettype` reports `JSONTypes.NUMBER` rather than `JSONTypes.INT`.
+"""
+JSON.@nonstruct struct FillValueJSON
+    kind::UInt8
+    float::Float64
+    int::Int64
+    str::String
+    bool::Bool
+end
+
+const FV_NULL = 0x00
+const FV_FLOAT = 0x01
+const FV_INT = 0x02
+const FV_STRING = 0x03
+const FV_BOOL = 0x04
+
+"The `fill_value` of an array that stores JSON `null`."
+const FILL_VALUE_NULL = FillValueJSON(FV_NULL, 0.0, 0, "", false)
+
+JSON.lift(::Type{FillValueJSON}, ::Nothing) = FILL_VALUE_NULL
+JSON.lift(::Type{FillValueJSON}, x::String) = FillValueJSON(FV_STRING, 0.0, 0, x, false)
+JSON.lift(::Type{FillValueJSON}, x::Float64) = FillValueJSON(FV_FLOAT, x, 0, "", false)
+JSON.lift(::Type{FillValueJSON}, x::Int64) = FillValueJSON(FV_INT, 0.0, x, "", false)
+JSON.lift(::Type{FillValueJSON}, x::Bool) = FillValueJSON(FV_BOOL, 0.0, 0, "", x)
+
+# `JSON.@nonstruct` emits `StructUtils.structlike(::StructStyle, ::Type{<:FillValueJSON}) = false`,
+# which `Test.detect_ambiguities` reports as ambiguous against JSON's
+# `structlike(::JSONReadStyle{O,N,S}, ::Type{T}) where S<:JSONStyle`. The
+# intersection is never instantiated here (ZarrCore parses with
+# `StructUtils.DefaultStyle`, which is not a `JSONStyle`), but spelling out the
+# more specific method keeps the ambiguity out of package-quality checks.
+@static if isdefined(JSON, :JSONStyle)
+    StructUtils.structlike(::JSON.JSONReadStyle{O,N,S}, ::Type{<:FillValueJSON}) where {O,N,S<:JSON.JSONStyle} = false
+end
+
+"`true` when the stored `fill_value` is JSON `null` (the array has no fill value)."
+isnullfill(v::FillValueJSON) = v.kind == FV_NULL
+
+"""
+    CompressorJSON
+
+The on-disk (numcodecs) JSON representation of a Zarr v2 compressor: the `id`
+plus the union of every configuration key the compressor packages shipped with
+Zarr.jl understand. Unknown keys in the document are ignored; keys that are
+absent stay `nothing`.
+
+A `getCompressor(::Type{C}, ::CompressorJSON)` method per compressor package
+turns this into a concrete compressor - see [`getCompressor`](@ref). Besides the
+all-positional constructor there is a keyword constructor
+`CompressorJSON(id; cname, clevel, shuffle, blocksize, level, checksum)` for
+building one in code, in which every configuration key defaults to `nothing`.
+"""
+JSON.@defaults struct CompressorJSON
+    id::String = ""
+    cname::Union{Nothing,String} = nothing
+    clevel::Union{Nothing,Int} = nothing
+    shuffle::Union{Nothing,Int} = nothing
+    blocksize::Union{Nothing,Int} = nothing
+    level::Union{Nothing,Int} = nothing
+    checksum::Union{Nothing,Bool} = nothing
+end
+
+# Constructor for building a `CompressorJSON` in code: `id` is required, every
+# configuration key is optional and defaults to `nothing`. `id` has to stay
+# positional - a keyword-only method would carry the positional signature
+# `CompressorJSON()` and so overwrite the zero-argument constructor
+# `JSON.@defaults` emits for the parser, which is an error during precompilation.
+CompressorJSON(id::AbstractString; cname=nothing, clevel=nothing, shuffle=nothing,
+    blocksize=nothing, level=nothing, checksum=nothing) =
+    CompressorJSON(id, cname, clevel, shuffle, blocksize, level, checksum)
+
+"""
+    ZarrayJSON
+
+Concrete, statically typed mirror of a Zarr v2 `.zarray` document. Missing keys
+fall back to the defaults given here; unknown keys (e.g. `node_type`) are
+ignored. Parse one with [`parse_zarray`](@ref).
+"""
+JSON.@defaults struct ZarrayJSON
+    zarr_format::Int = 2
+    shape::Vector{Int} = Int[]
+    chunks::Vector{Int} = Int[]
+    dtype::String = ""
+    compressor::Union{Nothing,CompressorJSON} = nothing
+    fill_value::FillValueJSON = FILL_VALUE_NULL
+    order::String = "C"
+    # Raw, unparsed text per filter: the typed path rejects filtered arrays
+    # anyway, and `JSONText` makes no assumptions about a filter's
+    # configuration keys (parsing them into a fixed schema struct would fail on
+    # any filter whose key types differ from the compressor schema's).
+    filters::Union{Nothing,Vector{JSON.JSONText}} = nothing
+    dimension_separator::Union{Nothing,String} = nothing
+end
+
+"""
+    parse_zarray(bytes) -> ZarrayJSON
+
+Parse a Zarr v2 `.zarray` document (a `String` or a byte vector) into the
+concrete [`ZarrayJSON`](@ref) schema struct. Unlike `Metadata(::AbstractString, ...)`
+this produces no `Any`-typed values and is `--trim=safe` clean.
+"""
+parse_zarray(bytes::AbstractVector{UInt8}) = JSON.parse(bytes, ZarrayJSON)
+parse_zarray(s::AbstractString) = JSON.parse(s, ZarrayJSON)
+
+# `ntuple(..., Val(N))` (rather than `NTuple{N,Int}(v) |> reverse`) keeps the
+# reversal statically unrolled and avoids the iterator protocol on a `Vector`.
+_revtuple(v::Vector{Int}, ::Val{N}) where {N} = ntuple(i -> @inbounds(v[N - i + 1]), Val(N))
+
+# Both branches return a `Char`; a ternary with differently typed branches
+# would widen to `Any` under `--trim`.
+function _dimension_separator(ds::Union{Nothing,String})
+    if ds === nothing
+        return '.'
+    else
+        return only(ds::String)
+    end
+end
+
+"""
+    fill_value_typed(::Type{T}, v::FillValueJSON) -> Union{T,Nothing}
+
+Decode an on-disk [`FillValueJSON`](@ref) for a *known* element type `T`. Each
+branch dispatches statically into an existing [`fill_value_decoding`](@ref)
+method, so the result type is exactly `Union{T,Nothing}`.
+"""
+function fill_value_typed(::Type{T}, v::FillValueJSON) where {T}
+    k = v.kind
+    if k == FV_NULL
+        return nothing
+    elseif k == FV_STRING
+        # handles "NaN" / "Infinity" / "-Infinity"
+        return convert(Union{T,Nothing}, fill_value_decoding(v.str, T))
+    elseif k == FV_INT
+        return convert(Union{T,Nothing}, fill_value_decoding(v.int, T))
+    elseif k == FV_BOOL
+        return convert(Union{T,Nothing}, fill_value_decoding(v.bool, T))
+    else
+        return convert(Union{T,Nothing}, fill_value_decoding(v.float, T))
+    end
+end
+
+"""
+    MetadataV2(::Type{T}, ::Val{N}, ::Type{C}, z::ZarrayJSON, fill_as_missing::Bool)
+
+Build array metadata for a *statically known* element type `T`, dimensionality
+`N` and compressor type `C` from a parsed [`ZarrayJSON`](@ref), validating the
+on-disk document against them. Throws `ArgumentError` on any mismatch.
+
+Unlike `Metadata(::AbstractDict, ...)` every type parameter of the result is
+known at compile time, which is what makes the typed
+[`zopen`](@ref) path juliac `--trim=safe` clean.
+"""
+function MetadataV2(::Type{T}, ::Val{N}, ::Type{C}, z::ZarrayJSON, fill_as_missing::Bool) where {T,N,C<:Compressor}
+    z.zarr_format == 2 || throw(ArgumentError("not a Zarr v2 array (zarr_format is not 2)"))
+    ts = typestr(T)
+    z.dtype == ts || throw(ArgumentError(string(
+        "dtype mismatch: the store holds \"", z.dtype, "\" but \"", ts, "\" was requested")))
+    (length(z.shape) == N && length(z.chunks) == N) || throw(ArgumentError(string(
+        "ndims mismatch: the store holds a ", string(length(z.shape)),
+        "-dimensional array but ", string(N), " dimensions were requested")))
+    z.filters === nothing || throw(ArgumentError(
+        "filters are not supported on the statically typed open path; use the dynamic `zopen`"))
+    comp = getCompressor(C, z.compressor)
+    fv = fill_value_typed(T, z.fill_value)
+    sep = _dimension_separator(z.dimension_separator)
+    ord = only(z.order)
+    sh = _revtuple(z.shape, Val(N))
+    ch = _revtuple(z.chunks, Val(N))
+    # Two explicit branches: `TU = cond ? T : Union{T,Missing}` would make the
+    # `MetadataV2{TU,...}` constructor a runtime `Core.apply_type`.
+    if isnullfill(z.fill_value) || !fill_as_missing
+        return MetadataV2{T,N,C,Nothing}(
+            2, "array", sh, ch, z.dtype, comp, fv, ord, nothing, ChunkKeyEncoding(sep, false))
+    else
+        return MetadataV2{Union{T,Missing},N,C,Nothing}(
+            2, "array", sh, ch, z.dtype, comp, fv, ord, nothing, ChunkKeyEncoding(sep, false))
+    end
+end

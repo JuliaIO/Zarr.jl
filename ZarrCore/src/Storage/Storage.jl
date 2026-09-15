@@ -98,6 +98,89 @@ function getattrs(::ZarrFormat{2}, s::AbstractStore, p)
   end
 end
 
+"""
+    getattrs_typed(::ZarrFormat{2}, s::AbstractStore, p) -> Dict{String,Any}
+
+Statically typed counterpart of `getattrs(::ZarrFormat{2}, ...)`: parses
+`.zattrs` with an explicitly asserted concrete result type and copies it into a
+`Dict{String,Any}` with a plain loop.
+
+`JSON.parse(...; dicttype = Dict{String,Any})` (used by the dynamic method) is
+not `--trim=safe`: the `dicttype` keyword widens to `DataType` and the `Any`
+result path drags in the whole array-display stack. Asserting
+`::JSON.Object{String,Any}` on the plain untyped parse is clean instead. The
+varargs/iterator `Dict` constructors are likewise not trim-safe, hence the loop.
+
+The parse is done in two stages. The strict parse is tried first because it is
+the only one that preserves integers: `allownan=true` makes the parser produce
+`Float64` for *every* number, so `{"y": 1}` would come back as `1.0` instead of
+`1`, while the dynamic `getattrs` yields `Int64`. Only if the strict parse
+throws - which happens for a document containing a bare `NaN`, `Infinity` or
+`-Infinity` literal, invalid JSON that older Zarr.jl versions nevertheless
+wrote, and that the dynamic method handles with its `": NaN," => ": \"NaN\","`
+pre-pass - is the document retried with `allownan=true`. Integer attributes are
+therefore widened to `Float64` only in such a bare-NaN/Infinity document.
+
+A `Vector{UInt8}` (or `String`) can be parsed twice, so `maybecopy` is called
+once and its result reused for the retry.
+"""
+function getattrs_typed(::ZarrFormat{2}, s::AbstractStore, p)
+  atts = s[p, ".zattrs"]
+  d = Dict{String,Any}()
+  if atts === nothing
+    return d
+  end
+  bytes = maybecopy(atts)
+  local obj::JSON.Object{String,Any}
+  try
+    obj = JSON.parse(bytes)::JSON.Object{String,Any}
+  catch
+    obj = JSON.parse(bytes; allownan=true)::JSON.Object{String,Any}
+  end
+  for (k, v) in obj
+    d[k] = v
+  end
+  return d
+end
+
+"""
+    getattrs_typed(::ZarrFormat{3}, s, p) -> Dict{String,Any}
+
+Statically typed counterpart of `getattrs(::ZarrFormat{3}, s, p)`. Reads the
+`"attributes"` object out of `zarr.json`; an absent key (or an absent
+`zarr.json`) yields an empty `Dict`.
+
+Same two-stage parse as the v2 method: the strict parse is tried first because
+it is the only one that preserves integers, and only a document containing a
+bare `NaN`/`Infinity` literal (which the dynamic method handles with a
+`replace` pre-pass) is retried with `allownan=true`. The `"attributes"` value is
+asserted `::JSON.Object{String,Any}` before the copy loop for the same reason
+the whole document is: the iterator/varargs `Dict` constructors are not
+trim-safe, hence the explicit `setindex!` loop.
+"""
+function getattrs_typed(::ZarrFormat{3}, s::AbstractStore, p)
+  md = s[p, "zarr.json"]
+  d = Dict{String,Any}()
+  if md === nothing
+    return d
+  end
+  bytes = maybecopy(md)
+  local obj::JSON.Object{String,Any}
+  try
+    obj = JSON.parse(bytes)::JSON.Object{String,Any}
+  catch
+    obj = JSON.parse(bytes; allownan=true)::JSON.Object{String,Any}
+  end
+  if !haskey(obj, "attributes")
+    return d
+  end
+  atts = obj["attributes"]::JSON.Object{String,Any}
+  for (k, v) in atts
+    d[k] = v
+  end
+  return d
+end
+
 function getattrs(::ZarrFormat{3}, s::AbstractStore, p)
   md = s[p, "zarr.json"]
   if md === nothing
@@ -108,7 +191,45 @@ function getattrs(::ZarrFormat{3}, s::AbstractStore, p)
   end
 end
 
+"""
+    NoAttrs()
+
+Marker value meaning "this node has no user attributes". It is the default of
+the `attrs` keyword of [`zcreate`](@ref) so that the dynamic, `Dict{String,Any}`
+based JSON attribute writer is never instantiated for the (very common) case of
+an array without attributes - `writeattrs` then emits the constant `{}`
+document. Arrays always store a plain `Dict` in their `attrs` field, see
+[`attrsdict`](@ref).
+"""
+struct NoAttrs <: AbstractDict{String,Any} end
+Base.length(::NoAttrs) = 0
+Base.isempty(::NoAttrs) = true
+Base.iterate(::NoAttrs, state...) = nothing
+Base.haskey(::NoAttrs, ::Any) = false
+Base.get(::NoAttrs, ::Any, default) = default
+Base.getindex(::NoAttrs, k) = throw(KeyError(k))
+
+"""Convert an `attrs` keyword value into the `Dict` stored on a `ZArray`/`ZGroup`."""
+attrsdict(d::AbstractDict) = d
+attrsdict(::NoAttrs) = Dict{String,Any}()
+
+
+_empty_json_object() = UInt8[0x7b, 0x7d]  # "{}"
+
+writeattrs(::ZarrFormat{2}, s::AbstractStore, p, ::NoAttrs; indent_json::Bool=false) =
+  (s[p,".zattrs"] = _empty_json_object(); NoAttrs())
+
+writeattrs(v::ZarrFormat{3}, s::AbstractStore, p, ::NoAttrs; indent_json::Bool=false) =
+  writeattrs(v, s, p, Dict{String,Any}(); indent_json=indent_json)
+
 function writeattrs(::ZarrFormat{2}, s::AbstractStore, p, att::Dict; indent_json::Bool=false)
+  # Fast path for the (very common) empty-attribute case: serialising an empty
+  # `Dict` through JSON pulls in the whole dynamic serialiser for no benefit,
+  # while the result is always the two-byte literal "{}".
+  if isempty(att)
+    s[p,".zattrs"] = _empty_json_object()
+    return att
+  end
   b = IOBuffer()
 
   if indent_json
@@ -178,30 +299,114 @@ isinitialized(s::AbstractStore, i::AbstractString) = s[i] !== nothing
 
 getmetadata(::ZarrFormat{2}, s::AbstractStore, p, fill_as_missing) = Metadata(String(maybecopy(s[p, ".zarray"])), fill_as_missing)
 
+"""
+    getmetadata(::Type{T}, ::Val{N}, ::Type{C}, ::ZarrFormat{2}, s, p, fill_as_missing::Bool)
+
+Statically typed counterpart of `getmetadata(::ZarrFormat{2}, s, p, fill_as_missing)`.
+Reads `.zarray` at path `p` and validates it against the caller-supplied
+element type `T`, dimensionality `N` and compressor type `C`, so that the
+returned metadata (and hence the `ZArray` built from it) has fully concrete
+type parameters. Used by `zopen(::Type{T}, ::Val{N}, ...)`.
+"""
+function getmetadata(::Type{T}, ::Val{N}, ::Type{C}, ::ZarrFormat{2}, s::AbstractStore, p,
+                     fill_as_missing::Bool) where {T,N,C<:Compressor}
+  bytes = s[p, ".zarray"]
+  if bytes === nothing
+    throw(ArgumentError("no Zarr v2 array at the given path: .zarray not found"))
+  end
+  return MetadataV2(T, Val(N), C, parse_zarray(maybecopy(bytes)), fill_as_missing)
+end
+
 getmetadata(::ZarrFormat{3}, s::AbstractStore, p, fill_as_missing) = Metadata(String(maybecopy(s[p, "zarr.json"])), fill_as_missing)
+
+"""
+    getmetadata(::Type{T}, ::Val{N}, ::Type{P}, ::ZarrFormat{3}, s, p, fill_as_missing::Bool)
+
+Statically typed counterpart of `getmetadata(::ZarrFormat{3}, s, p, fill_as_missing)`.
+Reads `zarr.json` at path `p` and validates it against the caller-supplied
+element type `T`, dimensionality `N` and codec pipeline type `P`, so that the
+returned metadata (and hence the `ZArray` built from it) has fully concrete
+type parameters. Used by `zopen(::Type{T}, ::Val{N}, ...; pipeline = P)`.
+"""
+function getmetadata(::Type{T}, ::Val{N}, ::Type{P}, ::ZarrFormat{3}, s::AbstractStore, p,
+                     fill_as_missing::Bool) where {T,N,P<:V3Pipeline}
+  bytes = s[p, "zarr.json"]
+  if bytes === nothing
+    throw(ArgumentError("no Zarr v3 array at the given path: zarr.json not found"))
+  end
+  return MetadataV3(T, Val(N), P, parse_zarrjson(maybecopy(bytes)), fill_as_missing)
+end
 
 function writemetadata(::ZarrFormat{2}, s::AbstractStore, p, m::AbstractMetadata; indent_json::Bool=false)
   met = IOBuffer()
 
-  if indent_json
-    JSON.print(met,m,4)
-  else
-    JSON.print(met,m)
-  end
-  
+  print_metadata(met, m, indent_json)
+
   s[p,".zarray"] = take!(met)
   m
 end
 function writemetadata(::ZarrFormat{3}, s::AbstractStore, p, m::AbstractMetadata; indent_json::Bool=false)
   met = IOBuffer()
 
-  if indent_json
-    JSON.print(met, m, 4)
-  else
-    JSON.print(met, m)
-  end
+  print_metadata(met, m, indent_json)
 
   s[p, "zarr.json"] = take!(met)
+  m
+end
+
+"""
+    write_new_metadata(v::ZarrFormat, s, p, m, attrs; indent_json=false)
+
+Write the metadata *and* the attributes of a freshly created node. Used by
+[`zcreate`](@ref); the split `writemetadata` + `writeattrs` pair remains for
+updates to an existing node.
+
+For v2 this is exactly the old pair (`.zarray` then `.zattrs`). For v3 both live
+in the single `zarr.json` document, and writing them separately means
+`writeattrs(::ZarrFormat{3}, ...)` has to read the document back and re-emit it
+through the dynamic `Dict{String,Any}` JSON writer - which is not
+`juliac --trim=safe` clean. Here the `attributes` object is instead part of the
+initial NamedTuple.
+
+Two v3 methods keep the empty-attribute case (`NoAttrs()`, the `zcreate`
+default) off the dynamic serialiser entirely: it emits the constant `{}`
+fragment. The `AbstractDict` method takes the same shortcut when the dict is
+empty, but is only compiled at all if a dict is actually passed.
+"""
+function write_new_metadata(v::ZarrFormat{2}, s::AbstractStore, p, m::AbstractMetadata, attrs;
+                            indent_json::Bool=false)
+  writemetadata(v, s, p, m; indent_json=indent_json)
+  writeattrs(v, s, p, attrs; indent_json=indent_json)
+  m
+end
+
+function write_new_metadata(::ZarrFormat{3}, s::AbstractStore, p, m::MetadataV3, ::NoAttrs;
+                            indent_json::Bool=false)
+  met = IOBuffer()
+  _print_metadata_v3(met, m, fill_value_encoding(m.fill_value), _EMPTY_JSON_OBJECT, indent_json)
+  s[p, "zarr.json"] = take!(met)
+  m
+end
+
+function write_new_metadata(::ZarrFormat{3}, s::AbstractStore, p, m::MetadataV3, attrs::AbstractDict;
+                            indent_json::Bool=false)
+  met = IOBuffer()
+  fv = fill_value_encoding(m.fill_value)
+  if isempty(attrs)
+    _print_metadata_v3(met, m, fv, _EMPTY_JSON_OBJECT, indent_json)
+  else
+    _print_metadata_v3(met, m, fv, attrs, indent_json)
+  end
+  s[p, "zarr.json"] = take!(met)
+  m
+end
+
+# Fallback for any other v3 metadata (e.g. group metadata): keep the old
+# two-step behaviour.
+function write_new_metadata(v::ZarrFormat{3}, s::AbstractStore, p, m::AbstractMetadata, attrs;
+                            indent_json::Bool=false)
+  writemetadata(v, s, p, m; indent_json=indent_json)
+  writeattrs(v, s, p, attrs; indent_json=indent_json)
   m
 end
 
@@ -254,17 +459,29 @@ function read_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e:
     end
 end
 
+"""
+    store_putchunk(s, p, i, e, data)
+
+Store the encoded chunk `data` under chunk index `i` of the array at path `p`,
+or delete an already existing chunk when `data === nothing` (i.e. the chunk
+consists entirely of the fill value).
+"""
+function store_putchunk(s::AbstractStore, p, i, e::AbstractChunkKeyEncoding, data)
+  if data === nothing
+    if store_isinitialized(s, p, i, e)
+      store_deletechunk(s, p, i, e)
+    end
+  else
+    store_writechunk(s, data, p, i, e)
+  end
+  nothing
+end
+
 write_items!(s::AbstractStore, c::AbstractChannel, e::AbstractChunkKeyEncoding, p, i) = write_items!(s, c, store_read_strategy(s), e, p, i)
 function write_items!(s::AbstractStore, c::AbstractChannel, ::SequentialRead, e::AbstractChunkKeyEncoding, p, i)
   for _ in 1:length(i)
       ii,data = take!(c)
-      if data === nothing
-        if store_isinitialized(s, p, ii, e)
-        store_deletechunk(s, p, ii, e)
-        end
-      else
-      store_writechunk(s, data, p, ii, e)
-      end
+      store_putchunk(s, p, ii, e, data)
   end
   close(c)
 end
@@ -273,13 +490,7 @@ function write_items!(s::AbstractStore, c::AbstractChannel, r::ConcurrentRead, e
   ntasks = r.ntasks
   asyncmap(i,ntasks = ntasks) do _
       ii,data = take!(c)
-      if data === nothing
-        if store_isinitialized(s, p, ii, e)
-        store_deletechunk(s, p, ii, e)
-        end
-      else
-      store_writechunk(s, data, p, ii, e)
-      end
+      store_putchunk(s, p, ii, e, data)
       nothing
   end
   close(c)

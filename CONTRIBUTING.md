@@ -33,8 +33,8 @@ Discussions are great for questions about usage, implementation, science, or any
 
 The root `Project.toml` is a Julia 1.12+ workspace. Packages remain compatible
 with Julia 1.10+ and live in the top-level directories `Zarr`, `ZarrCore`,
-`ZarrBlosc`, `ZarrZlib`, `ZarrZstd`, `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and
-`ZarrZip`. The facade source and tests are in `Zarr/src` and `Zarr/test`, while
+`ZarrBlosc`, `ZarrZlib`, `ZarrZstd`, `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, `ZarrZip`,
+and `ZarrTrimmable`. The facade source and tests are in `Zarr/src` and `Zarr/test`, while
 documentation is in `docs`.
 
 ```bash

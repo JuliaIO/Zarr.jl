@@ -22,7 +22,8 @@ The package currently implements basic functionality for reading and writing zar
 
 This monorepo contains the `Zarr` facade, `ZarrCore`, compressor packages
 `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`, and storage packages `ZarrHTTP`,
-`ZarrGCS`, `ZarrS3`, and `ZarrZip`. Each package is a top-level directory. The
+`ZarrGCS`, `ZarrS3`, and `ZarrZip`, plus the opt-in `juliac --trim=safe` front end
+`ZarrTrimmable`. Each package is a top-level directory. The
 facade source and tests live in `Zarr/src` and `Zarr/test`; documentation remains
 in `docs`.
 

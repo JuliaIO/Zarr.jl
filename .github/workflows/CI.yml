@@ -40,7 +40,7 @@ jobs:
       - name: Develop the sibling packages (Pkg < 1.11 ignores [sources])
         # Bash preserves the embedded quotes on Windows.
         shell: bash
-        run: julia --project=Zarr -e 'using Pkg; Pkg.develop([PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")])'
+        run: julia --project=Zarr -e 'using Pkg; Pkg.develop([PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3"), PackageSpec(path="ZarrTrimmable")])'
       - uses: julia-actions/julia-buildpkg@v1
         with:
           project: Zarr
@@ -56,7 +56,7 @@ jobs:
           # Bash preserves the embedded quotes on Windows.
           shell: bash
           command: |
-            julia --project=Zarr/test -e 'using Pkg; Pkg.develop([PackageSpec(path="Zarr"), PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=Zarr/test -e 'using Pkg; Pkg.develop([PackageSpec(path="Zarr"), PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3"), PackageSpec(path="ZarrTrimmable")]); Pkg.resolve(); Pkg.instantiate()'
             julia --project=Zarr/test Zarr/test/v3_julia.jl
             julia --project=Zarr/test Zarr/test/v3_python.jl
       # Julia 1.10 cannot merge developed fixture packages into the test sandbox.
@@ -70,7 +70,7 @@ jobs:
           PYTHON:
       - uses: julia-actions/julia-processcoverage@v1
         with:
-          directories: Zarr/src,ZarrCore/src,ZarrZip/src,ZarrBlosc/src,ZarrZlib/src,ZarrZstd/src,ZarrHTTP/src,ZarrGCS/src,ZarrS3/src
+          directories: Zarr/src,ZarrCore/src,ZarrZip/src,ZarrBlosc/src,ZarrZlib/src,ZarrZstd/src,ZarrHTTP/src,ZarrGCS/src,ZarrS3/src,ZarrTrimmable/src
       - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
