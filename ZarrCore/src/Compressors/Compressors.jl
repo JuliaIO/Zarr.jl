@@ -70,8 +70,12 @@ Creates an object that can be passed to ZArray constructors without compression.
 """
 struct NoCompressor <: Compressor end
 
-function zuncompress(a, ::NoCompressor, T)
-  _reinterpret(T,a)
+# `::Type{T}` (rather than a plain `T` argument) so that Julia specialises on the
+# element type; `nonmissingtype` because a `fill_as_missing` array decodes into
+# the `isbits` inner buffer of a `SenMissArray` (this matches what the ZarrZlib
+# and ZarrZstd compressors do).
+function zuncompress(a, ::NoCompressor, ::Type{T}) where {T}
+  _reinterpret(Base.nonmissingtype(T),a)
 end
 
 function zcompress(a, ::NoCompressor)
@@ -91,6 +95,57 @@ function zuncompress!(data::Array{T}, compressed::Vector{UInt8}, ::NoCompressor)
 end
 
 JSON.lower(::NoCompressor) = nothing
+
+# ## Statically typed compressor construction (juliac `--trim=safe` path)
+#
+# `getCompressor(::Type{C}, ::Union{Nothing,CompressorJSON})` is the typed
+# counterpart of `getCompressor(compdict::Dict)`: the caller states which
+# compressor type it expects, so the return type is concrete. Compressor
+# packages add a `getCompressor(::Type{TheirCompressor}, ::CompressorJSON)`
+# method; the two fallbacks below cover the "store and caller disagree" cases.
+# The `Dict` methods are untouched and stay on the dynamic path.
+#
+# Error messages are built with `string(...)` from `String`s only: string
+# interpolation of a non-`String` (a `DataType`, say) pulls in the whole
+# `show` stack and is not `--trim=safe`.
+
+"""
+    getCompressor(::Type{C}, c::Union{Nothing,CompressorJSON}) where {C<:Compressor}
+
+Build a compressor of the statically known type `C` from the `compressor` entry
+of a parsed [`ZarrayJSON`](@ref) (`nothing` when the array is uncompressed).
+Throws `ArgumentError` when the store's compressor does not match `C`.
+
+This is the typed counterpart of `getCompressor(::Dict)` and is used by the
+statically typed `zopen(::Type{T}, ::Val{N}, ...)` path.
+"""
+function getCompressor(::Type{C}, ::Nothing) where {C<:Compressor}
+    throw(ArgumentError("the store has no compressor, but a compressor type was requested"))
+end
+
+getCompressor(::Type{NoCompressor}, ::Nothing) = NoCompressor()
+
+function getCompressor(::Type{NoCompressor}, c::CompressorJSON)
+    throw(ArgumentError(string("the store has a \"", c.id,
+        "\" compressor, but NoCompressor was requested")))
+end
+
+"""
+    codec_id(::Type{C}) where {C<:Compressor} -> String
+
+The numcodecs `"id"` under which a compressor type is stored in a Zarr v2
+`.zarray` document, e.g. `"zstd"`. [`NoCompressor`](@ref) returns `""`, because
+an uncompressed array stores JSON `null` instead of a compressor object.
+
+This is the static counterpart of the `compressortypes` registry: the
+registry maps a stored id to a type at run time, `codec_id` maps a statically
+known type to its id. Compressor packages define a method next to their
+`getCompressor(::Type{C}, ::CompressorJSON)` method; defining one is the
+extension point that admits a compressor into a `ZarrTrimmable` codec pool.
+"""
+function codec_id end
+
+codec_id(::Type{NoCompressor}) = ""
 
 compressortypes[nothing] = NoCompressor
 

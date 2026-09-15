@@ -27,7 +27,7 @@ public zencode, zdecode, getfilter, sourcetype, desttype, filterdict,
 
 # Compressor interface; concrete compressors are declared by their packages.
 public Compressor, NoCompressor
-public zcompress, zcompress!, zuncompress, zuncompress!, getCompressor,
+public zcompress, zcompress!, zuncompress, zuncompress!, getCompressor, codec_id,
     compressortypes, default_compressor, v2_to_v3_codecs
 
 # Core v3 codecs; backend codecs are declared by their packages.
@@ -39,3 +39,15 @@ public typestr, fill_value_encoding, fill_value_decoding
 
 # Preferences
 public should_register_at_init
+
+# Statically typed (juliac `--trim=safe`) v2 `.zarray` schema and accessors.
+public ZarrayJSON, CompressorJSON, FillValueJSON, parse_zarray, fill_value_typed, isnullfill,
+    getattrs_typed
+
+# Statically typed (juliac `--trim=safe`) v3 `zarr.json` schema, plus the codec
+# pipeline type a caller has to name for the `pipeline =` keyword of the typed
+# `zopen(::Type{T}, ::Val{N}, ...)`.
+public ZarrJsonV3, CodecJSON, CodecConfigJSON, ChunkGridJSON, ChunkGridConfigJSON,
+    ChunkKeyEncodingJSON, ChunkKeyEncodingConfigJSON, parse_zarrjson,
+    chunk_grid_json, chunk_key_encoding_json, codecs_json
+public V3Pipeline

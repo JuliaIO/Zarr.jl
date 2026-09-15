@@ -3,6 +3,9 @@ module V3Codecs
 import ..Codecs: zencode, zdecode, zencode!, zdecode!
 # Import pipeline internals from ZarrCore (grandparent module)
 import ...ZarrCore: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
+# Statically typed `zarr.json` codec schema (defined in `metadata3.jl`, which is
+# included before this file), used by the typed `getCodec`/`pipeline_from_json`.
+import ...ZarrCore: CodecJSON, CodecConfigJSON, _json_int_vector
 using CRC32c: CRC32c
 using JSON: JSON
 
@@ -241,22 +244,81 @@ function _codecs_to_v3pipeline(codecs::Vector{<:V3Codec})
     return V3Pipeline(Tuple(aa), ab, Tuple(bb))
 end
 
-"""Flatten a `V3Pipeline` back to an ordered list of codec JSON dicts."""
-function _pipeline_to_codec_list(p::V3Pipeline)
-    result = Dict[]
+"""
+    _pipeline_to_codec_list(p::V3Pipeline)
+
+Flatten a `V3Pipeline` back to an ordered list of lowered codecs, ready to be
+placed in the `codecs` field of a `zarr.json` document. Every codec lowers to a
+NamedTuple, so the result stays introspectable (`list[2].configuration.level`).
+
+Two methods:
+
+* all-`Tuple` pipeline (the normal case) -> a `Tuple` of the lowered codecs,
+  built by splatting `map(JSON.lower, ...)`. Every element type is static.
+* `bytes_bytes::AbstractVector` (the `ZarrTrimmable` codec-pool case, where the
+  number of bytes->bytes codecs is only known at run time) -> a
+  `Vector{JSON.JSONText}`. Splatting a `Vector` into a tuple is not trim-safe
+  and the lowered elements have differing types, so each one is pre-rendered
+  into a raw JSON fragment which `JSON` writes back verbatim.
+
+See [`_pipeline_to_codec_json`](@ref) for the variant the write path uses.
+"""
+function _pipeline_to_codec_list(p::V3Pipeline{<:Tuple,AB,<:Tuple}) where {AB}
+    aa = map(JSON.lower, p.array_array)
+    ab = JSON.lower(p.array_bytes)
+    bb = map(JSON.lower, p.bytes_bytes)
+    return (aa..., ab, bb...)
+end
+
+function _pipeline_to_codec_list(p::V3Pipeline{<:Tuple,AB,<:AbstractVector}) where {AB}
+    return _pipeline_to_codec_json(p)
+end
+
+"""Render one codec into a raw JSON fragment written back verbatim."""
+_codec_json(c) = JSON.JSONText(JSON.json(c))
+
+"""
+    _pipeline_to_codec_json(p::V3Pipeline)
+
+Like [`_pipeline_to_codec_list`](@ref), but every codec is pre-rendered into a
+`JSON.JSONText` fragment. This is what the `zarr.json` *writer* uses.
+
+The reason is a limitation of the JSON.jl/StructUtils writer under
+`juliac --trim=safe`: a NamedTuple *nested inside a `Tuple` field of another
+NamedTuple* leaves an unresolved `StructUtils.applyeach` invoke
+(`StructUtils/src/StructUtils.jl:738`, reached from `JSON/src/write.jl:782,700`)
+- the `@generated` `applyeach` recursion is not followed through the tuple.
+Rendering each codec on its own first (a top-level `JSON.json` call, which *is*
+clean) and splicing the fragments sidesteps it, and the emitted bytes are
+identical.
+"""
+function _pipeline_to_codec_json(p::V3Pipeline{<:Tuple,AB,<:Tuple}) where {AB}
+    aa = map(_codec_json, p.array_array)
+    ab = _codec_json(p.array_bytes)
+    bb = map(_codec_json, p.bytes_bytes)
+    return (aa..., ab, bb...)
+end
+
+function _pipeline_to_codec_json(p::V3Pipeline{<:Tuple,AB,<:AbstractVector}) where {AB}
+    n = length(p.array_array) + 1 + length(p.bytes_bytes)
+    result = Vector{JSON.JSONText}(undef, n)
+    i = 1
     for codec in p.array_array
-        push!(result, JSON.lower(codec))
+        result[i] = _codec_json(codec)
+        i += 1
     end
-    push!(result, JSON.lower(p.array_bytes))
+    result[i] = _codec_json(p.array_bytes)
+    i += 1
     for codec in p.bytes_bytes
-        push!(result, JSON.lower(codec))
+        result[i] = _codec_json(codec)
+        i += 1
     end
     return result
 end
 
-function JSON.lower(c::BytesCodec)
-    Dict("name" => "bytes", "configuration" => Dict("endian" => string(c.endian)))
-end
+# NamedTuples (not `Dict`s) so that lowering array metadata stays statically
+# typed - see `ZarrCore.print_metadata`. The emitted JSON is unchanged.
+JSON.lower(c::BytesCodec) = (; name = "bytes", configuration = (; endian = string(c.endian)))
 
 """
     JSON.lower(c::ShardingCodec)
@@ -265,13 +327,13 @@ Serialize ShardingCodec to JSON. `chunk_shape` is reversed from Julia column-maj
 back to C-order as required by the Zarr v3 spec.
 """
 function JSON.lower(c::ShardingCodec)
-    return Dict(
-        "name" => "sharding_indexed",
-        "configuration" => Dict(
-            "chunk_shape"   => collect(reverse(c.chunk_shape)),
-            "codecs"        => _pipeline_to_codec_list(c.codecs),
-            "index_codecs"  => _pipeline_to_codec_list(c.index_codecs),
-            "index_location" => string(c.index_location)
+    return (;
+        name = "sharding_indexed",
+        configuration = (;
+            chunk_shape    = collect(reverse(c.chunk_shape)),
+            codecs         = _pipeline_to_codec_list(c.codecs),
+            index_codecs   = _pipeline_to_codec_list(c.index_codecs),
+            index_location = string(c.index_location)
         )
     )
 end
@@ -613,9 +675,8 @@ register_codec("transpose", TransposeCodec) do config, ctx
     TransposeCodec(perm)
 end
 
-function JSON.lower(c::TransposeCodec)
-    Dict("name" => "transpose", "configuration" => Dict("order" => collect(c.order .- 1)))
-end
+JSON.lower(c::TransposeCodec) =
+    (; name = "transpose", configuration = (; order = collect(c.order .- 1)))
 
 # codec_encode / codec_decode methods for V3 codecs
 
@@ -627,7 +688,12 @@ function codec_encode(c::BytesCodec, data::AbstractArray)
     end
 end
 
-function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N}
+# The positional five-argument form is the primary one: `pipeline_decode!` calls
+# it that way so that no keyword sorter (whose default expression can be
+# type-dependent, see `VLenUTF8V3Codec` below) is instantiated on the decode
+# path, which juliac `--trim=safe` would report as an unresolved call. The
+# keyword form forwards to it and keeps the four-argument spelling working.
+function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}, fill_value) where {T, N}
     arr = collect(reinterpret(T, encoded))
     if _needs_bswap(c.endian)
         arr = bswap.(arr)
@@ -635,17 +701,23 @@ function codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::N
     return reshape(arr, shape)
 end
 
+codec_decode(c::BytesCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N} =
+    codec_decode(c, encoded, T, shape, fill_value)
+
 function codec_encode(c::ShardingCodec, data::AbstractArray)
     encoded = UInt8[]
     zencode!(encoded, data, c)
     return encoded
 end
 
-function codec_decode(c::ShardingCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N}
+function codec_decode(c::ShardingCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}, fill_value) where {T, N}
     output = Array{T, N}(undef, shape)
     zdecode!(output, encoded, c, fill_value)
     return output
 end
+
+codec_decode(c::ShardingCodec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value=nothing) where {T, N} =
+    codec_decode(c, encoded, T, shape, fill_value)
 
 """Return the shape of the output of `codec_encode(codec, data)` given the input shape."""
 encoded_shape(::V3Codec, sz::NTuple{N,Int}) where {N} = sz
@@ -671,9 +743,7 @@ register_codec("crc32c", CRC32cV3Codec) do config, ctx
     CRC32cV3Codec()
 end
 
-function JSON.lower(::CRC32cV3Codec)
-    Dict("name" => "crc32c")
-end
+JSON.lower(::CRC32cV3Codec) = (; name = "crc32c")
 
 function codec_encode(c::CRC32cV3Codec, data::Vector{UInt8})
     out = UInt8[]
@@ -695,9 +765,7 @@ name(::VLenUTF8V3Codec) = "vlen-utf8"
 register_codec("vlen-utf8", VLenUTF8V3Codec) do config, ctx
     VLenUTF8V3Codec()
 end
-function JSON.lower(::VLenUTF8V3Codec)
-    Dict("name" => "vlen-utf8")
-end
+JSON.lower(::VLenUTF8V3Codec) = (; name = "vlen-utf8")
 function codec_encode(::VLenUTF8V3Codec, data::AbstractArray{<:AbstractString})
     b = IOBuffer()
     nitems = length(data)
@@ -709,7 +777,10 @@ function codec_encode(::VLenUTF8V3Codec, data::AbstractArray{<:AbstractString})
     end
     take!(b)
 end
-function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T= Missing <: T ? missing : zero(T)) where {T <: Union{<:AbstractString, Missing}, N}
+codec_decode(c::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}; fill_value::T= Missing <: T ? missing : zero(T)) where {T <: Union{<:AbstractString, Missing}, N} =
+    codec_decode(c, encoded, T, shape, fill_value)
+
+function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape::NTuple{N,Int}, fill_value) where {T <: Union{<:AbstractString, Missing}, N}
     f = IOBuffer(encoded, read=true, write=false)
     nitems = ltoh(read(f, UInt32))
     expected = prod(shape)
@@ -722,6 +793,202 @@ function codec_decode(::VLenUTF8V3Codec, encoded::Vector{UInt8}, ::Type{T}, shap
         out[i] = String(read(f, clen))
     end
     out
+end
+
+# ## Statically typed (juliac `--trim=safe`) codec construction
+#
+# The counterpart of the `codec_parsers` registry: instead of mapping a stored
+# name to a type at run time, the caller states the pipeline type and the stored
+# document is *validated* against it. Every method below therefore has a
+# concrete return type, and all error messages are built with `string(...)` from
+# `String`s only (interpolating a `DataType` pulls in the whole `show` stack).
+
+"""
+    codec_name(::Type{C}) -> String
+
+The name the zarr v3 spec gives the codec type `C`, without the optional
+`numcodecs.` prefix - the static counterpart of [`name`](@ref), which answers
+the same question for a codec *value*.
+
+This is the extension point a codec package implements next to
+`getCodec(::Type{C}, ::CodecJSON, ctx)`: together they let the statically typed
+`zopen(::Type{T}, ::Val{N}, store; pipeline = ...)` path build `C` from a
+`zarr.json` document without any runtime type lookup.
+"""
+function codec_name end
+
+codec_name(::Type{BytesCodec}) = "bytes"
+codec_name(::Type{TransposeCodec{N}}) where {N} = "transpose"
+codec_name(::Type{CRC32cV3Codec}) = "crc32c"
+codec_name(::Type{VLenUTF8V3Codec}) = "vlen-utf8"
+
+# Fallback for the instance form: a codec that defines `codec_name` need not
+# define `name` as well. Every codec that already has a `name` method keeps it
+# (those methods are more specific than this one), so behaviour is unchanged.
+name(c::V3Codec) = codec_name(typeof(c))
+
+"""
+    _strip_numcodecs(name::AbstractString) -> String
+
+Drop a leading `"numcodecs."` from a stored codec name. The typed counterpart
+of the `replace(name, r"^numcodecs\\." => "")` in `getCodec(::Dict, ctx)`; a
+regular expression is neither needed nor `--trim=safe`.
+"""
+function _strip_numcodecs(name::AbstractString)
+    s = String(name)
+    if startswith(s, "numcodecs.")
+        return s[11:end]
+    end
+    return s
+end
+
+"""
+    _check_codec_name(::Type{C}, c::CodecJSON)
+
+Throw an `ArgumentError` unless the stored codec name matches `codec_name(C)`.
+"""
+function _check_codec_name(::Type{C}, c::CodecJSON) where {C<:V3Codec}
+    stored = _strip_numcodecs(c.name)
+    wanted = codec_name(C)
+    stored == wanted || throw(ArgumentError(string(
+        "codec mismatch: the store has a \"", stored, "\" codec where \"", wanted,
+        "\" was requested")))
+    return nothing
+end
+
+"""
+    getCodec(::Type{C}, c::CodecJSON, ctx) -> C
+
+Build a codec of the statically known type `C` from one entry of a parsed
+`zarr.json` `"codecs"` array, applying the same defaults as the registered
+`Dict` parser. Throws `ArgumentError` when the stored codec does not match `C`.
+
+`ctx` is the same context value the registered parsers get, a
+`NamedTuple{(:shape, :elsize)}`.
+"""
+function getCodec(::Type{C}, ::CodecJSON, ctx) where {C<:V3Codec}
+    throw(ArgumentError(
+        "no typed parser for the requested codec type; a codec joins the statically typed " *
+        "open path by defining `codec_name(::Type{C})` and `getCodec(::Type{C}, ::CodecJSON, ctx)`"))
+end
+
+function getCodec(::Type{BytesCodec}, c::CodecJSON, ctx)
+    _check_codec_name(BytesCodec, c)
+    endian = :little
+    cfg = c.configuration
+    if cfg !== nothing
+        e = (cfg::CodecConfigJSON).endian
+        if e !== nothing
+            es = e::String
+            if es == "little"
+                endian = :little
+            elseif es == "big"
+                endian = :big
+            else
+                throw(ArgumentError(string("Unknown endian: \"", es, "\"")))
+            end
+        end
+    end
+    return BytesCodec(endian)
+end
+
+function getCodec(::Type{TransposeCodec{N}}, c::CodecJSON, ctx) where {N}
+    _check_codec_name(TransposeCodec{N}, c)
+    cfg = c.configuration
+    cfg === nothing && throw(ArgumentError(
+        "the transpose codec needs an \"order\" configuration on the statically typed open path"))
+    o = (cfg::CodecConfigJSON).order
+    o === nothing && throw(ArgumentError(
+        "the transpose codec needs an \"order\" configuration on the statically typed open path"))
+    ov = _json_int_vector(o::JSON.JSONText)
+    length(ov) == N || throw(ArgumentError(string(
+        "transpose order has length ", string(length(ov)),
+        " but a rank-", string(N), " transpose codec was requested")))
+    # Same conversion as the registered `Dict` parser: 0-based spec order, kept
+    # in document order, shifted to Julia's 1-based permutation.
+    return TransposeCodec(ntuple(i -> ov[i] + 1, Val(N)))
+end
+
+function getCodec(::Type{CRC32cV3Codec}, c::CodecJSON, ctx)
+    _check_codec_name(CRC32cV3Codec, c)
+    return CRC32cV3Codec()
+end
+
+function getCodec(::Type{<:ShardingCodec}, ::CodecJSON, ctx)
+    throw(ArgumentError(
+        "the sharding_indexed codec is not supported on the statically typed open path; use the dynamic `zopen`"))
+end
+
+function getCodec(::Type{VLenUTF8V3Codec}, ::CodecJSON, ctx)
+    throw(ArgumentError(
+        "the vlen-utf8 codec is not supported on the statically typed open path; use the dynamic `zopen`"))
+end
+
+"""
+    pipeline_from_json(::Type{V3Pipeline{AA,AB,BB}}, codecs::Vector{CodecJSON}, ctx)
+
+Build a fully concrete `V3Pipeline` of the requested type from the parsed
+`"codecs"` array of a `zarr.json`, validating the stored chain against it.
+
+`AA` must be a `Tuple` type (the array->array stage; its length is part of the
+pipeline type because `TransposeCodec{N}` needs its rank). `BB` may either be a
+`Tuple` type - then the stored chain must have exactly `length(AA) + 1 +
+length(BB)` entries - or an `AbstractVector{X}` type, in which case any number
+of trailing bytes->bytes codecs is accepted and each is parsed as an `X`
+(the `ZarrTrimmable` codec-pool case).
+
+This is a `@generated` function so that each position of the tuple stages
+becomes a separate, statically dispatched `getCodec` call.
+"""
+@generated function pipeline_from_json(::Type{V3Pipeline{AA,AB,BB}},
+        codecs::Vector{CodecJSON}, ctx) where {AA,AB,BB}
+    if !(AA <: Tuple)
+        return :(throw(ArgumentError(
+            "the array->array stage of a statically typed v3 pipeline must be a Tuple type")))
+    end
+    naa = length(AA.parameters)
+    stages = Expr[]
+    aa_syms = Symbol[]
+    for i in 1:naa
+        s = Symbol("aa_", i)
+        push!(aa_syms, s)
+        push!(stages, :($s = getCodec($(AA.parameters[i]), codecs[$i], ctx)))
+    end
+    push!(stages, :(ab = getCodec($AB, codecs[$(naa + 1)], ctx)))
+    aa_tuple = Expr(:tuple, aa_syms...)
+    if BB <: Tuple
+        nbb = length(BB.parameters)
+        ntotal = naa + 1 + nbb
+        bb_syms = Symbol[]
+        for j in 1:nbb
+            s = Symbol("bb_", j)
+            push!(bb_syms, s)
+            push!(stages, :($s = getCodec($(BB.parameters[j]), codecs[$(naa + 1 + j)], ctx)))
+        end
+        check = :(length(codecs) == $ntotal || throw(ArgumentError(string(
+            "codec count mismatch: the store's codec chain has ", string(length(codecs)),
+            " codecs but the requested pipeline has ", $(string(ntotal))))))
+        return Expr(:block, check, stages...,
+            :(V3Pipeline{AA,AB,BB}($aa_tuple, ab, $(Expr(:tuple, bb_syms...)))))
+    elseif BB <: AbstractVector
+        X = eltype(BB)
+        nmin = naa + 1
+        check = :(length(codecs) >= $nmin || throw(ArgumentError(string(
+            "codec count mismatch: the store's codec chain has ", string(length(codecs)),
+            " codecs but the requested pipeline needs at least ", $(string(nmin))))))
+        tail = quote
+            nbb = length(codecs) - $nmin
+            bb = Vector{$X}(undef, nbb)
+            for j in 1:nbb
+                bb[j] = getCodec($X, codecs[$nmin + j], ctx)
+            end
+        end
+        return Expr(:block, check, stages..., tail,
+            :(V3Pipeline{AA,AB,BB}($aa_tuple, ab, bb)))
+    else
+        return :(throw(ArgumentError(
+            "the bytes->bytes stage of a statically typed v3 pipeline must be a Tuple or a Vector type")))
+    end
 end
 
 @static if VERSION >= v"1.11"
