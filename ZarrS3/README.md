@@ -18,18 +18,20 @@ including when accessing S3 through the `Zarr` facade.
 
 ## Quick example
 
-With AWS credentials/configuration set up for AWSS3, replace the bucket and
-path with an existing Zarr array you can access:
+Read a few time coordinates from the public MUR sea-surface-temperature
+dataset used by this repository's tests. No AWS credentials are needed:
 
 ```julia
-using ZarrCore, ZarrS3, AWSS3
+using ZarrCore, ZarrS3, ZarrBlosc, AWSS3
 
-a = zopen("s3://my-bucket/data.zarr", "r")
-size(a)
+config = AWSS3.AWS.AWSConfig(creds=nothing, region="us-west-2")
+path = AWSS3.S3Path("s3://mur-sst/zarr-v1", config=config)
+g = zopen(path, "r")
+g["time"][1:5] # [0, 1, 2, 3, 4]
 ```
 
-Load the appropriate compressor package (such as `ZarrBlosc`) before reading
-compressed chunks. To use a custom AWS configuration, construct
+This example requires internet access and loads `ZarrBlosc` to decode compressed
+chunks. For private data, use your authenticated AWS configuration. Alternatively, construct
 `S3Store("my-bucket"; aws=config)` and pass it to `zopen` with `path="data.zarr"`.
 
 [Main README](../README.md) · [Documentation](https://juliaio.github.io/Zarr.jl/) · [License](../LICENSE.md)

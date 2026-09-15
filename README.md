@@ -41,16 +41,21 @@ Julia 1.10, develop sibling packages with explicit relative paths, for example
 
 ## Quick start
 
-````julia
+```julia
 using Zarr
-z1 = zcreate(Int, 10000,10000,path = "data/example.zarr",chunks=(1000, 1000))
-z1[:] .= 42
-z1[:,1] = 1:10000
-z1[1,:] = 1:10000
 
-z2 = zopen("data/example.zarr")
-z2[1:10,1:10]
-````
+path = joinpath(mktempdir(), "example.zarr")
+z1 = zcreate(Int, 100, 100; path, chunks=(10, 10))
+z1[:, :] .= 42
+z1[:, 1] = 1:100
+z1[1, :] = 1:100
+
+z2 = zopen(path, "r")
+z2[1:10, 1:10]
+```
+
+Use one index per dimension: `z1[:, :]` selects the entire two-dimensional
+array; `z1[:]` is only valid for a one-dimensional Zarr array.
 
 ## Links
 - https://discourse.julialang.org/t/a-julia-compatible-alternative-to-zarr/11842

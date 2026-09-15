@@ -16,19 +16,21 @@ Read-only Google Cloud Storage access for Zarr arrays and groups.
 
 ## Quick example
 
-Replace the bucket and path with an existing Zarr array you can access:
+Read a few latitude coordinates from the public CMIP6 dataset used by this
+repository's tests. No Google Cloud credentials are needed:
 
 ```julia
-using ZarrCore, ZarrGCS
+using ZarrCore, ZarrGCS, ZarrBlosc
 
-# For private data, configure credentials before opening:
-# ZarrGCS.gcs_credentials("my-project", ENV["GCS_ACCESS_TOKEN"], "Bearer")
-
-a = zopen("gs://my-bucket/data.zarr", "r")
-size(a)
+url = "gs://cmip6/CMIP6/HighResMIP/CMCC/CMCC-CM2-HR4/" *
+      "highresSST-present/r1i1p1f1/6hrPlev/psl/gn/v20170706"
+g = zopen(url, "r")
+g["lat"][1:4] # approximately [-90.0, -89.0576, -88.1152, -87.1728]
 ```
 
-Public data can be read without credentials. Load the appropriate compressor
-package (such as `ZarrBlosc`) before reading compressed chunks.
+This example requires internet access and loads `ZarrBlosc` to decode compressed
+chunks. For private data, call
+`ZarrGCS.gcs_credentials("my-project", ENV["GCS_ACCESS_TOKEN"], "Bearer")`
+before opening the dataset.
 
 [Main README](../README.md) · [Documentation](https://juliaio.github.io/Zarr.jl/) · [License](../LICENSE.md)
