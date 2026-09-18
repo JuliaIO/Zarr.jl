@@ -141,6 +141,27 @@ end
     reopened = zopen(python_path)
     @test any(c -> c isa IrregularChunks, DiskArrays.eachchunk(reopened).chunks)
     @test permutedims(reopened[:, :], (2, 1)) == python_data
+
+    # A regular axis that does not divide the extent stores a full-size final
+    # chunk, in both directions.
+    edge_path = tempname()
+    edge_chunks = GridChunks(
+        RegularChunks(4, 0, 18),
+        IrregularChunks(; chunksizes=[3, 4, 5, 6, 2]),
+    )
+    edge = zcreate(Int32, 18, 20;
+        zarr_format=3,
+        path=edge_path,
+        chunks=edge_chunks,
+        compressor=Zarr.NoCompressor(),
+    )
+    edge_data = reshape(Int32.(1:360), 18, 20)
+    edge[:, :] = edge_data
+    py_edge = zarr.open_array(edge_path, mode="r+")
+    @test pyconvert(Array, py_edge[pybuiltins.Ellipsis]) == permutedims(edge_data, (2, 1))
+
+    py_edge.__setitem__(pybuiltins.Ellipsis, numpy.array(permutedims(edge_data .+ Int32(1), (2, 1))))
+    @test zopen(edge_path)[:, :] == edge_data .+ Int32(1)
 end
 
 #Also save as zip file.

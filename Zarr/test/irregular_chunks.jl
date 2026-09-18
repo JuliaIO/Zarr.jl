@@ -29,7 +29,7 @@ using DiskArrays: DiskArrays, GridChunks, IrregularChunks, RegularChunks
         ])
         expected_lengths = sort(vec([
             sizeof(Int32) * rows * columns
-            for rows in (2, 2, 1), columns in (3, 4, 5, 6, 2)
+            for rows in (2, 2, 2), columns in (3, 4, 5, 6, 2)
         ]))
         @test stored_lengths == expected_lengths
     end
@@ -85,18 +85,19 @@ using DiskArrays: DiskArrays, GridChunks, IrregularChunks, RegularChunks
         end
     end
 
-    @testset "metadata validation and boundary clipping" begin
+    @testset "metadata validation" begin
         z = zcreate(Int32, 5, 20;
             zarr_format=3,
             chunks,
             compressor=Zarr.NoCompressor(),
         )
         metadata = JSON.parse(JSON.json(z.metadata); dicttype=Dict{String,Any})
-        metadata["chunk_grid"]["configuration"]["chunk_shapes"][1] = Any[3, 4, 5, 10]
-        parsed = ZarrCore.Metadata(metadata, false)
-        parsed_axis = parsed.chunks.chunks[2]
-        @test parsed_axis isa IrregularChunks
-        @test diff(parsed_axis.offsets) == [3, 4, 5, 8]
+        @test ZarrCore.Metadata(metadata, false) == z.metadata
+
+        # Legal per the spec, but chunks extending past the array are not supported.
+        overflowing = deepcopy(metadata)
+        overflowing["chunk_grid"]["configuration"]["chunk_shapes"][1] = Any[3, 4, 5, 10]
+        @test_throws ArgumentError ZarrCore.Metadata(overflowing, false)
 
         too_short = deepcopy(metadata)
         too_short["chunk_grid"]["configuration"]["chunk_shapes"][1] = Any[3, 4]
@@ -119,10 +120,34 @@ using DiskArrays: DiskArrays, GridChunks, IrregularChunks, RegularChunks
         @test_throws ArgumentError zcreate(Int, 5, 20; zarr_format=2, chunks=chunks)
     end
 
-    @testset "resize rejection does not mutate the array" begin
-        z = zcreate(Int, 5, 20; zarr_format=3, chunks)
-        @test_throws ArgumentError resize!(z, 6, 20)
-        @test size(z) == (5, 20)
-        @test DiskArrays.eachchunk(z) == chunks
+    @testset "resize and append along regular axes" begin
+        mktempdir() do dir
+            z = zcreate(Int, 5, 20; zarr_format=3, chunks, path=dir, fill_value=0)
+            data = reshape(1:100, 5, 20)
+            z[:, :] = data
+
+            # Irregular axes cannot change, and the rejection leaves the array untouched.
+            @test_throws ArgumentError resize!(z, 5, 21)
+            @test_throws ArgumentError resize!(z, 5, 18)
+            @test size(z) == (5, 20)
+            @test DiskArrays.eachchunk(z) == chunks
+
+            append!(z, fill(7, 3, 20); dims=1)
+            @test size(z) == (8, 20)
+            @test DiskArrays.eachchunk(z) == GridChunks(RegularChunks(2, 0, 8), chunks.chunks[2])
+            @test z[:, :] == vcat(data, fill(7, 3, 20))
+
+            reopened = zopen(dir, "w")
+            @test DiskArrays.eachchunk(reopened) == DiskArrays.eachchunk(z)
+            @test reopened[:, :] == vcat(data, fill(7, 3, 20))
+
+            resize!(reopened, 3, 20)
+            @test reopened[:, :] == data[1:3, :]
+            @test !isfile(joinpath(dir, "c", "0", "2"))
+            @test isfile(joinpath(dir, "c", "0", "1"))
+            resize!(reopened, 5, 20)
+            @test reopened[1:3, :] == data[1:3, :]
+            @test all(iszero, reopened[5, :])
+        end
     end
 end

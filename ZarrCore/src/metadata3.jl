@@ -93,11 +93,9 @@ end
 validate_v3_chunks(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N} =
     validate_chunk_grid(shape, chunks)
 
-function canonical_v3_chunks(shape::NTuple{N,Int}, chunks::NTuple{N,Int}) where {N}
-    validate_v3_chunks(shape, chunks)
-    return chunks
-end
+canonical_v3_chunks(shape::NTuple{N,Int}, chunks::NTuple{N,Int}) where {N} = validate_v3_chunks(shape, chunks)
 
+# A grid of only regular axes is a `regular` chunk grid, stored as its chunk sizes.
 function canonical_v3_chunks(shape::NTuple{N,Int}, chunks::DiskArrays.GridChunks{N}) where {N}
     validate_v3_chunks(shape, chunks)
     if all(c -> c isa DiskArrays.RegularChunks, chunks.chunks)
@@ -141,7 +139,7 @@ function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.zarr_format == m2.zarr_format &&
   m1.node_type == m2.node_type &&
   m1.shape[] == m2.shape[] &&
-  m1.chunks == m2.chunks &&
+  chunkgrid(m1) == chunkgrid(m2) &&
   m1.dtype == m2.dtype &&
   m1.fill_value == m2.fill_value &&
   m1.pipeline == m2.pipeline &&
@@ -197,7 +195,7 @@ _sizeof(x::Type{String}) = 1
 function decode_rectilinear_axis(spec, axis_length::Int, axis::Int)
     if spec isa Integer
         spec >= 1 || throw(ArgumentError("Rectilinear chunk size on axis $axis must be >= 1"))
-        return DiskArrays.RegularChunks(spec, 0, axis_length)
+        return DiskArrays.RegularChunks(Int(spec), 0, axis_length)
     end
     spec isa AbstractVector ||
         throw(ArgumentError("Rectilinear chunk_shapes entry for axis $axis must be an integer or a list"))
@@ -221,28 +219,19 @@ function decode_rectilinear_axis(spec, axis_length::Int, axis::Int)
         end
     end
 
-    if axis_length == 0
-        isempty(chunk_sizes) || throw(ArgumentError("A zero-length axis cannot contain rectilinear chunks (axis $axis)"))
-        return DiskArrays.IrregularChunks([0])
-    end
-    isempty(chunk_sizes) && throw(ArgumentError("Rectilinear chunk list on axis $axis cannot be empty"))
-
     covered = sum(chunk_sizes)
-    covered >= axis_length || throw(DimensionMismatch(
-        "Rectilinear chunks on axis $axis cover $covered elements, expected at least $axis_length"
+    covered < axis_length && throw(DimensionMismatch(
+        "Rectilinear chunks on axis $axis cover $covered elements, expected $axis_length"
     ))
-    covered_before_last = covered - last(chunk_sizes)
-    covered_before_last < axis_length || throw(DimensionMismatch(
-        "Rectilinear chunks on axis $axis contain chunks beyond the array extent $axis_length"
+    # The spec allows this, but `IrregularChunks` cannot describe chunks that extend past the array.
+    covered > axis_length && throw(ArgumentError(
+        "Rectilinear chunks on axis $axis cover $covered elements, which overflows the axis length " *
+        "$axis_length; overflowing chunk edges are not supported"
     ))
-    chunk_sizes[end] = axis_length - covered_before_last
     return DiskArrays.IrregularChunks(; chunksizes=chunk_sizes)
 end
 
-function encode_rectilinear_axis(chunks::DiskArrays.RegularChunks)
-    chunks.offset == 0 || throw(ArgumentError("Zarr rectilinear grids cannot encode non-zero chunk offsets"))
-    return chunks.chunksize
-end
+encode_rectilinear_axis(chunks::DiskArrays.RegularChunks) = chunks.chunksize
 
 function encode_rectilinear_axis(chunks::DiskArrays.IrregularChunks)
     sizes = diff(chunks.offsets)
@@ -406,7 +395,7 @@ function lower3(md::MetadataV3{T}) where T
             "name" => "rectilinear",
             "configuration" => Dict{String,Any}(
                 "kind" => "inline",
-                "chunk_shapes" => map(encode_rectilinear_axis, reverse(md.chunks.chunks))
+                "chunk_shapes" => Any[encode_rectilinear_axis(c) for c in reverse(md.chunks.chunks)]
             )
         )
     else

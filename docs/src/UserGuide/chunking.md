@@ -54,10 +54,18 @@ them.
 ## Metadata and interoperability
 
 Zarr.jl serializes an irregular grid using Zarr v3's `rectilinear` chunk-grid
-extension with an inline `chunk_shapes` configuration. Repeated sizes are
-run-length encoded, and each storage chunk is encoded at its actual grid
-extent rather than padded to a global maximum. This layout can be exchanged
-with zarr-python.
+extension with an inline `chunk_shapes` configuration. A regular axis is
+written as its chunk size, an irregular axis as its list of edge lengths with
+repeated sizes run-length encoded. This layout can be exchanged with
+zarr-python.
+
+Each storage chunk is encoded at its own size rather than padded to a global
+maximum. As in a regular grid, the final chunk of a regular axis is stored at
+the full chunk size even when the axis length is not a multiple of it.
+
+The specification also allows a list of edge lengths to overflow the array
+extent. Zarr.jl does not support this and throws an `ArgumentError` when
+opening such an array.
 
 The grid survives reopening:
 
@@ -74,7 +82,14 @@ true
 
 ## Resizing
 
-`resize!` and `append!` are not supported for rectilinear arrays. Changing the
-array extent would also require defining new per-axis chunk lengths, so Zarr.jl
-throws an `ArgumentError` before modifying the array. Regular arrays remain
-resizable.
+`resize!` and `append!` work along the regular axes of a rectilinear array:
+
+````jldoctest rectilinear-chunks
+julia> append!(z, fill(7, 3, 20); dims=1)
+
+julia> size(z)
+(8, 20)
+````
+
+Changing the extent of an irregular axis would require defining new edge
+lengths, so Zarr.jl throws an `ArgumentError` before modifying the array.

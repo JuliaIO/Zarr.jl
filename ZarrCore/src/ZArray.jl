@@ -97,7 +97,7 @@ function zinfo(io::IO,z::ZArray)
   "Type" => "ZArray",
   "Data type" => eltype(z),
   "Shape" => size(z),
-  "Chunk Shape" => chunk_buffer_shape(z),
+  "Chunk Shape" => chunk_edges(z.metadata.chunks),
   "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,
   "Compressor" => z.metadata isa MetadataV2 ? z.metadata.compressor : get_pipeline(z.metadata),
@@ -132,9 +132,24 @@ dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
 chunkgrid(md::AbstractMetadata) = chunkgrid(md.shape[], md.chunks)
 chunkgrid(shape, chunks::NTuple) = DiskArrays.GridChunks(shape, chunks)
-chunkgrid(::Any, chunks::DiskArrays.GridChunks) = chunks
+# The metadata is immutable, so after `resize!` the regular axes of a stored
+# grid still describe the old extent.
+function chunkgrid(shape, chunks::DiskArrays.GridChunks)
+  return DiskArrays.GridChunks(map(chunks.chunks, shape) do c, axis_length
+    c isa DiskArrays.RegularChunks ? DiskArrays.RegularChunks(c.chunksize, 0, axis_length) : c
+  end)
+end
 
-chunk_buffer_shape(z::ZArray) = DiskArrays.max_chunksize(DiskArrays.eachchunk(z))
+# Per-axis chunk sizes: an `Int` for a regular axis, the list of sizes otherwise.
+chunk_edges(chunks::NTuple) = chunks
+chunk_edges(chunks::DiskArrays.GridChunks) = map(chunk_edges, chunks.chunks)
+chunk_edges(chunks::DiskArrays.RegularChunks) = chunks.chunksize
+chunk_edges(chunks::DiskArrays.IrregularChunks) = diff(chunks.offsets)
+
+# Shape of the largest stored chunk, which sizes the scratch buffer.
+chunk_buffer_shape(z::ZArray) = chunk_buffer_shape(z.metadata.chunks)
+chunk_buffer_shape(chunks::NTuple) = chunks
+chunk_buffer_shape(chunks::DiskArrays.GridChunks) = DiskArrays.max_chunksize(chunks)
 
 function stored_chunk_ranges(md::AbstractMetadata, index::CartesianIndex{N}) where {N}
   return stored_chunk_ranges(md.chunks, index)
@@ -149,8 +164,12 @@ function stored_chunk_ranges(chunks::NTuple{N,Int}, index::CartesianIndex{N}) wh
 end
 
 function stored_chunk_ranges(chunks::DiskArrays.GridChunks{N}, index::CartesianIndex{N}) where {N}
-  return getindex(chunks, Tuple(index)...)
+  return ntuple(axis -> stored_axis_range(chunks.chunks[axis], index[axis]), N)
 end
+
+# As in a regular grid, the final chunk of a regular axis is stored at full size.
+stored_axis_range(chunks::DiskArrays.RegularChunks, i::Int) = ((i - 1) * chunks.chunksize + 1):(i * chunks.chunksize)
+stored_axis_range(chunks::DiskArrays.IrregularChunks, i::Int) = chunks[i]
 
 function boundint(r1, s2, o2)
   r2 = range(o2+1,length=s2)
@@ -538,7 +557,7 @@ end
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(size(DiskArrays.eachchunk(z)))
+chunkindices(z::ZArray) = CartesianIndices(chunkcounts(z.metadata.chunks, size(z)))
 
 """
     zzeros(T, dims...; kwargs... )
@@ -579,8 +598,12 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   z.writeable || error("Can not resize read-only ZArray")
   any(<(0), newsize) && throw(ArgumentError("Size must be positive"))
   oldsize = z.metadata.shape[]
-  if z.metadata.chunks isa DiskArrays.GridChunks && newsize != oldsize
-    throw(ArgumentError("Resizing arrays with rectilinear chunk grids is not supported"))
+  chunks = z.metadata.chunks
+  if chunks isa DiskArrays.GridChunks
+    for axis in 1:N
+      chunks.chunks[axis] isa DiskArrays.RegularChunks || newsize[axis] == oldsize[axis] ||
+        throw(ArgumentError("Cannot resize axis $axis: resizing along irregularly chunked axes is not supported"))
+    end
   end
   z.metadata.shape[] = newsize
   # Write the metadata before deleting chunks, so a store that rejects the
@@ -593,7 +616,7 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   end
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
-    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_key_encoding)
+    prune_oob_chunks(z.storage, z.path, chunkcounts(chunks, oldsize), chunkcounts(chunks, newsize), z.metadata.chunk_key_encoding)
   end
   nothing
 end
@@ -635,11 +658,19 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
   nothing
 end
 
-function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_key_encoding)
-  dimstoshorten = findall(map(<,newsize, oldsize))
+# `length(RegularChunks)` is 1 for an empty axis, so count chunks from the sizes.
+chunkcounts(chunks::NTuple, shape) = map(cld, shape, chunks)
+function chunkcounts(chunks::DiskArrays.GridChunks, shape)
+  return map(chunks.chunks, shape) do c, axis_length
+    c isa DiskArrays.RegularChunks ? cld(axis_length, c.chunksize) : length(c)
+  end
+end
+
+function prune_oob_chunks(s::AbstractStore, path, oldcounts, newcounts, chunk_key_encoding)
+  dimstoshorten = findall(map(<,newcounts, oldcounts))
   for idim in dimstoshorten
-    delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
-    allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
+    delrange = (newcounts[idim]+1):oldcounts[idim]
+    allchunkranges = map(n->1:n, oldcounts)
     r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
     for cI in CartesianIndices(r)
       store_deletechunk(s, path, cI, chunk_key_encoding)
