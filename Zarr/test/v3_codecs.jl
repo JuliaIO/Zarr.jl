@@ -435,7 +435,7 @@ end
     md = ZarrCore.Metadata(json_str, false)
     @test md isa ZarrCore.MetadataV3
     @test md.shape[] == (4,)
-    @test md.chunks == (4,)
+    @test md.chunks[] == (4,)
     @test md.fill_value == Int32(0)
 
     pipeline = ZarrCore.get_pipeline(md)

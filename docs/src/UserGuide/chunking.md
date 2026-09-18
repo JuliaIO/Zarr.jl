@@ -82,14 +82,28 @@ true
 
 ## Resizing
 
-`resize!` and `append!` work along the regular axes of a rectilinear array:
+`resize!` and `append!` work on rectilinear arrays. A regular axis keeps its
+chunk size. Growing an irregular axis appends one chunk covering the added
+extent, as zarr-python does:
 
 ````jldoctest rectilinear-chunks
 julia> append!(z, fill(7, 3, 20); dims=1)
 
+julia> append!(z, fill(9, 8, 4); dims=2)
+
 julia> size(z)
-(8, 20)
+(8, 24)
+
+julia> length.(DiskArrays.eachchunk(z).chunks[2])
+6-element Vector{Int64}:
+ 3
+ 4
+ 5
+ 6
+ 2
+ 4
 ````
 
-Changing the extent of an irregular axis would require defining new edge
-lengths, so Zarr.jl throws an `ArgumentError` before modifying the array.
+Shrinking an irregular axis is not supported: zarr-python does it by letting
+the edge lengths overflow the array, which Zarr.jl cannot represent (see
+above). Zarr.jl throws an `ArgumentError` before modifying the array.

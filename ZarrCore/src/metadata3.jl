@@ -67,7 +67,7 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding,CT} <
     zarr_format::Int
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
-    chunks::CT
+    chunks::Base.RefValue{CT}  # replaced by `resize!` when the chunk grid is rectilinear
     dtype::Union{String, Dict{String, Any}}  # data_type in v3
     pipeline::P
     fill_value::Union{T, Nothing}
@@ -77,7 +77,7 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding,CT} <
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         validate_v3_chunks(shape, chunks)
-        new{T2,N,P,E,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+        new{T2,N,P,E,CT}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), Base.RefValue{CT}(chunks), dtype, pipeline, fill_value, chunk_key_encoding)
     end
 end
 MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding) where {T2,N,P,E} =
@@ -139,7 +139,7 @@ function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.zarr_format == m2.zarr_format &&
   m1.node_type == m2.node_type &&
   m1.shape[] == m2.shape[] &&
-  chunkgrid(m1) == chunkgrid(m2) &&
+  m1.chunks[] == m2.chunks[] &&
   m1.dtype == m2.dtype &&
   m1.fill_value == m2.fill_value &&
   m1.pipeline == m2.pipeline &&
@@ -390,19 +390,20 @@ function Metadata3(A::AbstractArray{T, N}, chunks;
 end
 
 function lower3(md::MetadataV3{T}) where T
-    chunk_grid = if md.chunks isa DiskArrays.GridChunks
+    chunks = md.chunks[]
+    chunk_grid = if chunks isa DiskArrays.GridChunks
         Dict{String,Any}(
             "name" => "rectilinear",
             "configuration" => Dict{String,Any}(
                 "kind" => "inline",
-                "chunk_shapes" => Any[encode_rectilinear_axis(c) for c in reverse(md.chunks.chunks)]
+                "chunk_shapes" => Any[encode_rectilinear_axis(c) for c in reverse(chunks.chunks)]
             )
         )
     else
         Dict{String,Any}(
             "name" => "regular",
             "configuration" => Dict{String,Any}(
-                "chunk_shape" => reverse(md.chunks)
+                "chunk_shape" => reverse(chunks)
             )
         )
     end

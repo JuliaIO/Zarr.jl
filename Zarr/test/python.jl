@@ -162,6 +162,18 @@ end
 
     py_edge.__setitem__(pybuiltins.Ellipsis, numpy.array(permutedims(edge_data .+ Int32(1), (2, 1))))
     @test zopen(edge_path)[:, :] == edge_data .+ Int32(1)
+
+    # Both sides grow an irregular axis by appending one chunk.
+    append!(zopen(edge_path, "w"), fill(Int32(-3), 18, 5); dims=2)
+    py_grown = zarr.open_array(edge_path, mode="r+")
+    @test pyconvert(Tuple, py_grown.shape) == (25, 18)
+    @test pyconvert(Array, py_grown[pybuiltins.Ellipsis]) ==
+        permutedims(hcat(edge_data .+ Int32(1), fill(Int32(-3), 18, 5)), (2, 1))
+    py_grown.resize((28, 18))
+    jl_grown = zopen(edge_path)
+    @test size(jl_grown) == (18, 28)
+    @test diff(DiskArrays.eachchunk(jl_grown).chunks[2].offsets) == [3, 4, 5, 6, 2, 5, 3]
+    @test all(iszero, jl_grown[:, 26:28])
 end
 
 #Also save as zip file.

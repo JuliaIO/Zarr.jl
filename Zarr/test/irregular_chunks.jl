@@ -120,15 +120,15 @@ using DiskArrays: DiskArrays, GridChunks, IrregularChunks, RegularChunks
         @test_throws ArgumentError zcreate(Int, 5, 20; zarr_format=2, chunks=chunks)
     end
 
-    @testset "resize and append along regular axes" begin
+    @testset "resize and append" begin
         mktempdir() do dir
             z = zcreate(Int, 5, 20; zarr_format=3, chunks, path=dir, fill_value=0)
             data = reshape(1:100, 5, 20)
             z[:, :] = data
 
-            # Irregular axes cannot change, and the rejection leaves the array untouched.
-            @test_throws ArgumentError resize!(z, 5, 21)
+            # Irregular axes cannot shrink, and the rejection leaves the array untouched.
             @test_throws ArgumentError resize!(z, 5, 18)
+            @test_throws ArgumentError resize!(z, 8, 18)
             @test size(z) == (5, 20)
             @test DiskArrays.eachchunk(z) == chunks
 
@@ -148,6 +148,14 @@ using DiskArrays: DiskArrays, GridChunks, IrregularChunks, RegularChunks
             resize!(reopened, 5, 20)
             @test reopened[1:3, :] == data[1:3, :]
             @test all(iszero, reopened[5, :])
+
+            # Growing an irregular axis appends one chunk, as zarr-python does.
+            append!(reopened, fill(9, 5, 4); dims=2)
+            @test DiskArrays.eachchunk(reopened).chunks[2] ==
+                IrregularChunks(; chunksizes=[3, 4, 5, 6, 2, 4])
+            @test reopened.metadata == zopen(dir).metadata
+            @test zopen(dir)[:, 21:24] == fill(9, 5, 4)
+            @test zopen(dir)[1:3, 1:20] == data[1:3, :]
         end
     end
 end
