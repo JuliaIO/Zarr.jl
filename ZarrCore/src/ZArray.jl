@@ -534,14 +534,22 @@ Resizes a `ZArray` to the new specified size. If the size along any of the
 axes is decreased, unused chunks will be deleted from the store.
 """
 function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
+  z.writeable || error("Can not resize read-only ZArray")
   any(<(0), newsize) && throw(ArgumentError("Size must be positive"))
   oldsize = z.metadata.shape[]
   z.metadata.shape[] = newsize
+  # Write the metadata before deleting chunks, so a store that rejects the
+  # write (e.g. consolidated metadata) loses no data.
+  try
+    writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
+  catch
+    z.metadata.shape[] = oldsize
+    rethrow()
+  end
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
     prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_key_encoding)
   end
-  writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
   nothing
 end
 Base.resize!(z::ZArray, newsize::Integer...) = resize!(z,newsize)
