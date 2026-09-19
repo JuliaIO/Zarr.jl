@@ -406,6 +406,18 @@ end
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
   @test_throws ArgumentError resize!(a,(-1,2))
+
+  # A read-only array must not touch the stored metadata or chunks.
+  mktempdir() do dir
+    w = zzeros(Int64, 10, 10, path=dir, chunks=(5,2))
+    chunkfiles = sort(readdir(dir))
+    readonly = zopen(dir)
+    @test_throws ErrorException resize!(readonly, 5, 4)
+    @test_throws ErrorException append!(readonly, ones(Int64, 10, 2))
+    @test size(readonly) == (10, 10)
+    @test size(zopen(dir)) == (10, 10)
+    @test sort(readdir(dir)) == chunkfiles
+  end
 end
 
 @testset "zcreate does not allocate dense storage" begin

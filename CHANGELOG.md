@@ -2,6 +2,8 @@
 
 ## Unreleased
 - Move all packages to sibling top-level directories and make the root project workspace-only.
+- `resize!` and `append!` now throw on a read-only `ZArray` instead of rewriting its metadata and deleting chunks.
+- `resize!` through a `ConsolidatedStore` no longer deletes chunks or changes the in-memory shape before failing, and Zarr v3 consolidated stores now reject it like v2 ones instead of leaving the consolidated metadata stale.
 - Move code to ZarrCore.jl with low dependencies
 - Move HTTP, GCS, S3, and ZIP backends into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`.
 - Move Blosc, zlib, and Zstandard support into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`; each provides its v2 compressor and v3 codec.
