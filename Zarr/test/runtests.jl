@@ -517,6 +517,8 @@ include("storage.jl")
 
 include("Filters.jl")
 
+include("irregular_chunks.jl")
+
 include("python.jl")
 
 include("v3_codecs.jl")

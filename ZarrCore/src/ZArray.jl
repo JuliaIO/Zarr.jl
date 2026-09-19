@@ -97,7 +97,7 @@ function zinfo(io::IO,z::ZArray)
   "Type" => "ZArray",
   "Data type" => eltype(z),
   "Shape" => size(z),
-  "Chunk Shape" => z.metadata.chunks,
+  "Chunk Shape" => chunk_edges(chunkspec(z.metadata)),
   "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,
   "Compressor" => z.metadata isa MetadataV2 ? z.metadata.compressor : get_pipeline(z.metadata),
@@ -130,14 +130,44 @@ zarr_format(z::ZArray) = zarr_format(z.metadata)
 dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
 
-"""
-    trans_ind(r, bs)
+# Chunk sizes as a tuple for a regular grid, or a `GridChunks` for a rectilinear one.
+chunkspec(md::MetadataV2) = md.chunks
+chunkspec(md::MetadataV3) = md.chunks[]
 
-For a given index and blocksize determines which chunks of the Zarray will have to
-be accessed.
-"""
-trans_ind(r::AbstractUnitRange, bs) = fld1(first(r),bs):fld1(last(r),bs)
-trans_ind(r::Integer, bs) = fld1(r,bs)
+chunkgrid(md::AbstractMetadata) = chunkgrid(md.shape[], chunkspec(md))
+chunkgrid(shape, chunks::NTuple) = DiskArrays.GridChunks(shape, chunks)
+chunkgrid(::Any, chunks::DiskArrays.GridChunks) = chunks
+
+# Per-axis chunk sizes: an `Int` for a regular axis, the list of sizes otherwise.
+chunk_edges(chunks::NTuple) = chunks
+chunk_edges(chunks::DiskArrays.GridChunks) = map(chunk_edges, chunks.chunks)
+chunk_edges(chunks::DiskArrays.RegularChunks) = chunks.chunksize
+chunk_edges(chunks::DiskArrays.IrregularChunks) = diff(chunks.offsets)
+
+# Shape of the largest stored chunk, which sizes the scratch buffer.
+chunk_buffer_shape(z::ZArray) = chunk_buffer_shape(chunkspec(z.metadata))
+chunk_buffer_shape(chunks::NTuple) = chunks
+chunk_buffer_shape(chunks::DiskArrays.GridChunks) = DiskArrays.max_chunksize(chunks)
+
+function stored_chunk_ranges(md::AbstractMetadata, index::CartesianIndex{N}) where {N}
+  return stored_chunk_ranges(chunkspec(md), index)
+end
+
+function stored_chunk_ranges(chunks::NTuple{N,Int}, index::CartesianIndex{N}) where {N}
+  return ntuple(N) do axis
+    chunk_size = chunks[axis]
+    chunk_index = index[axis]
+    ((chunk_index - 1) * chunk_size + 1):(chunk_index * chunk_size)
+  end
+end
+
+function stored_chunk_ranges(chunks::DiskArrays.GridChunks{N}, index::CartesianIndex{N}) where {N}
+  return ntuple(axis -> stored_axis_range(chunks.chunks[axis], index[axis]), N)
+end
+
+# As in a regular grid, the final chunk of a regular axis is stored at full size.
+stored_axis_range(chunks::DiskArrays.RegularChunks, i::Int) = ((i - 1) * chunks.chunksize + 1):(i * chunks.chunksize)
+stored_axis_range(chunks::DiskArrays.IrregularChunks, i::Int) = chunks[i]
 
 function boundint(r1, s2, o2)
   r2 = range(o2+1,length=s2)
@@ -148,7 +178,7 @@ end
 
 function getchunkarray(z::ZArray{>:Missing})
   # temporary workaround to use strings as data values
-  inner = fill(z.metadata.fill_value, z.metadata.chunks)
+  inner = fill(z.metadata.fill_value, chunk_buffer_shape(z))
   a = SenMissArray(inner,z.metadata.fill_value)
 end
 _zero(T) = zero(T)
@@ -156,7 +186,7 @@ _zero(T::Type{<:MaxLengthString}) = zero(T)
 _zero(T::Type{ASCIIChar}) = ASCIIChar(0)
 _zero(::Type{<:Vector{T}}) where T = T[]
 _zero(::Type{Char}) = Char(0)
-getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
+getchunkarray(z::ZArray) = fill(_zero(eltype(z)), chunk_buffer_shape(z))
 
 # Same as `getchunkarray` but skips the zero/fill_value-fill. Use only when
 # the caller guarantees the buffer will be fully overwritten before any read
@@ -168,13 +198,22 @@ getchunkarray(z::ZArray) = fill(_zero(eltype(z)), z.metadata.chunks)
 # friends reject non-isbits eltypes).
 function getchunkarray_undef(z::ZArray{T}) where {T}
     Missing <: T && return getchunkarray(z)
-    return Array{T}(undef, z.metadata.chunks)
+    return Array{T}(undef, chunk_buffer_shape(z))
 end
 
-maybeinner(a::Array) = a
+maybeinner(a::AbstractArray) = a
 maybeinner(a::SenMissArray) = a.x
-resetbuffer!(fv,a::Array) = fv === nothing || fill!(a,fv)
+function maybeinner(a::SubArray{<:Any,<:Any,<:SenMissArray})
+  return view(parent(a).x, parentindices(a)...)
+end
+resetbuffer!(::Nothing,a::Array) = fill!(a,_zero(eltype(a)))
+resetbuffer!(fv,a::Array) = fill!(a,fv)
 resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
+
+function chunk_buffer_view(a, chunk_shape)
+  size(a) == chunk_shape && return a
+  return view(a, Base.OneTo.(chunk_shape)...)
+end
 
 # Returns the chunk index when the call qualifies for the single-chunk fast
 # path: a plain `Array{T,N}` matching the chunk shape, `Missing <: T` false,
@@ -182,9 +221,10 @@ resetbuffer!(_,a::SenMissArray) = fill!(a,missing)
 # implies the slice aligns with that chunk's full range, so no extra
 # coverage check is needed.
 function singlechunk_fastpath(arr, z::ZArray{T,N}, blockr::CartesianIndices{N}) where {T,N}
-  arr isa Array{T,N} && !(Missing <: T) &&
-    size(arr) == z.metadata.chunks && length(blockr) == 1 || return nothing
-  return first(blockr)
+  arr isa Array{T,N} && !(Missing <: T) && length(blockr) == 1 || return nothing
+  chunk_index = first(blockr)
+  size(arr) == length.(stored_chunk_ranges(z.metadata, chunk_index)) || return nothing
+  return chunk_index
 end
 
 # Single-chunk full-overwrite write. Encodes `ain` and pushes the chunk to
@@ -234,7 +274,8 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
 
   output_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
-  blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
+  chunks = DiskArrays.eachchunk(z)
+  blockr = CartesianIndices(map(DiskArrays.findchunk, chunks.chunks, r.indices))
   # Fast path: single-chunk full-read decodes directly into `aout`, skipping the readtask channel and scratch buffer.
   bI = singlechunk_fastpath(aout, z, blockr)
   if bI !== nothing
@@ -260,11 +301,13 @@ function readblock!(aout::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       
       bI,chunk_compressed = take!(c)
       
-      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
+      chunk_ranges = stored_chunk_ranges(z.metadata, bI)
+      current_chunk_shape = length.(chunk_ranges)
+      current_chunk_offsets = first.(chunk_ranges) .- 1
+      indranges = map(boundint, r.indices, current_chunk_shape, current_chunk_offsets)
+      active_buffer = chunk_buffer_view(a, current_chunk_shape)
 
-      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-      
-      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,a,indranges)
+      uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,current_chunk_offsets,active_buffer,indranges)
       nothing
     end
   finally
@@ -279,7 +322,8 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
   z.writeable || error("Can not write to read-only ZArray")
   input_base_offsets = map(i->first(i)-1,r.indices)
   # Determines which chunks are affected
-  blockr = CartesianIndices(map(trans_ind, r.indices, z.metadata.chunks))
+  chunks = DiskArrays.eachchunk(z)
+  blockr = CartesianIndices(map(DiskArrays.findchunk, chunks.chunks, r.indices))
   # Fast path: single-chunk full-overwrite skips the readtask/writetask channels and the scratch buffer.
   bI = singlechunk_fastpath(ain, z, blockr)
   if bI !== nothing
@@ -311,27 +355,26 @@ function writeblock!(ain::AbstractArray{<:Any,N}, z::ZArray{<:Any, N}, r::Cartes
       
       bI,chunk_compressed = take!(readchannel)
       
-      current_chunk_offsets = map((s,i)->s*(i-1),size(a),Tuple(bI))
+      chunk_ranges = stored_chunk_ranges(z.metadata, bI)
+      current_chunk_shape = length.(chunk_ranges)
+      current_chunk_offsets = first.(chunk_ranges) .- 1
+      indranges = map(boundint, r.indices, current_chunk_shape, current_chunk_offsets)
+      full_chunk = length.(indranges) == current_chunk_shape
 
-      indranges    = map(boundint,r.indices,size(a),current_chunk_offsets)
-
-      if isnothing(chunk_compressed) || (length.(indranges) != size(a))
+      if isnothing(chunk_compressed)
         resetbuffer!(z.metadata.fill_value,a)
       end
 
-      curchunk = if length.(indranges) != size(a)
-        view(a,dotminus.(indranges,current_chunk_offsets)...)
-      else
-        a
-      end
-      
-      if chunk_compressed !== nothing
-        uncompress_raw!(a,z,chunk_compressed)
+      active_buffer = chunk_buffer_view(a, current_chunk_shape)
+      if chunk_compressed !== nothing && !full_chunk
+        uncompress_raw!(active_buffer,z,chunk_compressed)
       end
 
+      curchunk = view(active_buffer,dotminus.(indranges,current_chunk_offsets)...)
       curchunk .= view(ain,dotminus.(indranges,input_base_offsets)...)
 
-      put!(writechannel,bI=>compress_raw(maybeinner(a),z))
+      active_inner = chunk_buffer_view(maybeinner(a), current_chunk_shape)
+      put!(writechannel,bI=>compress_raw(active_inner,z))
       nothing
     end
   finally
@@ -345,7 +388,7 @@ end
 DiskArrays.readblock!(a::ZArray,aout,i::AbstractUnitRange...) = readblock!(aout,a,CartesianIndices(i))
 DiskArrays.writeblock!(a::ZArray,v,i::AbstractUnitRange...) = writeblock!(v,a,CartesianIndices(i))
 DiskArrays.haschunks(::ZArray) = DiskArrays.Chunked()
-DiskArrays.eachchunk(a::ZArray) = DiskArrays.GridChunks(a,a.metadata.chunks)
+DiskArrays.eachchunk(a::ZArray) = chunkgrid(a.metadata)
 
 """
     uncompress_raw!(a::DenseArray{T},z::ZArray{T,N},i::CartesianIndex{N})
@@ -359,7 +402,7 @@ function uncompress_raw!(a,z::ZArray{<:Any,N},curchunk) where N
     end
     fill!(a, z.metadata.fill_value)
   else
-    pipeline_decode!(get_pipeline(z.metadata), a, curchunk; fill_value=z.metadata.fill_value)
+    pipeline_decode!(get_pipeline(z.metadata), maybeinner(a), curchunk; fill_value=z.metadata.fill_value)
   end
   a
 end
@@ -379,7 +422,6 @@ function uncompress_to_output!(aout,output_base_offsets,z,chunk_compressed,curre
 end
 
 function compress_raw(a,z)
-  length(a) == prod(z.metadata.chunks) || throw(DimensionMismatch("Array size does not equal chunk size"))
   pipeline_encode(get_pipeline(z.metadata), a, z.metadata.fill_value)
 end
 
@@ -394,7 +436,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `name=""` name of the zarr array, defaults to the directory name
 * `zarr_format`=$(DV) Zarr format version (2 or 3)
 * `storagetype` determines the storage to use, current options are `DirectoryStore` or `DictStore`
-* `chunks=dims` size of the individual array chunks, must be a tuple of length `length(dims)`
+* `chunks=dims` chunk layout. Pass a tuple of sizes for regular chunks or a `DiskArrays.GridChunks` for a Zarr v3 rectilinear grid.
 * `fill_value=nothing` value to represent missing values
 * `fill_as_missing=false` set to `true` shall fillvalue s be converted to `missing`s
 * `filters`=filters to be applied
@@ -452,9 +494,16 @@ function zcreate(::Type{T},storage::AbstractStore,
   end
   chunk_key_encoding = ChunkKeyEncoding(dimension_separator, default_prefix(v))
   
-  length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
   N = length(dims)
-  C = typeof(compressor)
+  if chunks isa Tuple
+    length(dims) == length(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
+    all(c -> c isa Integer, chunks) || throw(ArgumentError("Chunk sizes must be integers"))
+    chunks = map(Int, chunks)
+  elseif chunks isa DiskArrays.GridChunks
+    length(dims) == ndims(chunks) || throw(DimensionMismatch("Dims must have the same length as chunks"))
+  else
+    throw(ArgumentError("chunks must be a tuple of integers or a DiskArrays.GridChunks object"))
+  end
   
   # Create a dummy array to use with Metadata constructor
   # This allows us to leverage the multiple dispatch in Metadata constructors
@@ -506,7 +555,7 @@ end
 
 Returns the Cartesian Indices of the chunks of a given ZArray
 """
-chunkindices(z::ZArray) = CartesianIndices(map((s, c) -> 1:ceil(Int, s/c), z.metadata.shape[], z.metadata.chunks))
+chunkindices(z::ZArray) = CartesianIndices(chunkcounts(chunkspec(z.metadata), size(z)))
 
 """
     zzeros(T, dims...; kwargs... )
@@ -515,11 +564,21 @@ Creates a zarr array and initializes all values with zero. Accepts the same keyw
 """
 function zzeros(T,dims...;kwargs...)
   z = zcreate(T,dims...;kwargs...)
-  as = zeros(T, z.metadata.chunks...)
-  data_encoded = compress_raw(as,z)
   p = z.path
-  if data_encoded !== nothing
+  chunks = DiskArrays.eachchunk(z)
+  if all(c -> c isa DiskArrays.RegularChunks, chunks.chunks)
+    as = zeros(T, chunk_buffer_shape(z)...)
+    data_encoded = compress_raw(as,z)
+    if data_encoded !== nothing
+      for i in chunkindices(z)
+        store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_key_encoding)
+      end
+    end
+  else
     for i in chunkindices(z)
+      as = zeros(T, length.(stored_chunk_ranges(z.metadata, i))...)
+      data_encoded = compress_raw(as, z)
+      data_encoded === nothing ||
       store_writechunk(z.storage, data_encoded, p, i, z.metadata.chunk_key_encoding)
     end
   end
@@ -537,18 +596,23 @@ function Base.resize!(z::ZArray{T,N}, newsize::NTuple{N}) where {T,N}
   z.writeable || error("Can not resize read-only ZArray")
   any(<(0), newsize) && throw(ArgumentError("Size must be positive"))
   oldsize = z.metadata.shape[]
+  oldchunks = chunkspec(z.metadata)
+  newchunks = resized_chunks(oldchunks, oldsize, newsize)
   z.metadata.shape[] = newsize
+  # Only a rectilinear grid depends on the shape.
+  oldchunks === newchunks || (z.metadata.chunks[] = newchunks)
   # Write the metadata before deleting chunks, so a store that rejects the
   # write (e.g. consolidated metadata) loses no data.
   try
     writemetadata(zarr_format(z), z.storage, z.path, z.metadata)
   catch
     z.metadata.shape[] = oldsize
+    oldchunks === newchunks || (z.metadata.chunks[] = oldchunks)
     rethrow()
   end
   #Check if array was shrunk
   if any(map(<,newsize, oldsize))
-    prune_oob_chunks(z.storage, z.path, oldsize, newsize, z.metadata.chunks, z.metadata.chunk_key_encoding)
+    prune_oob_chunks(z.storage, z.path, chunkcounts(oldchunks, oldsize), chunkcounts(newchunks, newsize), z.metadata.chunk_key_encoding)
   end
   nothing
 end
@@ -590,11 +654,38 @@ function Base.append!(z::ZArray{<:Any, N},a;dims = N) where N
   nothing
 end
 
-function prune_oob_chunks(s::AbstractStore, path, oldsize, newsize, chunks, chunk_key_encoding)
-  dimstoshorten = findall(map(<,newsize, oldsize))
+# `length(RegularChunks)` is 1 for an empty axis, so count chunks from the sizes.
+chunkcounts(chunks::NTuple, shape) = map(cld, shape, chunks)
+function chunkcounts(chunks::DiskArrays.GridChunks, shape)
+  return map(chunks.chunks, shape) do c, axis_length
+    c isa DiskArrays.RegularChunks ? cld(axis_length, c.chunksize) : length(c)
+  end
+end
+
+resized_chunks(chunks::NTuple, oldsize, newsize) = chunks
+function resized_chunks(chunks::DiskArrays.GridChunks{N}, oldsize, newsize) where {N}
+  return DiskArrays.GridChunks(ntuple(N) do axis
+    resized_axis(chunks.chunks[axis], oldsize[axis], newsize[axis], axis)
+  end)
+end
+
+resized_axis(c::DiskArrays.RegularChunks, oldlength, newlength, axis) =
+  DiskArrays.RegularChunks(c.chunksize, 0, newlength)
+function resized_axis(c::DiskArrays.IrregularChunks, oldlength, newlength, axis)
+  newlength == oldlength && return c
+  # zarr-python shrinks by letting the edge lengths overflow the array, which
+  # `IrregularChunks` cannot describe.
+  newlength < oldlength && throw(ArgumentError(
+    "Cannot shrink axis $axis: shrinking along irregularly chunked axes is not supported"))
+  # As in zarr-python, one new chunk covers the added extent.
+  return DiskArrays.IrregularChunks(vcat(c.offsets, newlength))
+end
+
+function prune_oob_chunks(s::AbstractStore, path, oldcounts, newcounts, chunk_key_encoding)
+  dimstoshorten = findall(map(<,newcounts, oldcounts))
   for idim in dimstoshorten
-    delrange = (fld1(newsize[idim],chunks[idim])+1):(fld1(oldsize[idim],chunks[idim]))
-    allchunkranges = map(i->1:fld1(oldsize[i],chunks[i]),1:length(oldsize))
+    delrange = (newcounts[idim]+1):oldcounts[idim]
+    allchunkranges = map(n->1:n, oldcounts)
     r = (allchunkranges[1:idim-1]..., delrange, allchunkranges[idim+1:end]...)
     for cI in CartesianIndices(r)
       store_deletechunk(s, path, cI, chunk_key_encoding)

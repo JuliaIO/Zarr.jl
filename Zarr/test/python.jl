@@ -90,6 +90,92 @@ for (filterstr, filter) in filters
     a[] = testzerodim
 end
 
+@testset "Python zarr v3 rectilinear chunks" begin
+    using DiskArrays: GridChunks, IrregularChunks, RegularChunks
+
+    zarr = pyimport("zarr")
+    numpy = pyimport("numpy")
+    pybuiltins = pyimport("builtins")
+    zarr.config.set(pydict(Dict("array.rectilinear_chunks" => true)))
+
+    julia_path = tempname()
+    python_path = tempname()
+
+    # Julia writes exact-size rectilinear chunks that zarr-python can read.
+    chunks = GridChunks(
+        RegularChunks(4, 0, 20),
+        IrregularChunks(; chunksizes=[3, 4, 5, 6, 2]),
+    )
+    z = zcreate(Int32, 20, 20;
+        zarr_format=3,
+        path=julia_path,
+        chunks,
+        compressor=Zarr.NoCompressor(),
+    )
+    julia_data = reshape(Int32.(1:400), 20, 20)
+    z[:, :] = julia_data
+
+    py_array = zarr.open_array(julia_path, mode="r")
+    py_grid = pyconvert(Any, py_array.metadata.chunk_grid.to_dict())
+    @test py_grid["name"] == "rectilinear"
+    @test py_grid["configuration"]["kind"] == "inline"
+    py_chunk_shapes = py_grid["configuration"]["chunk_shapes"]
+    @test collect(py_chunk_shapes[1]) == [3, 4, 5, 6, 2]
+    @test py_chunk_shapes[2] == 4
+    @test pyconvert(Array, py_array[pybuiltins.Ellipsis]) == permutedims(julia_data, (2, 1))
+
+    # zarr-python writes exact-size rectilinear chunks that Julia can read.
+    python_data = reshape(Int32.(0:399), 20, 20)
+    py_written = zarr.create_array(
+        python_path;
+        zarr_format=3,
+        shape=(20, 20),
+        chunks=pylist([
+            pylist([3, 4, 5, 6, 2]),
+            pylist([4, 4, 4, 4, 4]),
+        ]),
+        dtype="int32",
+    )
+    py_written.__setitem__(pybuiltins.Ellipsis, numpy.array(python_data))
+
+    reopened = zopen(python_path)
+    @test any(c -> c isa IrregularChunks, DiskArrays.eachchunk(reopened).chunks)
+    @test permutedims(reopened[:, :], (2, 1)) == python_data
+
+    # A regular axis that does not divide the extent stores a full-size final
+    # chunk, in both directions.
+    edge_path = tempname()
+    edge_chunks = GridChunks(
+        RegularChunks(4, 0, 18),
+        IrregularChunks(; chunksizes=[3, 4, 5, 6, 2]),
+    )
+    edge = zcreate(Int32, 18, 20;
+        zarr_format=3,
+        path=edge_path,
+        chunks=edge_chunks,
+        compressor=Zarr.NoCompressor(),
+    )
+    edge_data = reshape(Int32.(1:360), 18, 20)
+    edge[:, :] = edge_data
+    py_edge = zarr.open_array(edge_path, mode="r+")
+    @test pyconvert(Array, py_edge[pybuiltins.Ellipsis]) == permutedims(edge_data, (2, 1))
+
+    py_edge.__setitem__(pybuiltins.Ellipsis, numpy.array(permutedims(edge_data .+ Int32(1), (2, 1))))
+    @test zopen(edge_path)[:, :] == edge_data .+ Int32(1)
+
+    # Both sides grow an irregular axis by appending one chunk.
+    append!(zopen(edge_path, "w"), fill(Int32(-3), 18, 5); dims=2)
+    py_grown = zarr.open_array(edge_path, mode="r+")
+    @test pyconvert(Tuple, py_grown.shape) == (25, 18)
+    @test pyconvert(Array, py_grown[pybuiltins.Ellipsis]) ==
+        permutedims(hcat(edge_data .+ Int32(1), fill(Int32(-3), 18, 5)), (2, 1))
+    py_grown.resize((28, 18))
+    jl_grown = zopen(edge_path)
+    @test size(jl_grown) == (18, 28)
+    @test diff(DiskArrays.eachchunk(jl_grown).chunks[2].offsets) == [3, 4, 5, 6, 2, 5, 3]
+    @test all(iszero, jl_grown[:, 26:28])
+end
+
 #Also save as zip file.
 open(pjulia*".zip";write=true) do io
     Zarr.writezip(io, g)

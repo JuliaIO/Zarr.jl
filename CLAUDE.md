@@ -139,6 +139,7 @@ Core paths below are relative to `ZarrCore/`. Backend implementations are in
 
 - **Format version dispatch**: `ZarrFormat{V}` selects version-specific behavior
 - **Shape is mutable**: `metadata.shape` is `Base.RefValue{NTuple{N,Int}}` to allow `resize!` without replacing the metadata struct
+- **V3 chunks are mutable**: `MetadataV3.chunks` is a `Base.RefValue` holding an `NTuple` (regular grid) or a `DiskArrays.GridChunks` (rectilinear grid, which `resize!` replaces); read it through `chunkspec(md)`
 - **Column-major ↔ row-major**: reverse dimensions at metadata boundaries
 - **Compressor registry**: `compressortypes` maps v2 names to compressor types; `v2_to_v3_codecs` maps compressors to v3 codecs by dispatch
 - **DiskArrays integration**: `ZArray <: AbstractDiskArray`, chunk-aware I/O via `readblock!`/`writeblock!`, `eachchunk`, `haschunks`
