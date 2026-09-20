@@ -70,8 +70,10 @@ function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   end
   request -> begin
     k = request.target
-    k = lstrip(k,'/')
-    contains("..",k) && return nothing
+    # Stores such as DirectoryStore only index by String, not SubString.
+    k = String(lstrip(k,'/'))
+    # A ".." segment would let a DirectoryStore read outside its folder.
+    ".." in split(k, ('/','\\')) && return HTTP.Response(400, "Error: Invalid key $k")
     r = s[p,k]
     try
       if r ===  nothing

@@ -327,6 +327,33 @@ end
     @test srv_szero isa HTTP.Server
     close(srv_szero)
   end
+  @testset "Serving a DirectoryStore" begin
+    mktempdir() do dir
+      write(joinpath(dir, "secret.txt"), "secret")
+      ds = Zarr.DirectoryStore(joinpath(dir, "store"))
+      gd = zgroup(ds, attrs = Dict("groupatt"=>5))
+      ad = zcreate(Int, gd, "a1", 10, 20, chunks=(5,5))
+      ad .= reshape(1:200,10,20)
+      srv = HTTP.serve!(gd, "127.0.0.1", 0)
+      try
+        g3 = zopen("http://127.0.0.1:$(srv.bound_port)")
+        @test g3.attrs == Dict("groupatt"=>5)
+        @test g3["a1"][:,:] == reshape(1:200,10,20)
+      finally
+        close(srv)
+      end
+      # Call the handler directly, since HTTP clients normalize ".." away.
+      handler = Zarr.ZarrHTTP.zarr_req_handler(ds, "")
+      @test handler(HTTP.Request("GET", "/.zgroup")).status == 200
+      for target in ("/../secret.txt", "/a1/../../secret.txt", "/..\\secret.txt")
+        r = handler(HTTP.Request("GET", target))
+        @test r.status == 400
+        @test String(r.body) != "secret"
+      end
+      # ".." inside a key name is not a traversal
+      @test handler(HTTP.Request("GET", "/a1/0..0")).status == 404
+    end
+  end
   @testset "HTTPStore construction and show" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test hs.url == "http://example.com"
