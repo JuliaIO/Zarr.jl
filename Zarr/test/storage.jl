@@ -348,8 +348,18 @@ end
       for target in ("/../secret.txt", "/a1/../../secret.txt", "/..\\secret.txt")
         r = handler(HTTP.Request("GET", target))
         @test r.status == 400
-        @test String(r.body) != "secret"
+        @test occursin("\"..\" path segments", String(r.body))
       end
+      # The DirectoryStore check resolves the path instead of inspecting the key
+      reason = Zarr.ZarrHTTP.invalid_key_reason
+      @test reason(ds, "", "a1/.zarray") === nothing
+      @test reason(ds, "a1", ".zarray") === nothing
+      @test reason(ds, "", "") === nothing
+      @test occursin("outside the served directory", reason(ds, "", abspath(dir, "secret.txt")))
+      # Wrapper stores defer to the store that reads the files
+      cs = Zarr.ConsolidatedStore(ds, "")
+      @test occursin("outside", reason(cs, "", abspath(dir, "secret.txt")))
+      @test reason(cs, "", "a1/.zarray") === nothing
       # ".." inside a key name is not a traversal
       @test handler(HTTP.Request("GET", "/a1/0..0")).status == 404
     end
