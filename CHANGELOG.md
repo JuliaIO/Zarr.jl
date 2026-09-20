@@ -12,6 +12,8 @@
   `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` through `Zarr`.
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
 - Fixed `fill_as_missing=true` on zarr v3 arrays, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}` when decoding an initialized chunk.
+- Fixed serving a `DirectoryStore` with `HTTP.serve`, which failed on every request with `getindex not implemented for store DirectoryStore` [#344](https://github.com/JuliaIO/Zarr.jl/pull/344)
+- Fixed the path-traversal check when serving a store over HTTP, which never rejected request targets such as `/../secret.txt`. These now get a `400` response that explains why, and a `DirectoryStore` also refuses any key that resolves to a file outside the served directory [#344](https://github.com/JuliaIO/Zarr.jl/pull/344)
 
 ## v0.10.2 - 2026-08-19
 
