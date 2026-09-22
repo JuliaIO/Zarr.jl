@@ -87,14 +87,26 @@ zarr_format(::MetadataV3) = ZarrFormat(Val(3))
 Convenience constructor for MetadataV3 that builds the codec pipeline from
 `order` (translated to a TransposeCodec), `endian` (translated to a BytesCodec),
 and `compressor` (translated to bytes->bytes codecs).
+
+Alternatively pass `codecs`, an ordered collection of `V3Codec`s (zero or more
+array->array codecs, exactly one array->bytes codec, zero or more bytes->bytes
+codecs), to use that pipeline verbatim. `codecs` cannot be combined with a
+non-default `compressor`, `order`, or `endian`.
 """
 function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::NTuple{N,Int},
         dtype, fill_value;
         order::Char='C',
         endian::Symbol=:little,
         compressor=default_compressor(),
+        codecs=nothing,
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T2, N, E}
+    if codecs !== nothing
+        (compressor == default_compressor() && order == 'C' && endian == :little) ||
+            throw(ArgumentError("`codecs` cannot be combined with `compressor`, `order`, or `endian`"))
+        pipeline = Codecs.V3Codecs._codecs_to_v3pipeline(collect(Codecs.V3Codecs.V3Codec, codecs))
+        return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+    end
     T_base = Base.nonmissingtype(T2)
     array_array_codecs = if order == 'F'
         (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
@@ -275,6 +287,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order::Char='C',
         endian::Symbol=:little,
         filters=nothing,
+        codecs=nothing,
         fill_as_missing = false,
         dimension_separator::Char = '/'
     ) where {T, N}
@@ -292,6 +305,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order=order,
         endian=endian,
         compressor=compressor,
+        codecs=codecs,
         chunk_key_encoding=ChunkKeyEncoding(dimension_separator, true)
     )
 end
@@ -328,6 +342,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         order::Char='C',
         endian::Symbol=:little,
         filters::F=nothing,
+        codecs=nothing,
         fill_as_missing = false,
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T, N, C, F, E}
@@ -338,6 +353,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         order=order,
         endian=endian,
         filters=filters,
+        codecs=codecs,
         fill_as_missing=fill_as_missing,
         dimension_separator=chunk_key_encoding.sep
     )
