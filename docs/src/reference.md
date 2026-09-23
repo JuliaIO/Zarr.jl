@@ -5,6 +5,7 @@
 ```@docs
 zcreate
 zzeros
+Zarr.dimension_names
 ```
 
 ## Group hierarchy

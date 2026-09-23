@@ -3,6 +3,9 @@
 
 public zname, zopen_noerr
 
+# Zarr v3 dimension names, set with `zcreate(...; dimension_names=...)`.
+public dimension_names
+
 # Core stores; backend stores are declared by their packages.
 public AbstractStore, DictStore, CachingStore, ConsolidatedStore
 

@@ -25,7 +25,8 @@ function create_and_fill(store, name, data;
     compressor=Zarr.BloscCompressor(),
     fill_value=nothing,
     zarr_format=3,
-    dimension_separator='/')
+    dimension_separator='/',
+    dimension_names=nothing)
 
     # Create the array
     z = zcreate(eltype(data), store, shape...;
@@ -34,7 +35,8 @@ function create_and_fill(store, name, data;
         compressor=compressor,
         fill_value=fill_value,
         zarr_format=zarr_format,
-        dimension_separator=dimension_separator)
+        dimension_separator=dimension_separator,
+        dimension_names=dimension_names)
     # Fill the array with the data
     z[:] = data
     return z
@@ -160,6 +162,15 @@ create_and_fill(store, "2d.contiguous.i2", Int16[1 2; 3 4];
     shape=(2,2),
     chunks=(2,2),
     compressor=Zarr.BloscCompressor(shuffle=0),  # noshuffle
+)
+
+# 2d.contiguous.named.i2 -- the v3 `dimension_names` field. Julia order
+# ("x", nothing) lands in zarr.json in C order as [null, "x"].
+create_and_fill(store, "2d.contiguous.named.i2", Int16[1 2; 3 4];
+    shape=(2,2),
+    chunks=(2,2),
+    compressor=Zarr.BloscCompressor(shuffle=0),  # noshuffle
+    dimension_names=("x", nothing),
 )
 
 # 2d.chunked.i2
