@@ -181,7 +181,7 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         chunk_key_encoding=ChunkKeyEncoding('.', false),
         dimension_names=nothing
     ) where {T, N, C, F}
-    dimension_names === nothing || throw(ArgumentError(
+    isnothing(dimension_names) || throw(ArgumentError(
         "dimension_names is a Zarr v3 metadata field and has no equivalent in Zarr v2; " *
         "use zarr_format=3, or store them as an attribute (xarray uses `_ARRAY_DIMENSIONS`)"))
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}

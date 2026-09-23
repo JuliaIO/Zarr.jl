@@ -97,7 +97,8 @@ function zinfo(io::IO,z::ZArray)
   "Type" => "ZArray",
   "Data type" => eltype(z),
   "Shape" => size(z),
-  "Dimension names" => dimension_names(z),
+  # only Zarr v3 arrays can name their dimensions; skip the line when they don't
+  (isnothing(dimension_names(z)) ? () : ("Dimension names" => dimension_names(z),))...,
   "Chunk Shape" => z.metadata.chunks,
   "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,

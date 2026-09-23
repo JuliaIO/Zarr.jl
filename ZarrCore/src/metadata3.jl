@@ -99,7 +99,7 @@ parse_dimension_names(::Nothing, N) = nothing
 function parse_dimension_names(names, N)
     names isa AbstractString && throw(ArgumentError("dimension_names must be a collection of names, not the single string $(repr(names))"))
     length(names) == N || throw(ArgumentError("dimension_names must have one entry per dimension, got $(length(names)) names for $N dimensions"))
-    return ntuple(i -> (n = names[i]; n === nothing ? nothing : String(n)), N)
+    return ntuple(i -> (n = names[i]; isnothing(n) ? nothing : String(n)), N)
 end
 
 """
@@ -276,13 +276,11 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     chunk_key_encoding = parse_chunk_key_encoding(chunk_key_encoding)
     E = typeof(chunk_key_encoding)
 
-    # Dimension names: optional, C order in the file. A top-level `null` is
-    # tolerated and treated like an absent key (all dimensions unnamed).
+    # Dimension names: optional, C order in the file (reversed here like shape and
+    # chunks; the constructor checks the length). A top-level `null` is tolerated
+    # and treated like an absent key (all dimensions unnamed).
     dimension_names = get(d, "dimension_names", nothing)
-    if dimension_names !== nothing
-        length(dimension_names) == N || throw(ArgumentError("dimension_names has $(length(dimension_names)) entries but shape has rank $N"))
-        dimension_names = reverse(dimension_names)
-    end
+    isnothing(dimension_names) || (dimension_names = reverse(dimension_names))
 
     MetadataV3{TU, N, typeof(pipeline), E}(
         zarr_format,
@@ -352,9 +350,7 @@ function lower3(md::MetadataV3{T}) where T
         "codecs" => codecs
     )
     # Optional per spec; omitted (not null) when all dimensions are unnamed.
-    if md.dimension_names !== nothing
-        d["dimension_names"] = collect(Union{Nothing, String}, reverse(md.dimension_names))
-    end
+    isnothing(md.dimension_names) || (d["dimension_names"] = collect(Union{Nothing, String}, reverse(md.dimension_names)))
     return d
 end
 
