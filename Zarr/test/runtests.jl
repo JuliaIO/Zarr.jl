@@ -70,6 +70,7 @@ end
 end
 
 include("registration.jl")
+include("dimension_names.jl")
 
 @testset "ZArray" begin
     @testset "fields" begin
