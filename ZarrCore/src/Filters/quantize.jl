@@ -46,7 +46,7 @@ function JSON.lower(filter::QuantizeFilter{T, Tenc}) where {T, Tenc}
 end
 
 function getfilter(::Type{<: QuantizeFilter}, d)
-    return QuantizeFilter{typestr(d["dtype"], typestr(d["astype"]))}(; digits = d["digits"])
+    return QuantizeFilter{typestr(d["dtype"]), typestr(d["astype"])}(; digits = d["digits"])
 end
 
 register_filter("quantize", QuantizeFilter)

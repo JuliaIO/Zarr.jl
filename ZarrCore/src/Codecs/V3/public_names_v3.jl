@@ -3,4 +3,4 @@
 public V3Codec, getCodec, register_codec, codec_parsers, codec_encode,
     codec_decode, is_fixed_size, name
 public BytesCodec, CRC32cCodec, ShardingCodec, TransposeCodec, CRC32cV3Codec,
-    VLenUTF8V3Codec
+    VLenUTF8V3Codec, ScaleOffset

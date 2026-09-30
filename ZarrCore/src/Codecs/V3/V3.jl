@@ -651,6 +651,9 @@ end
 encoded_shape(::V3Codec, sz::NTuple{N,Int}) where {N} = sz
 encoded_shape(c::TransposeCodec, sz::NTuple{N,Int}) where {N} = ntuple(i -> sz[c.order[i]], Val{N}())
 
+"""Return the element type of the output of `codec_encode(codec, data)` given the input element type."""
+encoded_type(::V3Codec, ::Type{T}) where {T} = T
+
 function codec_encode(c::TransposeCodec, data::AbstractArray)
     return permutedims(data, c.order)
 end
@@ -658,6 +661,38 @@ end
 function codec_decode(c::TransposeCodec, encoded::AbstractArray)
     inv_order = Tuple(invperm(collect(c.order)))
     return permutedims(encoded, inv_order)
+end
+
+"""
+    ScaleOffset(offset, scale)
+
+The zarr v3 `scale_offset` array->array codec: encodes `(x - offset) * scale`
+and decodes `x / scale + offset` in the array's element type.
+"""
+struct ScaleOffset{S<:Real} <: V3Codec{:array, :array}
+    offset::S
+    scale::S
+end
+ScaleOffset(offset::Real, scale::Real) = ScaleOffset(promote(offset, scale)...)
+name(::ScaleOffset) = "scale_offset"
+is_fixed_size(::ScaleOffset) = true
+
+register_codec("scale_offset", ScaleOffset) do config, ctx
+    ScaleOffset(get(config, "offset", 0), get(config, "scale", 1))
+end
+
+function JSON.lower(c::ScaleOffset)
+    Dict("name" => "scale_offset", "configuration" => Dict("offset" => c.offset, "scale" => c.scale))
+end
+
+function codec_encode(c::ScaleOffset, data::AbstractArray{T}) where {T}
+    offset, scale = T(c.offset), T(c.scale)
+    return T.((data .- offset) .* scale)
+end
+
+function codec_decode(c::ScaleOffset, encoded::AbstractArray{T}) where {T}
+    offset, scale = T(c.offset), T(c.scale)
+    return T.(encoded ./ scale .+ offset)
 end
 
 # Compression codecs are registered by their subpackages.

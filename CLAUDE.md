@@ -155,4 +155,4 @@ expose a qualified `register!` and invoke it from runtime `__init__`, guarded by
 
 V3 support is experimental. Arrays, groups, codec pipelines, sharding, endian
 conversion, and Julia/Python fixtures are implemented. `zgroup()` still creates
-v2 groups, and v3 filters are unsupported.
+v2 groups. v2 filters map to `numcodecs.<id>` v3 codecs via `FilterCodec`.

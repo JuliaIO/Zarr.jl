@@ -1376,4 +1376,42 @@ end
     @test_throws ArgumentError ZarrCore.Metadata(json_str, false)
 end
 
+@testset "v2 filters as v3 codecs" begin
+    x = Float64.(reshape(1:24, 4, 6))
+    for filters in [
+        (Zarr.DeltaFilter{Float64}(),),
+        (Zarr.FixedScaleOffsetFilter{Float64,Float64,Int16}(10.0, 1.0),),
+        (Zarr.QuantizeFilter{Float64,Float32}(digits=3),),
+        (Zarr.ShuffleFilter(elementsize=8), Zarr.Fletcher32Filter()),
+    ]
+        store = Zarr.DictStore()
+        z = zcreate(Float64, store, 4, 6; zarr_format=3, chunks=(2, 3), filters)
+        z[:, :] = x
+        @test zopen(store)[:, :] ≈ x
+    end
+    md = ZarrCore.Metadata("""{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"float64",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+        "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+        "fill_value":0,"codecs":[
+            {"name":"numcodecs.fixedscaleoffset","configuration":{"scale":10,"offset":1,"dtype":"<f8","astype":"<i2"}},
+            {"name":"bytes","configuration":{"endian":"little"}}]}""", false)
+    codec = only(md.pipeline.array_array)
+    @test codec isa Zarr.FilterCodec
+    @test Zarr.Codecs.V3Codecs.encoded_type(codec, Float64) == Int16
+    @test JSON.lower(codec)["name"] == "numcodecs.fixedscaleoffset"
+end
+
+@testset "ScaleOffset" begin
+    c = Zarr.ScaleOffset(1000, 1)
+    x = UInt16[1000, 1100, 1255]
+    @test Zarr.Codecs.V3Codecs.codec_encode(c, x) == UInt16[0, 100, 255]
+    @test Zarr.Codecs.V3Codecs.codec_decode(c, Zarr.Codecs.V3Codecs.codec_encode(c, x)) == x
+    y = Float32[5, 6, 7.5]
+    c = Zarr.Codecs.V3Codecs.getCodec(Dict("name" => "scale_offset", "configuration" => Dict("offset" => 5, "scale" => 0.5)))
+    @test Zarr.Codecs.V3Codecs.codec_encode(c, y) == Float32[0, 0.5, 1.25]
+    @test Zarr.Codecs.V3Codecs.codec_decode(c, Zarr.Codecs.V3Codecs.codec_encode(c, y)) == y
+    @test JSON.lower(c)["configuration"] == Dict("offset" => 5.0, "scale" => 0.5)
+    @test Zarr.Codecs.V3Codecs.getCodec(Dict("name" => "scale_offset")) == Zarr.ScaleOffset(0, 1)
+end
+
 end # V3 Codecs
