@@ -22,7 +22,7 @@ public Compressor, NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor
 # v3 codecs
 public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,
     TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
-    VLenUTF8V3Codec
+    VLenUTF8V3Codec, FilterCodec, ScaleOffset
 
 # Data type and fill value encoding
 public typestr, fill_value_encoding, fill_value_decoding

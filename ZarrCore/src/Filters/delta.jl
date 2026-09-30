@@ -39,7 +39,7 @@ function JSON.lower(filter::DeltaFilter{T, Tenc}) where {T, Tenc}
 end
 
 function getfilter(::Type{<: DeltaFilter}, d)
-    return DeltaFilter{typestr(d["dtype"], haskey(d, "astype") ? typestr(d["astype"]) : d["dtype"])}()
+    return DeltaFilter{typestr(d["dtype"]), typestr(get(d, "astype", d["dtype"]))}()
 end
 
 register_filter("delta", DeltaFilter)

@@ -93,13 +93,15 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         order::Char='C',
         endian::Symbol=:little,
         compressor=default_compressor(),
+        filters=nothing,
         chunk_key_encoding::E=ChunkKeyEncoding('/', true)
     ) where {T2, N, E}
     T_base = Base.nonmissingtype(T2)
+    filter_array_codecs, filter_bytes_codecs = v3_filter_codecs(filters)
     array_array_codecs = if order == 'F'
-        (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)),)
+        (Codecs.V3Codecs.TransposeCodec(ntuple(i -> N - i + 1, N)), filter_array_codecs...)
     else
-        ()
+        filter_array_codecs
     end
     if T_base <: AbstractString && T_base !== MaxLengthString
         array_bytes_codec = Codecs.V3Codecs.VLenUTF8V3Codec()
@@ -108,7 +110,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         array_bytes_codec = Codecs.V3Codecs.BytesCodec(endian)
         typesize = sizeof(T_base)
     end
-    bytes_bytes_codecs = v2_to_v3_codecs(compressor, typesize)
+    bytes_bytes_codecs = (filter_bytes_codecs..., v2_to_v3_codecs(compressor, typesize)...)
     pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
     return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
 end
@@ -292,6 +294,7 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         order=order,
         endian=endian,
         compressor=compressor,
+        filters=filters,
         chunk_key_encoding=ChunkKeyEncoding(dimension_separator, true)
     )
 end
