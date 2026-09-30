@@ -771,6 +771,12 @@ end
         z2 = zopen(store; path="2d.chunked.i2")
         @test z2[:, :] == Int16[1 2; 3 4]
 
+        # dimension_names: zarr.json holds [null, "x"], Julia sees ("x", nothing)
+        z = zopen(store; path="2d.contiguous.named.i2")
+        @test Zarr.dimension_names(z) === ("x", nothing)
+        @test z[:, :] == Int16[1 2; 3 4]
+        @test Zarr.dimension_names(z2) === nothing
+
         # Sharded with index_location=:start — round-trips through Julia
         z = zopen(store; path="1d.chunked.compressed.sharded.indexstart.i2")
         @test z[:] == Int16[10, 20, 30, 40]
@@ -818,6 +824,10 @@ end
 
             arr2d_chunked = pyconvert(Matrix{Int16}, np.array(g["2d.chunked.i2"]))
             @test arr2d_chunked == Int16[1 3; 2 4]
+
+            # dimension_names written by Julia are seen in the file's C order
+            @test pyconvert(Any, g["2d.contiguous.named.i2"].metadata.dimension_names) == (nothing, "x")
+            @test pyconvert(Any, g["2d.contiguous.i2"].metadata.dimension_names) === nothing
         end
 
         @testset "3D arrays" begin
@@ -921,6 +931,15 @@ end
         @warn "Python v3 fixtures not found at $fixture_path, skipping"
     else
         store = Zarr.DirectoryStore(fixture_path)
+
+        @testset "dimension_names" begin
+            # written by zarr-python as (None, "x"), read in Julia order;
+            # the C-order data [[1,2],[3,4]] is the transpose in Julia
+            z = zopen(store; path="2d.contiguous.named.i2")
+            @test Zarr.dimension_names(z) === ("x", nothing)
+            @test z[:, :] == Int16[1 3; 2 4]
+            @test Zarr.dimension_names(zopen(store; path="2d.contiguous.i2")) === nothing
+        end
 
         @testset "1D contiguous arrays" begin
             # gzip compressed

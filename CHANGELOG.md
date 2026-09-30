@@ -12,6 +12,7 @@
   `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` through `Zarr`.
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
 - Fixed `fill_as_missing=true` on zarr v3 arrays, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}` when decoding an initialized chunk.
+- Support the Zarr v3 `dimension_names` metadata field [#319](https://github.com/JuliaIO/Zarr.jl/issues/319): `zcreate(...; dimension_names=("x", "y"))` writes it to `zarr.json` and the public `dimension_names(z)` reads it back, so arrays written by Zarr.jl open with named dimensions in xarray. Names are given in Julia (column-major) order and reversed in the file like `shape`; `nothing` marks an unnamed dimension.
 
 ## v0.10.2 - 2026-08-19
 

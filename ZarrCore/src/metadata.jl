@@ -155,7 +155,8 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         order::Char='C',
         filters=nothing,
         fill_as_missing = false,
-        dimension_separator::Char = '.'
+        dimension_separator::Char = '.',
+        dimension_names=nothing
     ) where {T, N, C}
     return Metadata(A, chunks, ZarrFormat(zarr_format);
         node_type=node_type,
@@ -164,7 +165,8 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, zarr_format=DV;
         order=order,
         filters=filters,
         fill_as_missing=fill_as_missing,
-        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format)))
+        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, default_prefix(ZarrFormat(zarr_format))),
+        dimension_names=dimension_names
     )
 end
 
@@ -176,8 +178,12 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         order::Char='C',
         filters::F=nothing,
         fill_as_missing = false,
-    chunk_key_encoding=ChunkKeyEncoding('.', false)
+        chunk_key_encoding=ChunkKeyEncoding('.', false),
+        dimension_names=nothing
     ) where {T, N, C, F}
+    isnothing(dimension_names) || throw(ArgumentError(
+        "dimension_names is a Zarr v3 metadata field and has no equivalent in Zarr v2; " *
+        "use zarr_format=3, or store them as an attribute (xarray uses `_ARRAY_DIMENSIONS`)"))
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     MetadataV2{T2,N,C,typeof(filters)}(
         2,

@@ -41,7 +41,8 @@ zarr.create_group(store)
 
 # helper: create array and set data (value should be a numpy array or convertible)
 function create_and_fill(store; name, dtype=nothing, shape=nothing, chunks=nothing,
-    serializer=nothing, compressors=nothing, filters=nothing, shards=nothing, data)
+    serializer=nothing, compressors=nothing, filters=nothing, shards=nothing,
+    dimension_names=nothing, data)
     # Build NamedTuple of only non-nothing keyword arguments
     kwargs = (; name=name)
     if dtype !== nothing
@@ -61,6 +62,9 @@ function create_and_fill(store; name, dtype=nothing, shape=nothing, chunks=nothi
     end
     if shards !== nothing
         kwargs = merge(kwargs, (; shards=shards))
+    end
+    if dimension_names !== nothing
+        kwargs = merge(kwargs, (; dimension_names=dimension_names))
     end
 
     # Always pass compressors explicitly: nothing → empty list (disables default compressor)
@@ -255,6 +259,19 @@ create_and_fill(store;
     serializer=codecs.BytesCodec(endian="little"),
     compressors=[codecs.BloscCodec(typesize=4, shuffle="noshuffle")],
     data= np.array([ [1,2], [3,4] ] |> pylist, dtype="i2"),
+)
+
+# 2d.contiguous.named.i2 -- v3 `dimension_names`, C order (null, "x") so that
+# Julia reads ("x", nothing)
+create_and_fill(store;
+    name="2d.contiguous.named.i2",
+    dtype="int16",
+    shape=(2,2),
+    chunks=(2,2),
+    serializer=codecs.BytesCodec(endian="little"),
+    compressors=[codecs.BloscCodec(typesize=4, shuffle="noshuffle")],
+    data= np.array([ [1,2], [3,4] ] |> pylist, dtype="i2"),
+    dimension_names=(nothing, "x"),
 )
 
 # 2d.chunked.i2

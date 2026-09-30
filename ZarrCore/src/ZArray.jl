@@ -97,6 +97,8 @@ function zinfo(io::IO,z::ZArray)
   "Type" => "ZArray",
   "Data type" => eltype(z),
   "Shape" => size(z),
+  # only Zarr v3 arrays can name their dimensions; skip the line when they don't
+  (isnothing(dimension_names(z)) ? () : ("Dimension names" => dimension_names(z),))...,
   "Chunk Shape" => z.metadata.chunks,
   "Order" => try get_order(z.metadata) catch e "unknown ($(e.msg))" end,
   "Read-Only" => !z.writeable,
@@ -128,6 +130,20 @@ end
 
 zarr_format(z::ZArray) = zarr_format(z.metadata)
 dimension_separator(z::ZArray) = dimension_separator(z.metadata)
+
+"""
+    dimension_names(z::ZArray)
+
+Names of the dimensions of `z` in Julia (column-major) order, so that
+`dimension_names(z)[i]` names `size(z, i)`, or `nothing` if no dimension is
+named. Individual unnamed dimensions are `nothing`. Dimension names are a Zarr
+v3 feature (the optional `dimension_names` field of `zarr.json`); Zarr v2
+arrays always return `nothing`. Set them with the `dimension_names` keyword of
+[`zcreate`](@ref).
+"""
+dimension_names(z::ZArray) = dimension_names(z.metadata)
+dimension_names(md::MetadataV3) = md.dimension_names
+dimension_names(::MetadataV2) = nothing
 
 
 """
@@ -403,6 +419,7 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
 * `dimension_separator='.'` sets how chunks are encoded. The Zarr v2 default is '.' such that the first 3D chunk would be `0.0.0`. The Zarr v3 default is `/`.
+* `dimension_names=nothing` names of the dimensions in Julia (column-major) order, e.g. `("x", "y")`, with `nothing` for an unnamed dimension. Zarr v3 only: written to the `dimension_names` field of `zarr.json` (reversed to match the stored shape) and read back with [`dimension_names`](@ref). Zarr v2 has no equivalent and throws.
 """
 function zcreate(::Type{T}, dims::Integer...;
   name="",
@@ -439,7 +456,8 @@ function zcreate(::Type{T},storage::AbstractStore,
   attrs=Dict(),
   writeable=true,
   indent_json=false,
-  dimension_separator=nothing
+  dimension_separator=nothing,
+  dimension_names=nothing
   ) where {T}
 
   v = ZarrFormat(zarr_format)
@@ -464,7 +482,8 @@ function zcreate(::Type{T},storage::AbstractStore,
       fill_value=fill_value,
       filters=filters,
       fill_as_missing=fill_as_missing,
-    chunk_key_encoding=chunk_key_encoding
+      chunk_key_encoding=chunk_key_encoding,
+      dimension_names=dimension_names
   )
   
   # Extract the element type from the metadata (handles T2 calculation)
