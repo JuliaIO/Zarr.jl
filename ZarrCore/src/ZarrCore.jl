@@ -30,7 +30,7 @@ include("caching.jl")
 import .Codecs: Codec
 import .Codecs.V3Codecs: V3Codec, BytesCodec, CRC32cCodec,
     ShardingCodec, TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec,
-    ScaleOffset
+    ScaleOffset, CastValue
 
 # User-facing exports. Extension APIs are declared in public_names_core.jl.
 

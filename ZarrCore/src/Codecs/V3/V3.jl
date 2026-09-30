@@ -2,7 +2,7 @@ module V3Codecs
 
 import ..Codecs: zencode, zdecode, zencode!, zdecode!
 # Import pipeline internals from ZarrCore (grandparent module)
-import ...ZarrCore: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!
+import ...ZarrCore: AbstractCodecPipeline, V3Pipeline, pipeline_encode, pipeline_decode!, typestr3
 using CRC32c: CRC32c
 using JSON: JSON
 
@@ -27,11 +27,14 @@ function codec_encode end
 
 """
     codec_decode(codec::V3Codec, encoded)
+    codec_decode(codec::V3Codec, encoded::AbstractArray, ::Type{T})
     codec_decode(codec::V3Codec, encoded::Vector{UInt8}, ::Type{T}, shape; fill_value=nothing)
 
 Apply `codec` in the decoding direction, inverting [`codec_encode`](@ref). The
 four-argument form is the one array->bytes codecs implement, since they need
-the element type and shape to rebuild the array.
+the element type and shape to rebuild the array. Array->array codecs that
+change the element type implement the three-argument form, where `T` is the
+decoded element type.
 """
 function codec_decode end
 
@@ -654,6 +657,8 @@ encoded_shape(c::TransposeCodec, sz::NTuple{N,Int}) where {N} = ntuple(i -> sz[c
 """Return the element type of the output of `codec_encode(codec, data)` given the input element type."""
 encoded_type(::V3Codec, ::Type{T}) where {T} = T
 
+codec_decode(c::V3Codec{:array, :array}, encoded::AbstractArray, ::Type) = codec_decode(c, encoded)
+
 function codec_encode(c::TransposeCodec, data::AbstractArray)
     return permutedims(data, c.order)
 end
@@ -693,6 +698,74 @@ end
 function codec_decode(c::ScaleOffset, encoded::AbstractArray{T}) where {T}
     offset, scale = T(c.offset), T(c.scale)
     return T.(encoded ./ scale .+ offset)
+end
+
+"""
+    CastValue{T}(; rounding=RoundNearest, out_of_range=nothing)
+
+The zarr v3 `cast_value` array->array codec: casts values to `T` when encoding
+and back to the array's element type when decoding. `out_of_range` is
+`nothing` (out-of-range values throw), `:clamp`, or `:wrap`. `scalar_map` is
+not supported.
+"""
+struct CastValue{T<:Real} <: V3Codec{:array, :array}
+    rounding::RoundingMode
+    out_of_range::Union{Nothing,Symbol}
+    function CastValue{T}(rounding::RoundingMode, out_of_range) where {T<:Real}
+        out_of_range in (nothing, :clamp, :wrap) ||
+            throw(ArgumentError("cast_value out_of_range must be clamp or wrap, got $out_of_range"))
+        out_of_range === :wrap && !(T <: Integer) &&
+            throw(ArgumentError("cast_value out_of_range wrap requires an integer data_type"))
+        new{T}(rounding, out_of_range)
+    end
+end
+CastValue{T}(; rounding=RoundNearest, out_of_range=nothing) where {T} = CastValue{T}(rounding, out_of_range)
+name(::CastValue) = "cast_value"
+is_fixed_size(::CastValue) = true
+
+const _cast_roundings = Dict(
+    "nearest-even" => RoundNearest, "towards-zero" => RoundToZero,
+    "towards-positive" => RoundUp, "towards-negative" => RoundDown,
+    "nearest-away" => RoundNearestTiesAway,
+)
+
+register_codec("cast_value", CastValue) do config, ctx
+    haskey(config, "scalar_map") &&
+        throw(ArgumentError("Zarr.jl does not support cast_value scalar_map"))
+    T = typestr3(config["data_type"])
+    rounding = _cast_roundings[get(config, "rounding", "nearest-even")]
+    out_of_range = haskey(config, "out_of_range") ? Symbol(config["out_of_range"]) : nothing
+    CastValue{T}(rounding, out_of_range)
+end
+
+function JSON.lower(c::CastValue{T}) where {T}
+    config = Dict{String,Any}(
+        "data_type" => typestr3(T),
+        "rounding" => only(k for (k, v) in _cast_roundings if v == c.rounding),
+    )
+    c.out_of_range === nothing || (config["out_of_range"] = string(c.out_of_range))
+    Dict("name" => "cast_value", "configuration" => config)
+end
+
+encoded_type(::CastValue{T}, ::Type) where {T} = T
+
+codec_encode(c::CastValue{T}, data::AbstractArray) where {T} = map(x -> _cast(T, x, c), data)
+codec_decode(c::CastValue, encoded::AbstractArray, ::Type{S}) where {S} = map(x -> _cast(S, x, c), encoded)
+
+function _cast(::Type{T}, x, c::CastValue) where {T<:Integer}
+    x isa Integer || isfinite(x) || throw(InexactError(:cast_value, T, x))
+    v = x isa Integer ? x : round(x, c.rounding)
+    typemin(T) <= v <= typemax(T) && return T(v)
+    c.out_of_range === :clamp && return v < 0 ? typemin(T) : typemax(T)
+    c.out_of_range === :wrap && return BigInt(v) % T
+    throw(InexactError(:cast_value, T, x))
+end
+
+function _cast(::Type{T}, x, c::CastValue) where {T<:AbstractFloat}
+    y = c.rounding == RoundNearest ? T(x) : T(x, c.rounding)
+    isinf(y) && isfinite(x) && c.out_of_range !== :clamp &&
+        throw(InexactError(:cast_value, T, x))
+    return y
 end
 
 # Compression codecs are registered by their subpackages.

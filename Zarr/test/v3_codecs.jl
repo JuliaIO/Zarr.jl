@@ -1414,4 +1414,30 @@ end
     @test Zarr.Codecs.V3Codecs.getCodec(Dict("name" => "scale_offset")) == Zarr.ScaleOffset(0, 1)
 end
 
+@testset "CastValue" begin
+    V = Zarr.Codecs.V3Codecs
+    @test V.codec_encode(Zarr.CastValue{UInt8}(), [1.4, 2.5, 3.6]) == UInt8[1, 2, 4]
+    @test V.codec_encode(Zarr.CastValue{UInt8}(rounding=RoundToZero), [3.6]) == UInt8[3]
+    @test_throws InexactError V.codec_encode(Zarr.CastValue{Int8}(), [128.0])
+    @test V.codec_encode(Zarr.CastValue{Int8}(out_of_range=:clamp), [128.0, -200.0]) == Int8[127, -128]
+    @test V.codec_encode(Zarr.CastValue{Int16}(out_of_range=:wrap), [32768, 32769, -32769]) == Int16[-32768, -32767, 32767]
+    @test_throws InexactError V.codec_encode(Zarr.CastValue{UInt8}(), [NaN])
+    @test_throws ArgumentError Zarr.CastValue{Float32}(out_of_range=:wrap)
+
+    # the spec's uint16 range reduction example, through a full pipeline
+    p = V.getCodec([
+        Dict("name" => "scale_offset", "configuration" => Dict("offset" => 1000)),
+        Dict("name" => "cast_value", "configuration" => Dict("data_type" => "uint8")),
+        Dict("name" => "bytes", "configuration" => Dict("endian" => "little")),
+    ])
+    x = UInt16[1000 1100; 1200 1255]
+    bytes = ZarrCore.pipeline_encode(p, x, nothing)
+    @test bytes == UInt8[0, 200, 100, 255]
+    @test ZarrCore.pipeline_decode!(p, similar(x), bytes) == x
+    @test V._pipeline_to_codec_list(p)[2] == Dict("name" => "cast_value",
+        "configuration" => Dict("data_type" => "uint8", "rounding" => "nearest-even"))
+    @test_throws ArgumentError V.getCodec(Dict("name" => "cast_value",
+        "configuration" => Dict("data_type" => "uint8", "scalar_map" => Dict())))
+end
+
 end # V3 Codecs
