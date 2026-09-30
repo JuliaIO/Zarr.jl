@@ -1376,4 +1376,25 @@ end
     @test_throws ArgumentError ZarrCore.Metadata(json_str, false)
 end
 
+@testset "zcreate with explicit codecs" begin
+    V = Zarr.Codecs.V3Codecs
+    data = Float32.(reshape(1:48, 8, 6))
+    store = Zarr.DictStore()
+    codecs = (V.TransposeCodec((2, 1)), V.BytesCodec(:big), V.CRC32cV3Codec())
+    z = zcreate(Float32, store, 8, 6; zarr_format=3, chunks=(4, 3), codecs)
+    z[:, :] = data
+    @test JSON.parse(String(copy(store["zarr.json"])))["codecs"] == JSON.parse(JSON.json(collect(codecs)))
+    reopened = zopen(store)
+    @test reopened.metadata.pipeline == z.metadata.pipeline
+    @test reopened[:, :] == data
+
+    # v2 has no codec pipeline
+    @test_throws ArgumentError zcreate(Float32, Zarr.DictStore(), 8, 6; zarr_format=2, codecs=(V.BytesCodec(),))
+    # explicit codecs replace the compressor entirely, so both cannot be given
+    @test_throws ArgumentError zcreate(Float32, Zarr.DictStore(), 8, 6; zarr_format=3,
+        compressor=Zarr.ZstdCompressor(), codecs=(V.BytesCodec(),))
+    # the list must contain an array->bytes codec
+    @test_throws ArgumentError zcreate(Float32, Zarr.DictStore(), 8, 6; zarr_format=3, codecs=(V.CRC32cV3Codec(),))
+end
+
 end # V3 Codecs

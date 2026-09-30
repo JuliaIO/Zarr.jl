@@ -399,6 +399,9 @@ Creates a new empty zarr array with element type `T` and array dimensions `dims`
 * `fill_as_missing=false` set to `true` shall fillvalue s be converted to `missing`s
 * `filters`=filters to be applied
 * `compressor` compressor type and properties, defaulting to `default_compressor()`
+* `codecs=nothing` (Zarr v3 only) an ordered collection of `V3Codec`s used verbatim as the chunk pipeline:
+  zero or more array->array codecs, exactly one array->bytes codec, then zero or more bytes->bytes codecs.
+  Cannot be combined with a non-default `compressor`; `filters` are ignored for v3.
 * `attrs=Dict()` a dict containing key-value pairs with metadata attributes associated to the array
 * `writeable=true` determines if the array is opened in read-only or write mode
 * `indent_json=false` determines if indents are added to format the json files `.zarray` and `.zattrs`.  This makes them more readable, but increases file size.
@@ -435,7 +438,8 @@ function zcreate(::Type{T},storage::AbstractStore,
   fill_value=nothing,
   fill_as_missing=false,
   compressor=default_compressor(),
-  filters = filterfromtype(T), 
+  filters = filterfromtype(T),
+  codecs=nothing,
   attrs=Dict(),
   writeable=true,
   indent_json=false,
@@ -463,6 +467,7 @@ function zcreate(::Type{T},storage::AbstractStore,
       compressor=compressor,
       fill_value=fill_value,
       filters=filters,
+      codecs=codecs,
       fill_as_missing=fill_as_missing,
     chunk_key_encoding=chunk_key_encoding
   )

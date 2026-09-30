@@ -175,9 +175,11 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::F=nothing,
+        codecs=nothing,
         fill_as_missing = false,
     chunk_key_encoding=ChunkKeyEncoding('.', false)
     ) where {T, N, C, F}
+    codecs === nothing || throw(ArgumentError("`codecs` is only supported for Zarr v3; use `compressor` and `filters` for v2"))
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     MetadataV2{T2,N,C,typeof(filters)}(
         2,
