@@ -40,38 +40,10 @@ store = storage.LocalStore(path_v3)
 zarr.create_group(store)
 
 # helper: create array and set data (value should be a numpy array or convertible)
-function create_and_fill(store; name, dtype=nothing, shape=nothing, chunks=nothing,
-    serializer=nothing, compressors=nothing, filters=nothing, shards=nothing,
-    dimension_names=nothing, data)
-    # Build NamedTuple of only non-nothing keyword arguments
-    kwargs = (; name=name)
-    if dtype !== nothing
-        kwargs = merge(kwargs, (; dtype=dtype))
-    end
-    if shape !== nothing
-        kwargs = merge(kwargs, (; shape=shape))
-    end
-    if chunks !== nothing
-        kwargs = merge(kwargs, (; chunks=chunks))
-    end
-    if serializer !== nothing
-        kwargs = merge(kwargs, (; serializer=serializer))
-    end
-    if filters !== nothing
-        kwargs = merge(kwargs, (; filters=filters))
-    end
-    if shards !== nothing
-        kwargs = merge(kwargs, (; shards=shards))
-    end
-    if dimension_names !== nothing
-        kwargs = merge(kwargs, (; dimension_names=dimension_names))
-    end
-
-    # Always pass compressors explicitly: nothing → empty list (disables default compressor)
-    kwargs = merge(kwargs, (; compressors=compressors !== nothing ? compressors : pylist([])))
-
+function create_and_fill(store; data, compressors = pylist([]), kw...)
+    kwargs = filter(!isnothing, NamedTuple(kw))
     # create the array
-    a = zarr.create_array(store; kwargs...)
+    a = zarr.create_array(store; compressors, kwargs...)
 
     # ensure numpy array
     arr = data isa Py ? data : np.array(data)
