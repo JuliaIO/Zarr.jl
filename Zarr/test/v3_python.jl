@@ -41,7 +41,7 @@ zarr.create_group(store)
 
 # helper: create array and set data (value should be a numpy array or convertible)
 function create_and_fill(store; data, compressors = pylist([]), kw...)
-    kwargs = filter(!isnothing, NamedTuple(kw))
+    kwargs = filter(!isnothing ∘ last, kw)
     # create the array
     a = zarr.create_array(store; compressors, kwargs...)
 
