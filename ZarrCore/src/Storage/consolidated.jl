@@ -93,7 +93,7 @@ function is_zgroup(::ZarrFormat{3}, d::ConsolidatedStore, p)
 end
 
 ZarrFormat(d::ConsolidatedStore, path) = ZarrFormat(d.parent, path)  # detect format from parent, not cons
-check_consolidated_write(i::String) = split(i, '/')[end] in (".zattrs", ".zarray", ".zgroup") &&
+check_consolidated_write(i::String) = split(i, '/')[end] in (".zattrs", ".zarray", ".zgroup", "zarr.json") &&
                                       throw(ArgumentError("Can not modify consolidated metadata, please re-open the dataset with `consolidated=false`"))
 function _pdict(d::ConsolidatedStore, p)
   zv = ZarrFormat(d.parent, d.path)
