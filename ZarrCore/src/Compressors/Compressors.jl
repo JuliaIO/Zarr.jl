@@ -52,11 +52,18 @@ function zcompress!(compressed, data, c, f)
 end
 
 function zuncompress!(data, compressed, c, f)
-    data2 = zuncompress(compressed, c, desttype(last(f))) 
+    data2 = zuncompress(compressed, c, desttype(last(f)))
     a2 = foldr(f, init = data2) do fnow, anow
         zdecode(anow, fnow)
     end
-    copyto!(data, a2)
+    # A bytes-to-bytes filter such as `shuffle` or `fletcher32` leaves `a2`
+    # holding the chunk's bytes rather than its elements, so it has to be
+    # reinterpreted before it can fill a wider `data`. Only that case is
+    # reinterpreted: a filter that merely narrows the element type, as
+    # `DeltaFilter{Int64,Int32}` does, still needs `copyto!`'s elementwise
+    # conversion.
+    needsbytes = eltype(a2) === UInt8 && eltype(data) !== UInt8
+    copyto!(data, needsbytes ? _reinterpret(eltype(data), a2) : a2)
 end
 
 # ## `NoCompressor`

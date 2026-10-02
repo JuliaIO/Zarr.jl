@@ -154,3 +154,31 @@ end
         @test eltype(actual) == astype
     end
 end
+
+@testset "Array round trip through a bytes-to-bytes filter" begin
+    # `shuffle` and `fletcher32` have `desttype` `UInt8`, so decoding a chunk
+    # yields its bytes rather than its elements. Exercising them only through
+    # `zencode`/`zdecode` cannot catch a failure to reinterpret those bytes
+    # back to a wider element type, so go through a real array here.
+    for T in (UInt8, Int32, Int64, Float32, Float64)
+        @testset "$T" begin
+            data = T[1:10;]
+
+            for (name, filters) in (
+                "shuffle" => (ShuffleFilter(sizeof(T)),),
+                "fletcher32" => (Fletcher32Filter(),),
+                "shuffle then fletcher32" => (ShuffleFilter(sizeof(T)), Fletcher32Filter()),
+            )
+                @testset "$name" begin
+                    z = zcreate(
+                        T, Zarr.DictStore(), length(data);
+                        chunks=(length(data),), compressor=Zarr.NoCompressor(),
+                        filters=filters,
+                    )
+                    z[:] = data
+                    @test z[:] == data
+                end
+            end
+        end
+    end
+end
