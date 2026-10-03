@@ -52,11 +52,14 @@ function zcompress!(compressed, data, c, f)
 end
 
 function zuncompress!(data, compressed, c, f)
-    data2 = zuncompress(compressed, c, desttype(last(f))) 
+    data2 = zuncompress(compressed, c, desttype(last(f)))
     a2 = foldr(f, init = data2) do fnow, anow
         zdecode(anow, fnow)
     end
-    copyto!(data, a2)
+    # `shuffle`/`fletcher32` leave `a2` as raw bytes, not elements; `DeltaFilter`
+    # narrows eltype legitimately and still needs copyto!'s elementwise conversion.
+    needsbytes = eltype(a2) === UInt8 && eltype(data) !== UInt8
+    copyto!(data, needsbytes ? _reinterpret(eltype(data), a2) : a2)
 end
 
 # ## `NoCompressor`
