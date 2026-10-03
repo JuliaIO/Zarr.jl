@@ -1,20 +1,14 @@
-name = "Zarr"
-uuid = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
-version = "0.10.2"
-authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
-
 [workspace]
-projects = ["test", "lib/ZarrCore"]
-
-[deps]
-ZarrCore = "77f5b75c-4c08-499f-ba13-550b0a0af171"
-
-[weakdeps]
-AWSS3 = "1c724243-ef5b-51ab-93f4-b0a88ac62a95"
-
-[extensions]
-ZarrAWSS3Ext = "AWSS3"
-
-[compat]
-AWSS3 = "0.10, 0.11"
-julia = "1.10"
+projects = [
+    "Zarr",
+    "ZarrCore",
+    "ZarrZip",
+    "ZarrBlosc",
+    "ZarrZlib",
+    "ZarrZstd",
+    "ZarrHTTP",
+    "ZarrGCS",
+    "ZarrS3",
+    "Zarr/test",
+    "docs",
+]

@@ -1,0 +1,564 @@
+using Test
+using Zarr
+import Zarr: ZarrCore
+using JSON
+using JSON: json
+using Pkg
+using Dates
+
+
+@testset "Zarr" begin
+
+@testset "public API surface" begin
+    # Zarr exports the union of subpackage exports and exposes a smaller public API.
+    mods = Zarr.REEXPORTED_MODULES
+    modnames = Set((:Zarr, map(nameof, mods)...))
+    exported(m) = setdiff(Set(filter(n -> Base.isexported(m, n), names(m))), modnames)
+    publiconly(m) = setdiff(Set(filter(n -> !Base.isexported(m, n), names(m))), modnames)
+    # Declaration files also expose public names on Julia 1.10.
+    declared(m) = setdiff(Set(Zarr._declared_public_names(m)), modnames)
+    allexported = mapreduce(exported, union, mods)
+    allpublic = mapreduce(publiconly, union, mods)
+    alldeclared = mapreduce(declared, union, mods)
+    facade_declared = setdiff(alldeclared, Set([:register!]))
+
+    @test all(m -> isdefined(Zarr, nameof(m)), mods)
+    @test !any(m -> Base.isexported(Zarr, nameof(m)), mods)
+
+    @test exported(Zarr) == allexported
+
+    @test isempty(intersect(allpublic, exported(Zarr)))
+    @test isempty(intersect(allexported, publiconly(Zarr)))
+
+    @static if VERSION >= v"1.11"
+        @test all(m -> declared(m) == publiconly(m), mods)
+        @test declared(Zarr) == publiconly(Zarr)
+        @test issubset(publiconly(Zarr), allpublic)
+    end
+
+    # Individual packages may have no public-only names; the combined set may not.
+    @test !isempty(alldeclared)
+    @test isempty(filter(n -> !isdefined(Zarr, n), facade_declared))
+    @test !isempty(declared(Zarr))
+    @test isempty(filter(n -> !isdefined(Zarr, n), declared(Zarr)))
+
+    @test all(isdefined.(Ref(Zarr), [:zname]))
+    @test all(isdefined.(Ref(Zarr), [:DictStore, :HTTPStore, :ZipStore, :CachingStore, :ConsolidatedStore]))
+    @test all(isdefined.(Ref(Zarr), [:consolidate_metadata, :writezip, :missing_chunk_return_code!, :gcs_credentials]))
+    @test all(isdefined.(Ref(Zarr), [:ChunkKeyEncoding, :SuffixChunkKeyEncoding]))
+    @test all(isdefined.(Ref(Zarr), [:Filter, :VLenArrayFilter, :VLenUTF8Filter, :Fletcher32Filter,
+        :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
+    @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
+    @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :CRC32cV3Codec, :VLenUTF8V3Codec]))
+    @test !isdefined(Zarr, :register!)
+    for mod in (Zarr.ZarrBlosc, Zarr.ZarrZlib, Zarr.ZarrZstd, Zarr.ZarrHTTP,
+                Zarr.ZarrGCS, Zarr.ZarrS3, Zarr.ZarrZip)
+        @test :register! in declared(mod)
+    end
+end
+
+@testset "default compressor" begin
+    @test @inferred(ZarrCore.default_compressor()) == Zarr.BloscCompressor()
+    core_only = """
+        using ZarrCore
+        @assert ZarrCore.default_compressor() isa ZarrCore.NoCompressor
+        @assert ZarrCore.Metadata(zeros(UInt8, 1), (1,)).compressor isa ZarrCore.NoCompressor
+        """
+    @test success(`$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $core_only`)
+end
+
+include("registration.jl")
+
+@testset "ZArray" begin
+    @testset "fields" begin
+        z = zzeros(Int64, 2, 3)
+            @test z isa ZArray{Int64,2,ZarrCore.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
+        @test :a ∈ propertynames(z.storage)
+        @test length(z.storage.a) === 3
+        @test length(z.storage.a["0.0"]) === 64
+        @test eltype(z.storage.a["0.0"]) === UInt8
+        @test z.metadata.zarr_format === 2
+        @test z.metadata.node_type === "array"
+        @test z.metadata.shape[] === (2, 3)
+        @test z.metadata.order === 'C'
+        @test z.metadata.chunks === (2, 3)
+        @test z.metadata.fill_value === nothing
+        @test z.metadata.compressor isa Zarr.BloscCompressor
+        @test z.metadata.compressor.blocksize === 0
+        @test z.metadata.compressor.clevel === 5
+        @test z.metadata.compressor.cname === "lz4"
+        @test z.metadata.compressor.shuffle === 1
+        @test z.attrs == Dict{Any, Any}()
+        @test z.writeable === true
+            @test z.metadata.chunk_key_encoding === Zarr.ChunkKeyEncoding(ZarrCore.default_sep(ZarrCore.DV), ZarrCore.default_prefix(ZarrCore.DV))
+        @test_throws ArgumentError zzeros(Int64,2,3, chunks = (0,1))
+        @test_throws ArgumentError zzeros(Int64,0,-1)
+        @test_throws ArgumentError ZarrCore.Metadata(zeros(2,2), (2,2), order = 'F')
+    end
+
+    @testset "methods" begin
+        z = zzeros(Int64, 2, 3)
+            @test z isa ZArray{Int64,2,Zarr.DictStore,ZarrCore.MetadataV2{Int64,2,Zarr.BloscCompressor,Nothing}}
+        @test eltype(z) === Int64
+        @test ndims(z) === 2
+        @test size(z) === (2, 3)
+        @test size(z, 2) === 3
+        @test size(z,300) === 1
+        @test_throws ErrorException size(z, -1)
+        @inferred size(z)
+        @inferred size(z, 2)
+        @test length(z) === 2 * 3
+        @test lastindex(z, 2) === 3
+        @test Zarr.zname(z) === "root"
+    end
+
+    @testset "NoCompressor DirectoryStore" begin
+        mktempdir(@__DIR__) do dir
+            name = "nocompressor"
+            z = zzeros(Int64, 2, 3, path="$dir/$name",
+                compressor=Zarr.NoCompressor())
+
+            @test z.metadata.compressor === Zarr.NoCompressor()
+                @test z.storage === Zarr.DirectoryStore("$dir/$name")
+            @test isdir("$dir/$name")
+            @test ispath("$dir/$name/.zarray")
+            @test ispath("$dir/$name/.zattrs")
+            @test ispath("$dir/$name/0.0")
+            @test JSON.parsefile("$dir/$name/.zattrs") == Dict{String, Any}()
+            @test JSON.parsefile("$dir/$name/.zarray") == Dict{String, Any}(
+                "dtype" => "<i8",
+                "filters" => nothing,
+                "shape" => Any[3, 2],
+                "order" => "C",
+                "zarr_format" => 2,
+                "node_type" => "array",
+                "chunks" => Any[3, 2],
+                "fill_value" => nothing,
+                "compressor" => nothing,
+                "dimension_separator" => "."
+            )
+            # call gc to avoid unlink: operation not permitted (EPERM) on Windows
+            # might be because files are left open
+            # from https://github.com/JuliaLang/julia/blob/f6344d32d3ebb307e2b54a77e042559f42d2ebf6/stdlib/SharedArrays/test/runtests.jl#L146
+            GC.gc()
+        end
+    end
+
+    @testset "NoCompressor single-chunk zero-copy fastpath" begin
+        # The V2+NoCompressor+no-filters specialization of
+        # `write_singlechunk_fastpath!` hands a `reinterpret(UInt8, ain)` view
+        # straight to the store instead of allocating a chunk-sized
+        # `Vector{UInt8}` and memcpy'ing into it. The on-disk bytes must
+        # still match the array's bit pattern exactly.
+
+        # Dispatch: the specialized method is selected for V2 + NoCompressor + no filters.
+        mktempdir(@__DIR__) do dir
+            z3 = zcreate(Float32, 4, 4, 2; path=joinpath(dir, "disp"),
+                         chunks=(4, 4, 2), compressor=Zarr.NoCompressor())
+            ain = rand(Float32, 4, 4, 2)
+            m = which(ZarrCore.write_singlechunk_fastpath!, (typeof(z3), typeof(ain), CartesianIndex{3}))
+            @test occursin("MetadataV2", string(m.sig))
+            @test occursin("NoCompressor", string(m.sig))
+            GC.gc()
+        end
+
+        # Round-trip across rank 0, 1, 3, 4 and a mix of bitstypes.
+        mktempdir(@__DIR__) do dir
+            for (T, shape) in ((Float32, (8, 8, 4)),
+                               (Int64,   (5, 3)),
+                               (UInt16,  (16,)),
+                               (ComplexF32, (4, 4)),
+                               (Float64, ()))
+                name = "rt_$(T)_$(length(shape))d"
+                # Match chunks to full shape so writes hit the single-chunk fastpath.
+                chunks = shape == () ? () : shape
+                z = zcreate(T, shape...; path=joinpath(dir, name),
+                            chunks=chunks, compressor=Zarr.NoCompressor())
+                # Drive `ain` through a controlled byte pattern so round-trip
+                # failure can't be masked by zero-init.
+                ain = T === ComplexF32 ?
+                    reshape(ComplexF32[ComplexF32(i, -i) for i in 1:prod(shape == () ? (1,) : shape)],
+                            shape == () ? () : shape) :
+                    reshape(T[T(i) for i in 1:prod(shape == () ? (1,) : shape)],
+                            shape == () ? () : shape)
+                if shape == ()
+                    z[] = ain[]
+                else
+                    z[(Colon() for _ in shape)...] = ain
+                end
+                # On-disk chunk file equals reinterpret(UInt8, ain).
+                chunk_path = shape == () ? joinpath(dir, name, "0") :
+                             joinpath(dir, name, join(fill("0", length(shape)), "."))
+                @test isfile(chunk_path)
+                on_disk = read(chunk_path)
+                expected = Vector{UInt8}(undef, sizeof(ain))
+                GC.@preserve ain expected unsafe_copyto!(pointer(expected),
+                    Ptr{UInt8}(pointer(ain)), sizeof(ain))
+                @test on_disk == expected
+                # Reads round-trip via the regular Zarr.jl path.
+                @test Array(zopen(joinpath(dir, name))) == ain
+                GC.gc()
+            end
+        end
+
+        # All-fill-value chunks are elided (no on-disk file written) — same
+        # semantics as the generic V2 pipeline_encode.
+        mktempdir(@__DIR__) do dir
+            z = zcreate(Float32, 4, 4; path=joinpath(dir, "elide"),
+                        chunks=(4, 4), compressor=Zarr.NoCompressor(),
+                        fill_value=Float32(7))
+            z[:, :] = fill(Float32(7), 4, 4)
+            @test !ispath(joinpath(dir, "elide", "0.0"))
+            # Overwriting an existing chunk with all-fill removes the file.
+            z[:, :] = rand(Float32, 4, 4)
+            @test ispath(joinpath(dir, "elide", "0.0"))
+            z[:, :] = fill(Float32(7), 4, 4)
+            @test !ispath(joinpath(dir, "elide", "0.0"))
+            GC.gc()
+        end
+
+        # The store must fully consume the reinterpret view before returning:
+        # mutating `ain` after the write must not affect on-disk content.
+        mktempdir(@__DIR__) do dir
+            z = zcreate(Float32, 8, 8; path=joinpath(dir, "alias"),
+                        chunks=(8, 8), compressor=Zarr.NoCompressor())
+            ain = rand(Float32, 8, 8)
+            snapshot = copy(ain)
+            z[:, :] = ain
+            fill!(ain, Float32(NaN))                  # clobber after the write returns
+            @test zopen(joinpath(dir, "alias"))[:, :] == snapshot
+            GC.gc()
+        end
+    end
+end
+
+@testset "Groups" begin
+    store = DirectoryStore(tempname())
+    g = zgroup(store,"mygroup")
+    g2 = zgroup(g,"asubgroup",attrs = Dict("a1"=>5))
+        @test ZarrCore.is_zgroup(ZarrCore.DV, store, "mygroup")
+        @test ZarrCore.is_zgroup(ZarrCore.DV, store, "mygroup/asubgroup")
+    @test g2.attrs["a1"]==5
+    @test isdir(joinpath(store.folder,"mygroup"))
+    @test isdir(joinpath(store.folder,"mygroup","asubgroup"))
+end
+
+@testset "Groups format inheritance v2" begin
+    store = DirectoryStore(tempname())
+    zv = ZarrCore.ZarrFormat(2)
+    g = zgroup(store, "rootgroup", zv)
+    sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
+
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test sg.attrs["a1"] == 5
+    @test ispath(joinpath(store.folder, "rootgroup", ".zgroup"))
+    @test ispath(joinpath(store.folder, "rootgroup", "subgroup", ".zgroup"))
+
+    a_root = zcreate(Float64, g, "temperature", 2, 3)
+    a_sub = zcreate(Float64, sg, "pressure", 2, 3)
+    @test ZarrCore.zarr_format(a_root) == zv
+    @test ZarrCore.zarr_format(a_sub) == zv
+end
+
+@testset "Groups format inheritance v3" begin
+    store = DirectoryStore(tempname())
+    zv = ZarrCore.ZarrFormat(3)
+    g = zgroup(store, "rootgroup", zv)
+    sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
+
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup")
+    @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test sg.attrs["a1"] == 5
+    @test ispath(joinpath(store.folder, "rootgroup", "zarr.json"))
+    @test ispath(joinpath(store.folder, "rootgroup", "subgroup", "zarr.json"))
+
+    a_root = zcreate(Float64, g, "temperature", 2, 3)
+    a_sub = zcreate(Float64, sg, "pressure", 2, 3)
+    @test ZarrCore.zarr_format(a_root) == zv
+    @test ZarrCore.zarr_format(a_sub) == zv
+end
+
+@testset "Metadata" begin
+    @testset "Data type encoding" begin
+        using DateTimes64: DateTime64
+        @test ZarrCore.typestr(Bool) === "|b1"
+        @test ZarrCore.typestr(Int8) === "|i1"
+        @test ZarrCore.typestr(Int64) === "<i8"
+        @test ZarrCore.typestr(UInt8) === "|u1"
+        @test ZarrCore.typestr(UInt32) === "<u4"
+        @test ZarrCore.typestr(UInt128) === "<u16"
+        @test ZarrCore.typestr(Complex{Float32}) === "<c8"
+        @test ZarrCore.typestr(Complex{Float64}) === "<c16"
+        @test ZarrCore.typestr(Float16) === "<f2"
+        @test ZarrCore.typestr(Float64) === "<f8"
+        @test ZarrCore.typestr("<U1") == ZarrCore.MaxLengthString{1,UInt32}
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{5,UInt8}) === "<S5"
+        @test ZarrCore.typestr(ZarrCore.MaxLengthString{9,UInt32}) === "<U9"
+        @test ZarrCore.typestr(Vector{Int64}) === "|O"
+        @test ZarrCore.typestr(DateTime64{Day}) === "<M8[D]"
+        @test ZarrCore.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
+    end
+
+    @testset "Metadata struct and JSON representation" begin
+        A = fill(1.0, 30, 20)
+        chunks = (5,10)
+        metadata = ZarrCore.Metadata(A, chunks; fill_value=-1.5)
+        @test metadata isa ZarrCore.Metadata
+        @test metadata.zarr_format === 2
+        @test metadata.shape[] === size(A)
+        @test metadata.chunks === chunks
+        @test metadata.dtype === "<f8"
+        @test metadata.compressor === Zarr.BloscCompressor(0, 5, "lz4", true)
+        @test metadata.fill_value === -1.5
+        @test metadata.order === 'C'
+        @test metadata.filters === nothing
+
+        jsonstr = json(metadata)
+        metadata_cycled = ZarrCore.Metadata(jsonstr,false)
+        @test metadata == metadata_cycled
+    end
+
+    @testset "dimension_names (Zarr v3)" begin
+        # Julia order in the API, C order (reversed) in zarr.json
+        z = zcreate(Float32, 4, 3, 2; chunks=(2, 3, 2), zarr_format=3, dimension_names=("x", nothing, "z"))
+        @test Zarr.dimension_names(z) === ("x", nothing, "z")
+        meta = JSON.parse(String(copy(z.storage[z.path, "zarr.json"])))
+        @test meta["dimension_names"] == ["z", nothing, "x"]
+        # round trip through JSON and through reopening the store
+        @test ZarrCore.Metadata(json(z.metadata), false) == z.metadata
+        z2 = zopen(z.storage; path=z.path)
+        @test Zarr.dimension_names(z2) === ("x", nothing, "z")
+        @test z2.metadata == z.metadata
+        # any indexable collection of names is accepted
+        @test Zarr.dimension_names(zcreate(Int, 2, 3; zarr_format=3, dimension_names=["a", "b"])) === ("a", "b")
+        # absent: the key is omitted (not null) and the accessor returns nothing
+        z3 = zcreate(Int, 2, 2; zarr_format=3)
+        @test Zarr.dimension_names(z3) === nothing
+        meta3 = JSON.parse(String(copy(z3.storage[z3.path, "zarr.json"])))
+        @test !haskey(meta3, "dimension_names")
+        # a top-level null (written by some tools) is tolerated and means unnamed
+        meta3["dimension_names"] = nothing
+        @test ZarrCore.Metadata(json(meta3), false).dimension_names === nothing
+        # validation: one entry per dimension, and a collection rather than a string
+        @test_throws ArgumentError zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x",))
+        @test_throws ArgumentError zcreate(Int, 2; zarr_format=3, dimension_names="x")
+        meta["dimension_names"] = ["z", "x"]
+        @test_throws ArgumentError ZarrCore.Metadata(json(meta), false)
+        # names take part in metadata equality
+        @test zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x", "y")).metadata !=
+              zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x", "z")).metadata
+        # Zarr v2 has no dimension_names field
+        @test Zarr.dimension_names(zcreate(Int, 2, 2; zarr_format=2)) === nothing
+        @test_throws ArgumentError zcreate(Int, 2, 2; zarr_format=2, dimension_names=("x", "y"))
+    end
+
+    @testset "Fill value" begin
+        @test Zarr.fill_value_encoding(Inf) === "Infinity"
+        @test Zarr.fill_value_encoding(-Inf) === "-Infinity"
+        @test Zarr.fill_value_encoding(NaN) === "NaN"
+        @test Zarr.fill_value_encoding(nothing) === nothing
+        @test Zarr.fill_value_encoding("-") === "-"
+
+        @test Zarr.fill_value_decoding("Infinity", Float64) === Inf
+        @test Zarr.fill_value_decoding("-Infinity", Float64) === -Inf
+        @test Zarr.fill_value_decoding("NaN", Float32) === NaN32
+        @test Zarr.fill_value_decoding("3.4", Float64) === 3.4
+        @test Zarr.fill_value_decoding("3", Int) === 3
+        @test Zarr.fill_value_decoding(nothing, Int) === nothing
+        @test Zarr.fill_value_decoding("-", String) === "-"
+        @test Zarr.fill_value_decoding("", ZarrCore.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt8}) === ZarrCore.MaxLengthString{6,UInt8}("")
+        @test Zarr.fill_value_decoding("", ZarrCore.MaxLengthString{6,UInt32}) === ZarrCore.MaxLengthString{6,UInt32}("")
+        @test Zarr.fill_value_decoding(nothing, ZarrCore.ASCIIChar) === nothing
+        @test Zarr.fill_value_decoding(Any[0.0, 0.0], ComplexF64) === ComplexF64(0.0, 0.0)
+        @test Zarr.fill_value_decoding(Any[1.5, -2.5], ComplexF32) === ComplexF32(1.5, -2.5)
+    end
+end
+
+@testset "getindex/setindex" begin
+  a = zzeros(Int64, 10, 10, chunks = (5,2))
+  a[2,:] .= 5
+  a[:,3] .= 6
+  a[9:10,9:10] .= 2
+  a[5,5] = 1
+
+  @test a[2,:] == [5, 5, 6, 5, 5, 5, 5, 5, 5, 5]
+  @test a[:,3] == fill(6,10)
+  @test a[4,4] == 0
+  @test a[5:6,5:6] == [1 0; 0 0]
+  @test a[9:10,9:10] == fill(2,2,2)
+  # Now with FillValue
+  amiss = zzeros(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=true)
+  amiss[:,1] = 1:10
+  amiss[:,2] .= missing
+  amiss[1:3,4] = [1,missing,3]
+  amiss[1,10] = 5
+  amiss[1:5,9:10] .= missing
+
+  @test amiss[:,1] == 1:10
+  @test all(ismissing,amiss[:,2])
+  @test all(i->isequal(i...),zip(amiss[1:3,4],[1,missing,3]))
+  # Test that chunk containing only missings is not initialized
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkKeyEncoding('/', false), CartesianIndex((1, 5))))
+  #
+  amiss = zcreate(Int64, 10,10,chunks=(5,2), fill_value=-1, fill_as_missing=false)
+  amiss[:,1] = 1:10
+  amiss[1:3,4] = [1,-1,3]
+  amiss[1,10] = 5
+  amiss[1:5,9:10] .= -1
+
+  @test amiss[:,1] == 1:10
+  @test all(==(-1),amiss[:,2])
+  @test all(i->isequal(i...),zip(amiss[1:3,4],[1,-1,3]))
+  # Test that chunk containing only fill values is not initialized
+        @test !Zarr.isinitialized(amiss.storage, Zarr.citostring(Zarr.ChunkKeyEncoding('/', false), CartesianIndex((1, 5))))
+end
+
+@testset "resize" begin
+  a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+  resize!(a,5,4)
+  @test size(a)==(5,4)
+  resize!(a,10,10)
+  @test size(a)==(10,10)
+  @test all(==(-1),a[6:end,:])
+  xapp = rand(1:10,10,20)
+  append!(a,xapp)
+  @test size(a)==(10,30)
+  @test a[:,11:30] == xapp
+  singlevec = rand(1:10,10)
+  append!(a,singlevec)
+  @test size(a)==(10,31)
+  @test a[:,31]==singlevec
+  singlerow = rand(1:10,31)
+  append!(a,singlerow,dims=1)
+  @test size(a)==(11,31)
+  @test a[11,:]==singlerow
+  append!(a,vcat(singlerow', singlerow'), dims=1)
+  @test size(a)==(13,31)
+  @test a[12:13,:]==vcat(singlerow', singlerow')
+  @test_throws ArgumentError resize!(a,(-1,2))
+
+  # A read-only array must not touch the stored metadata or chunks.
+  mktempdir() do dir
+    w = zzeros(Int64, 10, 10, path=dir, chunks=(5,2))
+    chunkfiles = sort(readdir(dir))
+    readonly = zopen(dir)
+    @test_throws ErrorException resize!(readonly, 5, 4)
+    @test_throws ErrorException append!(readonly, ones(Int64, 10, 2))
+    @test size(readonly) == (10, 10)
+    @test size(zopen(dir)) == (10, 10)
+    @test sort(readdir(dir)) == chunkfiles
+  end
+end
+
+@testset "zcreate does not allocate dense storage" begin
+    mktempdir() do dir
+        # About 1 TB if zcreate were materializing dummy storage.
+        r = @timed zcreate(UInt8, 10674, 10653, 9327; path = joinpath(dir, "big.zarr"))
+        @test r.bytes < 1e9
+        @test size(r.value) == (10674, 10653, 9327)
+        @test eltype(r.value) == UInt8
+        GC.gc()
+    end
+end
+
+@testset "concatenate" begin
+    a = zzeros(Int64, 10, 10, chunks = (5,2), fill_value=-1)
+    ca = cat(a, a, dims=3)
+    @test size(ca) == (10,10,2)
+end
+
+@testset "string/Char array getindex/setindex" begin
+  aa = ["this", "is", "all ", "ascii"]
+  bb = ["And" "Unicode"; "ματριξ" missing]
+  cc = 'A':'D'
+  a = ZArray(aa)
+  b = ZArray(bb, fill_value = "")
+  c = ZArray(cc)
+  @test eltype(a) == String
+  @test eltype(b) == Union{String,Missing}
+  @test eltype(c) == Char
+  @test a[:] == ["this", "is", "all ", "ascii"]
+  @test c[:] == 'A':'D'
+  @test all(isequal.(b[:,:],["And" "Unicode"; "ματριξ" missing]))
+end
+
+@testset "MaxLengthString large-chunk read path" begin
+  MaxLS = ZarrCore.MaxLengthString{1024,UInt32}
+  fv = MaxLS("")
+  z_v2 = zcreate(MaxLS, 348; chunks=(18674,), fill_value=fv)
+  @test z_v2[1] == fv
+  @test z_v2[end] == fv
+  z_v3 = zcreate(MaxLS, 348; chunks=(18674,), fill_value=fv, zarr_format=3)
+  @test z_v3[1] == fv
+  @test z_v3[end] == fv
+end
+
+@testset "MaxLengthString conversion and display" begin
+    s8 = ZarrCore.MaxLengthString{5,UInt8}("abc")
+    s32 = ZarrCore.MaxLengthString{5,UInt32}("Snow")
+    sempty = ZarrCore.MaxLengthString{5,UInt32}("")
+  
+    @test String(s8) == "abc"
+    @test String(s32) == "Snow"
+    @test String(sempty) == ""
+    @test sprint(show, s32) == "\"Snow\""
+    @test sprint(show, sempty) == "\"\""
+end
+
+@testset "ragged arrays" begin
+  z = zcreate(Vector{Float64},2,3)
+  a, b, c, d = [1.0,2.0,3.0], [4.0,5.0],[2.0],[2.0,3.0]
+  z[1,1] = a
+  z[2,1:3] = [b,c,d]
+  @test z[:,:] == reshape([a,b,[],c,[],d],2,3)
+  @test storageratio(z) == "unknown"
+  @test zinfo(z) === nothing
+  @test z.metadata.filters == (Zarr.VLenArrayFilter{Float64}(),)
+  z2 = ZArray(reshape([a,b,Float64[],c,Float64[],d],2,3))
+  @test z[:,:] == z2[:,:]
+end
+
+@testset "Fillvalue as missing" begin 
+    p = tempname()
+    a = zcreate(Int,2,3,fill_value=-1,fill_as_missing=true,path=p)
+    @test all(ismissing,a[:,:])
+    @test eltype(a) == Union{Int,Missing}
+    a[:,1] .= 5
+    b = zopen(p,fill_as_missing=true)
+    @test eltype(b) == Union{Int, Missing}
+    @test all(ismissing,b[:,2:3])
+    @test all(==(5),b[:,1])
+    c = zopen(p)
+    @test eltype(c) == Int
+    @test all(==(-1),c[:,2:3])
+    @test all(==(5),c[:,1])
+  end
+
+  @testset "Fill_Value nothing with missing chunk" begin
+    # See issue #146
+    p = tempname()
+    a = zcreate(Int64, 10,10,chunks=(5,2))
+    @test_throws ArgumentError a[:,:]
+    
+  end
+
+
+include("storage.jl")
+
+include("Filters.jl")
+
+include("python.jl")
+
+include("v3_codecs.jl")
+
+include("http_sharded.jl")
+
+include("consolidated.jl")
+
+include("arraycache.jl")
+
+end  # @testset "Zarr"

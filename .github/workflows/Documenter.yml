@@ -11,8 +11,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      # Julia 1.10 ignores `[sources]`; develop sibling packages explicitly.
+      - name: Develop the sibling packages
+        run: julia --project=Zarr -e 'using Pkg; Pkg.develop([PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")])'
       - uses: julia-actions/julia-buildpkg@latest
+        with:
+          project: Zarr
+      - name: Develop all packages into the documentation environment
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(path="Zarr"), PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")]); Pkg.instantiate()'
       - uses: julia-actions/julia-docdeploy@latest
+        with:
+          install-package: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}

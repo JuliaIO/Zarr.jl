@@ -18,18 +18,44 @@
 
 The package currently implements basic functionality for reading and writing zarr arrays. However, the package is under active development, since many compressors and backends supported by the python implementation are still missing.
 
+## Repository layout
+
+This monorepo contains the `Zarr` facade, `ZarrCore`, compressor packages
+`ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`, and storage packages `ZarrHTTP`,
+`ZarrGCS`, `ZarrS3`, and `ZarrZip`. Each package is a top-level directory. The
+facade source and tests live in `Zarr/src` and `Zarr/test`; documentation remains
+in `docs`.
+
+The root `Project.toml` is a Julia 1.12+ workspace used for monorepo
+development. Individual packages support Julia 1.10+.
+
+```bash
+julia +1.12 --project=. -e 'using Pkg; Pkg.instantiate(; workspace=true)'
+julia +1.12 --project=docs docs/make.jl
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete test commands. On Julia
+1.11+, each project's `[sources]` entries resolve its local dependencies. On
+Julia 1.10, develop sibling packages with explicit relative paths, for example
+`Pkg.develop(path="../ZarrCore")`.
+
 ## Quick start
 
-````julia
+```julia
 using Zarr
-z1 = zcreate(Int, 10000,10000,path = "data/example.zarr",chunks=(1000, 1000))
-z1[:] .= 42
-z1[:,1] = 1:10000
-z1[1,:] = 1:10000
 
-z2 = zopen("data/example.zarr")
-z2[1:10,1:10]
-````
+path = joinpath(mktempdir(), "example.zarr")
+z1 = zcreate(Int, 100, 100; path, chunks=(10, 10))
+z1[:, :] .= 42
+z1[:, 1] = 1:100
+z1[1, :] = 1:100
+
+z2 = zopen(path, "r")
+z2[1:10, 1:10]
+```
+
+Use one index per dimension: `z1[:, :]` selects the entire two-dimensional
+array; `z1[:]` is only valid for a one-dimensional Zarr array.
 
 ## Links
 - https://discourse.julialang.org/t/a-julia-compatible-alternative-to-zarr/11842

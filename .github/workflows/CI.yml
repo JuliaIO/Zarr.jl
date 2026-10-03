@@ -36,19 +36,14 @@ jobs:
           arch: ${{ matrix.arch }}
           show-versioninfo: true
       - uses: julia-actions/cache@v3
-      # Pkg only understands `[sources]`/`[workspace]` from Julia 1.11 on, so on
-      # LTS (1.10) the unregistered path dependency on ZarrCore is invisible and
-      # resolution fails with "expected package ZarrCore to be registered".
-      # Dev'ing it explicitly fixes that; on 1.11+ it is a no-op because
-      # `[sources]` already points at the same path. This only affects developing
-      # from a checkout -- once both packages are registered, users resolve
-      # ZarrCore normally on any supported Julia.
-      - name: Develop ZarrCore (Pkg < 1.11 ignores [sources])
-        # bash on every platform: PowerShell mangles the embedded double quotes
-        # when forwarding them to a native executable.
+      # Julia 1.10 ignores `[sources]`; develop sibling packages explicitly.
+      - name: Develop the sibling packages (Pkg < 1.11 ignores [sources])
+        # Bash preserves the embedded quotes on Windows.
         shell: bash
-        run: julia --project=. -e 'using Pkg; Pkg.develop(path="lib/ZarrCore")'
+        run: julia --project=Zarr -e 'using Pkg; Pkg.develop([PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")])'
       - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: Zarr
         env:
           PYTHON:
       - name: Generate Julia and Python v3 fixtures
@@ -58,29 +53,24 @@ jobs:
         with:
           timeout_minutes: 5
           max_attempts: 3
-          # bash on every platform, for the same quoting reason as above (and so
-          # `rm`-style POSIX commands added here behave consistently).
+          # Bash preserves the embedded quotes on Windows.
           shell: bash
           command: |
-            julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path=pwd()), PackageSpec(path="lib/ZarrCore")]); Pkg.resolve(); Pkg.instantiate()'
-            julia --project=test test/v3_julia.jl
-            julia --project=test test/v3_python.jl
-      # The step above dev's ZarrCore into the test environment so the fixture
-      # scripts can `using Zarr` on LTS, which makes ZarrCore a *direct* dep of
-      # test/Project.toml. `Pkg.test` then builds its sandbox by merging the
-      # active manifest (where ZarrCore is also dev'd, hence fixed) with the
-      # fixed deps of the test manifest, and refuses to merge a package that
-      # appears in both: "ERROR: can not merge projects". Dropping the test
-      # manifest leaves nothing to merge; the sandbox resolves ZarrCore from the
-      # active manifest instead. On 1.11+ the workspace keeps the only manifest
-      # at the repo root, so this is a no-op there.
+            julia --project=Zarr/test -e 'using Pkg; Pkg.develop([PackageSpec(path="Zarr"), PackageSpec(path="ZarrCore"), PackageSpec(path="ZarrZip"), PackageSpec(path="ZarrBlosc"), PackageSpec(path="ZarrZlib"), PackageSpec(path="ZarrZstd"), PackageSpec(path="ZarrHTTP"), PackageSpec(path="ZarrGCS"), PackageSpec(path="ZarrS3")]); Pkg.resolve(); Pkg.instantiate()'
+            julia --project=Zarr/test Zarr/test/v3_julia.jl
+            julia --project=Zarr/test Zarr/test/v3_python.jl
+      # Julia 1.10 cannot merge developed fixture packages into the test sandbox.
       - name: Drop the test manifest so Pkg.test can build its sandbox
         shell: bash
-        run: rm -f test/Manifest.toml
+        run: rm -f Zarr/test/Manifest.toml
       - uses: julia-actions/julia-runtest@v1
+        with:
+          project: Zarr
         env:
           PYTHON:
       - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: Zarr/src,ZarrCore/src,ZarrZip/src,ZarrBlosc/src,ZarrZlib/src,ZarrZstd/src,ZarrHTTP/src,ZarrGCS/src,ZarrS3/src
       - uses: codecov/codecov-action@v7
         with:
           files: lcov.info
