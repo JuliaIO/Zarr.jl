@@ -12,6 +12,7 @@
   `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` through `Zarr`.
 - Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
 - Fixed `fill_as_missing=true` on zarr v3 arrays, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}` when decoding an initialized chunk.
+- Fixed zarr v3 `ComplexF32`/`ComplexF64` arrays, which wrote `data_type` as `"complexf32"`/`"complexf64"` (now the spec names `"complex64"`/`"complex128"`; old names still read) and encoded complex fill values as `{"re","im"}` instead of `[real, imag]`, so they could not be reopened.
 
 ## v0.10.2 - 2026-08-19
 

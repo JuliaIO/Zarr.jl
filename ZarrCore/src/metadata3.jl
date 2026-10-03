@@ -9,10 +9,16 @@ end
 typemap3["complex64"] = ComplexF32
 typemap3["complex128"] = ComplexF64
 typemap3["string"] = String
+# legacy names written by the `lowercase(string(T))` fallback before the explicit `typestr3` methods below
+typemap3["complexf32"] = ComplexF32
+typemap3["complexf64"] = ComplexF64
 
 function typestr3(t::Type)
     return lowercase(string(t))
 end
+
+typestr3(::Type{ComplexF32}) = "complex64"
+typestr3(::Type{ComplexF64}) = "complex128"
 
 function typestr3(::Type{MaxLengthString{N, UInt32}}) where {N}
     return Dict{String, Any}(

@@ -913,6 +913,40 @@ end
             @test all(==(0.0), c[3:4, 4:6])
         end
     end
+
+    @testset "complex data_type names (spec-compliant)" begin
+        for (T, wirename) in ((ComplexF32, "complex64"), (ComplexF64, "complex128"))
+            mktempdir() do dir
+                path = joinpath(dir, "complex.zarr")
+                a = zcreate(T, 4, 6; path=path, zarr_format=3, chunks=(2, 3))
+                @test eltype(a) == T
+
+                doc = JSON.parse(read(joinpath(path, "zarr.json"), String))
+                @test doc["data_type"] == wirename
+
+                data = T.(reshape(1:24, 4, 6)) .+ 2im
+                a[:, :] = data
+
+                b = zopen(path)
+                @test eltype(b) == T
+                @test b[:, :] == data
+            end
+        end
+    end
+
+    @testset "complex data_type legacy-name read compat" begin
+        for (name, T) in (("complexf32", ComplexF32), ("complexf64", ComplexF64))
+            store = Zarr.DictStore()
+            json_str = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"$name",
+                "chunk_grid":{"name":"regular","configuration":{"chunk_shape":[4]}},
+                "chunk_key_encoding":{"name":"default","configuration":{"separator":"/"}},
+                "fill_value":[0.0,0.0],
+                "codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+            store["zarr.json"] = Vector{UInt8}(json_str)
+            z = zopen(store)
+            @test eltype(z) == T
+        end
+    end
 end
 
 @testset "Read Python-generated v3 fixtures" begin
