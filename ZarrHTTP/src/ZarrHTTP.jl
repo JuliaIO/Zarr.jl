@@ -74,12 +74,16 @@ end
 # Store-specific check that the key stays inside what the store serves.
 outside_store_reason(::AbstractStore, p, k) = nothing
 function outside_store_reason(s::DirectoryStore, p, k)
-  # Resolve the file the store would read. This also catches keys that
-  # `joinpath` treats as absolute, such as "C:/secret.txt" on Windows.
+  # Check both lexical paths and existing symlink targets against the served
+  # directory. Missing files retain the handler's normal not-found response.
   root = abspath(joinpath(s.folder, p))
-  rel = relpath(abspath(joinpath(s.folder, ZarrCore._concatpath(p, k))), root)
-  (isabspath(rel) || first(splitpath(rel)) == "..") || return nothing
-  "the key resolves to a file outside the served directory"
+  path = abspath(joinpath(s.folder, ZarrCore._concatpath(p, k)))
+  reason = "the key resolves to a file outside the served directory"
+  rel = relpath(path, root)
+  (isabspath(rel) || first(splitpath(rel)) == "..") && return reason
+  ispath(path) || return nothing
+  rel = relpath(realpath(path), realpath(root))
+  (isabspath(rel) || first(splitpath(rel)) == "..") ? reason : nothing
 end
 outside_store_reason(s::ConsolidatedStore, p, k) = outside_store_reason(s.parent, p, k)
 function outside_store_reason(s::CachingStore, p, k)
@@ -87,10 +91,24 @@ function outside_store_reason(s::CachingStore, p, k)
   reason === nothing ? outside_store_reason(s.remote, p, k) : reason
 end
 
+# Apply the same key boundary while discovering and reading metadata to serve.
+struct ServingStore{S<:AbstractStore} <: AbstractStore
+  parent::S
+end
+function Base.getindex(s::ServingStore, k::String)
+  invalid_key_reason(s.parent, "", k) === nothing ? s.parent[k] : nothing
+end
+Base.setindex!(s::ServingStore, value, k::String) = s.parent[k] = value
+function ZarrCore.subdirs(s::ServingStore, p)
+  filter(ZarrCore.subdirs(s.parent, p)) do name
+    invalid_key_reason(s.parent, "", ZarrCore._concatpath(p, name)) === nothing
+  end
+end
+
 # Serve a store through HTTP.
 function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   if s[p,".zmetadata"] === nothing
-    consolidate_metadata(s)
+    consolidate_metadata(ServingStore(s))
   end
   request -> begin
     k = request.target
