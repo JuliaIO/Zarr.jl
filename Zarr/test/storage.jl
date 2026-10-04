@@ -327,6 +327,87 @@ end
     @test srv_szero isa HTTP.Server
     close(srv_szero)
   end
+  @testset "Serving a DirectoryStore" begin
+    mktempdir() do dir
+      write(joinpath(dir, "secret.txt"), "secret")
+      ds = Zarr.DirectoryStore(joinpath(dir, "store"))
+      gd = zgroup(ds, attrs = Dict("groupatt"=>5))
+      ad = zcreate(Int, gd, "a1", 10, 20, chunks=(5,5))
+      ad .= reshape(1:200,10,20)
+      srv = HTTP.serve!(gd, "127.0.0.1", 0)
+      try
+        g3 = zopen("http://127.0.0.1:$(srv.bound_port)")
+        @test g3.attrs == Dict("groupatt"=>5)
+        @test g3["a1"][:,:] == reshape(1:200,10,20)
+      finally
+        close(srv)
+      end
+      # Call the handler directly, since HTTP clients normalize ".." away.
+      handler = Zarr.ZarrHTTP.zarr_req_handler(ds, "")
+      @test handler(HTTP.Request("GET", "/.zgroup")).status == 200
+      for target in ("/../secret.txt", "/a1/../../secret.txt", "/..\\secret.txt")
+        r = handler(HTTP.Request("GET", target))
+        @test r.status == 400
+        @test occursin("\"..\" path segments", String(r.body))
+      end
+      # The DirectoryStore check resolves the path instead of inspecting the key
+      reason = Zarr.ZarrHTTP.invalid_key_reason
+      @test reason(ds, "", "a1/.zarray") === nothing
+      @test reason(ds, "a1", ".zarray") === nothing
+      @test reason(ds, "", "") === nothing
+      @test occursin("outside the served directory", reason(ds, "", abspath(dir, "secret.txt")))
+      # Wrapper stores defer to the store that reads the files
+      cs = Zarr.ConsolidatedStore(ds, "")
+      @test occursin("outside", reason(cs, "", abspath(dir, "secret.txt")))
+      @test reason(cs, "", "a1/.zarray") === nothing
+      # ".." inside a key name is not a traversal
+      @test handler(HTTP.Request("GET", "/a1/0..0")).status == 404
+
+      # Directory links use junctions on Windows and need no symlink privilege.
+      outside = joinpath(dir, "outside")
+      mkpath(outside)
+      write(joinpath(outside, "secret.txt"), "outside fixture")
+      symlink(outside, joinpath(ds.folder, "escape"); dir_target=true)
+      symlink(outside, joinpath(ds.folder, "a1", "escape"); dir_target=true)
+      symlink(joinpath(ds.folder, "a1"), joinpath(ds.folder, "inside"); dir_target=true)
+      @test handler(HTTP.Request("GET", "/escape/secret.txt")).status == 400
+      array_handler = Zarr.ZarrHTTP.zarr_req_handler(ds, "a1")
+      @test array_handler(HTTP.Request("GET", "/escape/secret.txt")).status == 400
+      @test handler(HTTP.Request("GET", "/inside/.zarray")).body == ds["a1/.zarray"]
+      @test handler(HTTP.Request("GET", "/escape/missing")).status == 404
+      @test reason(cs, "", "escape/secret.txt") !== nothing
+      @test reason(cs, "", "inside/.zarray") === nothing
+      # A served directory may itself be reached through a directory link.
+      symlink(ds.folder, joinpath(dir, "linked-store"); dir_target=true)
+      linked_store = Zarr.DirectoryStore(joinpath(dir, "linked-store"))
+      @test reason(linked_store, "", "a1/.zarray") === nothing
+      @test reason(linked_store, "", "escape/secret.txt") !== nothing
+
+      safe = Zarr.DirectoryStore(joinpath(dir, "safe"))
+      zgroup(safe)
+      for cached in (Zarr.CachingStore(ds, safe), Zarr.CachingStore(safe, ds))
+        @test reason(cached, "", "escape/secret.txt") !== nothing
+        @test reason(cached, "", ".zgroup") === nothing
+      end
+    end
+    # Metadata generation must not copy attributes through an outside link.
+    mktempdir() do dir
+      ds = Zarr.DirectoryStore(joinpath(dir, "store"))
+      gd = zgroup(ds)
+      zgroup(gd, "child", attrs=Dict("inside"=>true))
+      outside = Zarr.DirectoryStore(joinpath(dir, "outside"))
+      zgroup(outside, attrs=Dict("outside-marker"=>true))
+      symlink(outside.folder, joinpath(ds.folder, "escape"); dir_target=true)
+      handler = Zarr.ZarrHTTP.zarr_req_handler(ds, "")
+      response = handler(HTTP.Request("GET", "/.zmetadata"))
+      @test response.status == 200
+      metadata = JSON.parse(String(response.body))["metadata"]
+      @test metadata["child/.zattrs"] == Dict("inside"=>true)
+      @test !haskey(metadata, "escape/.zattrs")
+      @test !haskey(metadata, "escape/.zgroup")
+      @test handler(HTTP.Request("GET", "/escape/.zattrs")).status == 400
+    end
+  end
   @testset "HTTPStore construction and show" begin
     hs = Zarr.HTTPStore("http://example.com")
     @test hs.url == "http://example.com"
