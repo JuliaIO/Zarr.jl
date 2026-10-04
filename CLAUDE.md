@@ -112,7 +112,8 @@ are internal.
   `S3Store`, `GCStore`.
 - **Public but not exported**: store, codec, filter, and compressor types;
   extension interfaces; `typestr`, fill-value functions, `zname`, `writezip`,
-  `consolidate_metadata`, `missing_chunk_return_code!`, and `gcs_credentials`.
+  `consolidate_metadata`, `dimension_names`, `missing_chunk_return_code!`, and
+  `gcs_credentials`.
 - **Internal**: metadata structs, `ZarrFormat`, `PermanentZarrCache`, detection and
   normalization helpers, codec pipelines, and `store_*` helpers.
 

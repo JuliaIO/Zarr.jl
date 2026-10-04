@@ -1,7 +1,7 @@
 # User-facing public API. Extension APIs remain public in their defining package.
 # Parsed by `Zarr` on Julia 1.10; keep only `public` statements and comments.
 
-public zname
+public zname, dimension_names
 
 # Stores
 public DictStore, HTTPStore, ZipStore, CachingStore, ConsolidatedStore

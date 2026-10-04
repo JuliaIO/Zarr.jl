@@ -7,7 +7,9 @@
 """
     DeltaFilter(; DecodingType, [EncodingType = DecodingType])
 
-Delta-based compression for Zarr arrays.  (Delta encoding is Julia `diff`, decoding is Julia `cumsum`).
+Delta-based compression for Zarr arrays. Encoding stores the first value followed
+by successive differences. Decoding returns `DecodingType` values and preserves
+integer wraparound when both types are the same.
 """
 struct DeltaFilter{T, TENC} <: Filter{T, TENC}
 end
@@ -30,7 +32,10 @@ end
 
 function zdecode(data::AbstractArray, filter::DeltaFilter{DecodingType, EncodingType}) where {DecodingType, EncodingType}
     encoded = reinterpret(EncodingType, vec(data))
-    decoded = DecodingType.(cumsum(encoded))
+    decoded = similar(encoded, DecodingType)
+    isempty(encoded) && return decoded
+    decoded[begin] = encoded[begin]
+    @views accumulate!(+, decoded[begin+1:end], encoded[begin+1:end]; init=decoded[begin])
     return decoded
 end
 

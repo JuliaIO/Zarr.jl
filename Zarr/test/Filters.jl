@@ -134,13 +134,38 @@ end
         Int32.(collect(0:999)),  # np.arange(1000, dtype='<i4')
         Float32.(reshape(LinRange(1000, 1001, 1000), (100, 10))),  # np.linspace(1000, 1001, 1000, dtype='<f4').reshape(100, 10)
         Float64.(reshape(randn(1000) .* 1 .+ 1000, (10, 10, 10))),  # np.random.normal(loc=1000, scale=1, size=(10, 10, 10)).astype('<f8')
-        permutedims(reshape(rand(UInt16, 1000) .% 200, (100, 10)))  # np.random.randint(0, 200, size=1000, dtype='u2').astype('<u2').reshape(100, 10, order='F')
+        permutedims(reshape(rand(UInt16, 1000) .% 200, (100, 10))),  # np.random.randint(0, 200, size=1000, dtype='u2').astype('<u2').reshape(100, 10, order='F')
+        Int8[-128, 127]
     ]
 
     for array in arrays
         encoded = Zarr.zencode(array, DeltaFilter{eltype(array)}())
         decoded = reshape(reinterpret(eltype(array), Zarr.zdecode(encoded, DeltaFilter{eltype(array)}())), size(array))
         @test decoded == array
+    end
+
+    @testset "integer wraparound" begin
+        for T in (Int8, UInt8, Int16, UInt16, Int32, UInt32, Int64, UInt64, Int128, UInt128)
+            array = T[typemin(T), typemax(T), typemin(T), zero(T)]
+            filter = DeltaFilter{T}()
+            @test Zarr.zdecode(Zarr.zencode(array, filter), filter) == array
+        end
+    end
+
+    @testset "integer wraparound through stored chunks" begin
+        array = Int8[typemin(Int8), typemax(Int8), typemin(Int8), zero(Int8)]
+        z = zcreate(Int8, Zarr.DictStore(), length(array);
+            chunks=(2,), compressor=Zarr.NoCompressor(), filters=(DeltaFilter{Int8}(),))
+        z[:] = array
+        @test z[:] == array
+    end
+
+    @testset "first value and empty decoding" begin
+        for T in (Float16, Float32, Float64)
+            filter = DeltaFilter{T}()
+            @test isequal(Zarr.zdecode(Zarr.zencode(T[-0.0], filter), filter), T[-0.0])
+            @test Zarr.zdecode(T[], filter) == T[]
+        end
     end
 
     @testset "DeltaFilter with different dtypes" begin
@@ -152,5 +177,36 @@ end
         actual = Zarr.zencode(arr, codec)
         @test Int64.(expect) == Int64.(actual)
         @test eltype(actual) == astype
+        @test Zarr.zdecode(actual, codec) == arr
+        boundary = Int64[typemax(Int32)-1, typemax(Int32), Int64(typemax(Int32))+1]
+        @test Zarr.zdecode(Zarr.zencode(boundary, codec), codec) == boundary
+    end
+end
+
+@testset "Array round trip through a bytes-to-bytes filter" begin
+    # `shuffle` and `fletcher32` have `desttype` `UInt8`, so decoding a chunk
+    # yields its bytes rather than its elements. Exercising them only through
+    # `zencode`/`zdecode` cannot catch a failure to reinterpret those bytes
+    # back to a wider element type, so go through a real array here.
+    for T in (UInt8, Int32, Int64, Float32, Float64)
+        @testset "$T" begin
+            data = T[1:10;]
+
+            for (name, filters) in (
+                "shuffle" => (ShuffleFilter(sizeof(T)),),
+                "fletcher32" => (Fletcher32Filter(),),
+                "shuffle then fletcher32" => (ShuffleFilter(sizeof(T)), Fletcher32Filter()),
+            )
+                @testset "$name" begin
+                    z = zcreate(
+                        T, Zarr.DictStore(), length(data);
+                        chunks=(length(data),), compressor=Zarr.NoCompressor(),
+                        filters=filters,
+                    )
+                    z[:] = data
+                    @test z[:] == data
+                end
+            end
+        end
     end
 end

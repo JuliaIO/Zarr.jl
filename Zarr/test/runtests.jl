@@ -321,6 +321,40 @@ end
         @test metadata == metadata_cycled
     end
 
+    @testset "dimension_names (Zarr v3)" begin
+        # Julia order in the API, C order (reversed) in zarr.json
+        z = zcreate(Float32, 4, 3, 2; chunks=(2, 3, 2), zarr_format=3, dimension_names=("x", nothing, "z"))
+        @test Zarr.dimension_names(z) === ("x", nothing, "z")
+        meta = JSON.parse(String(copy(z.storage[z.path, "zarr.json"])))
+        @test meta["dimension_names"] == ["z", nothing, "x"]
+        # round trip through JSON and through reopening the store
+        @test ZarrCore.Metadata(json(z.metadata), false) == z.metadata
+        z2 = zopen(z.storage; path=z.path)
+        @test Zarr.dimension_names(z2) === ("x", nothing, "z")
+        @test z2.metadata == z.metadata
+        # any indexable collection of names is accepted
+        @test Zarr.dimension_names(zcreate(Int, 2, 3; zarr_format=3, dimension_names=["a", "b"])) === ("a", "b")
+        # absent: the key is omitted (not null) and the accessor returns nothing
+        z3 = zcreate(Int, 2, 2; zarr_format=3)
+        @test Zarr.dimension_names(z3) === nothing
+        meta3 = JSON.parse(String(copy(z3.storage[z3.path, "zarr.json"])))
+        @test !haskey(meta3, "dimension_names")
+        # a top-level null (written by some tools) is tolerated and means unnamed
+        meta3["dimension_names"] = nothing
+        @test ZarrCore.Metadata(json(meta3), false).dimension_names === nothing
+        # validation: one entry per dimension, and a collection rather than a string
+        @test_throws ArgumentError zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x",))
+        @test_throws ArgumentError zcreate(Int, 2; zarr_format=3, dimension_names="x")
+        meta["dimension_names"] = ["z", "x"]
+        @test_throws ArgumentError ZarrCore.Metadata(json(meta), false)
+        # names take part in metadata equality
+        @test zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x", "y")).metadata !=
+              zcreate(Int, 2, 2; zarr_format=3, dimension_names=("x", "z")).metadata
+        # Zarr v2 has no dimension_names field
+        @test Zarr.dimension_names(zcreate(Int, 2, 2; zarr_format=2)) === nothing
+        @test_throws ArgumentError zcreate(Int, 2, 2; zarr_format=2, dimension_names=("x", "y"))
+    end
+
     @testset "Fill value" begin
         @test Zarr.fill_value_encoding(Inf) === "Infinity"
         @test Zarr.fill_value_encoding(-Inf) === "-Infinity"
@@ -406,6 +440,18 @@ end
   @test size(a)==(13,31)
   @test a[12:13,:]==vcat(singlerow', singlerow')
   @test_throws ArgumentError resize!(a,(-1,2))
+
+  # A read-only array must not touch the stored metadata or chunks.
+  mktempdir() do dir
+    w = zzeros(Int64, 10, 10, path=dir, chunks=(5,2))
+    chunkfiles = sort(readdir(dir))
+    readonly = zopen(dir)
+    @test_throws ErrorException resize!(readonly, 5, 4)
+    @test_throws ErrorException append!(readonly, ones(Int64, 10, 2))
+    @test size(readonly) == (10, 10)
+    @test size(zopen(dir)) == (10, 10)
+    @test sort(readdir(dir)) == chunkfiles
+  end
 end
 
 @testset "zcreate does not allocate dense storage" begin
