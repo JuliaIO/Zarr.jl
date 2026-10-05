@@ -19,6 +19,7 @@
 - Fixed the path-traversal check when serving a store over HTTP, which never rejected request targets such as `/../secret.txt`. These now get a `400` response that explains why, and a `DirectoryStore` also refuses keys whose lexical or symlink-resolved paths lie outside the served directory [#344](https://github.com/JuliaIO/Zarr.jl/pull/344)
 - Support the Zarr v3 `dimension_names` metadata field [#319](https://github.com/JuliaIO/Zarr.jl/issues/319): `zcreate(...; dimension_names=("x", "y"))` writes it to `zarr.json` and the public `dimension_names(z)` reads it back, so arrays written by Zarr.jl open with named dimensions in xarray. Names are given in Julia (column-major) order and reversed in the file like `shape`; `nothing` marks an unnamed dimension.
 - Fixed reading a Zarr v2 array whose last filter works on raw bytes (`shuffle`, `fletcher32`) and whose element type is wider than one byte, which threw `BoundsError: attempt to access 10-element Vector{Int32} at index [1:40]` instead of returning data. Writing such arrays already worked, so affected arrays were written readable but could not be read back.
+- Bump `ZarrCore` to 0.11.1 so the ZarrCore changes above can be released [#356](https://github.com/JuliaIO/Zarr.jl/pull/356)
 
 ## v0.10.2 - 2026-08-19
 
