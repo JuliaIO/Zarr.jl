@@ -1401,8 +1401,8 @@ end
     @test JSON.lower(codec)["name"] == "numcodecs.fixedscaleoffset"
 end
 
-@testset "ScaleOffset" begin
-    c = Zarr.ScaleOffset(1000, 1)
+@testset "ScaleOffsetCodec" begin
+    c = Zarr.ScaleOffsetCodec(1000, 1)
     x = UInt16[1000, 1100, 1255]
     @test Zarr.Codecs.V3Codecs.codec_encode(c, x) == UInt16[0, 100, 255]
     @test Zarr.Codecs.V3Codecs.codec_decode(c, Zarr.Codecs.V3Codecs.codec_encode(c, x)) == x
@@ -1411,7 +1411,7 @@ end
     @test Zarr.Codecs.V3Codecs.codec_encode(c, y) == Float32[0, 0.5, 1.25]
     @test Zarr.Codecs.V3Codecs.codec_decode(c, Zarr.Codecs.V3Codecs.codec_encode(c, y)) == y
     @test JSON.lower(c)["configuration"] == Dict("offset" => 5.0, "scale" => 0.5)
-    @test Zarr.Codecs.V3Codecs.getCodec(Dict("name" => "scale_offset")) == Zarr.ScaleOffset(0, 1)
+    @test Zarr.Codecs.V3Codecs.getCodec(Dict("name" => "scale_offset")) == Zarr.ScaleOffsetCodec(0, 1)
 end
 
 end # V3 Codecs

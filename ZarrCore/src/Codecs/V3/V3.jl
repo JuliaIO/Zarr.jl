@@ -664,33 +664,33 @@ function codec_decode(c::TransposeCodec, encoded::AbstractArray)
 end
 
 """
-    ScaleOffset(offset, scale)
+    ScaleOffsetCodec(offset, scale)
 
 The zarr v3 `scale_offset` array->array codec: encodes `(x - offset) * scale`
 and decodes `x / scale + offset` in the array's element type.
 """
-struct ScaleOffset{S<:Real} <: V3Codec{:array, :array}
+struct ScaleOffsetCodec{S<:Real} <: V3Codec{:array, :array}
     offset::S
     scale::S
 end
-ScaleOffset(offset::Real, scale::Real) = ScaleOffset(promote(offset, scale)...)
-name(::ScaleOffset) = "scale_offset"
-is_fixed_size(::ScaleOffset) = true
+ScaleOffsetCodec(offset::Real, scale::Real) = ScaleOffsetCodec(promote(offset, scale)...)
+name(::ScaleOffsetCodec) = "scale_offset"
+is_fixed_size(::ScaleOffsetCodec) = true
 
-register_codec("scale_offset", ScaleOffset) do config, ctx
-    ScaleOffset(get(config, "offset", 0), get(config, "scale", 1))
+register_codec("scale_offset", ScaleOffsetCodec) do config, ctx
+    ScaleOffsetCodec(get(config, "offset", 0), get(config, "scale", 1))
 end
 
-function JSON.lower(c::ScaleOffset)
+function JSON.lower(c::ScaleOffsetCodec)
     Dict("name" => "scale_offset", "configuration" => Dict("offset" => c.offset, "scale" => c.scale))
 end
 
-function codec_encode(c::ScaleOffset, data::AbstractArray{T}) where {T}
+function codec_encode(c::ScaleOffsetCodec, data::AbstractArray{T}) where {T}
     offset, scale = T(c.offset), T(c.scale)
     return T.((data .- offset) .* scale)
 end
 
-function codec_decode(c::ScaleOffset, encoded::AbstractArray{T}) where {T}
+function codec_decode(c::ScaleOffsetCodec, encoded::AbstractArray{T}) where {T}
     offset, scale = T(c.offset), T(c.scale)
     return T.(encoded ./ scale .+ offset)
 end

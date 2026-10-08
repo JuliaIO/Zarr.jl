@@ -33,7 +33,7 @@ public zcompress, zcompress!, zuncompress, zuncompress!, getCompressor,
 # Core v3 codecs; backend codecs are declared by their packages.
 public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,
     TransposeCodec, CRC32cV3Codec, VLenUTF8V3Codec, FilterCodec,
-    ScaleOffset
+    ScaleOffsetCodec
 
 # Data type and fill value encoding, needed to map Zarr dtypes to Julia types.
 public typestr, fill_value_encoding, fill_value_decoding
