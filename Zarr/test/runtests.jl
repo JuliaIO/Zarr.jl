@@ -250,9 +250,11 @@ end
     zv = ZarrCore.ZarrFormat(2)
     g = zgroup(store, "rootgroup", zv)
     sg = zgroup(g, "subgroup", attrs=Dict("a1" => 5))
-
+    
     @test ZarrCore.is_zgroup(zv, store, "rootgroup")
     @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test ZarrCore.zarr_format(g) == zv
+    @test ZarrCore.zarr_format(sg) == zv
     @test sg.attrs["a1"] == 5
     @test ispath(joinpath(store.folder, "rootgroup", ".zgroup"))
     @test ispath(joinpath(store.folder, "rootgroup", "subgroup", ".zgroup"))

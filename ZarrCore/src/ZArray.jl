@@ -128,7 +128,7 @@ function ZArray(s::T, mode="r", path="", zarr_format=:auto; fill_as_missing=fals
   ZArray(metadata, s, string(path), attrs, writeable)
 end
 
-zarr_format(z::ZArray) = zarr_format(z.metadata)
+zarr_format(z::Union{ZArray, ZGroup}) = zarr_format(z.metadata)
 dimension_separator(z::ZArray) = dimension_separator(z.metadata)
 
 """
