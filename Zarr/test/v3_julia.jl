@@ -42,6 +42,13 @@ function create_and_fill(store, name, data;
     return z
 end
 
+# 1d.contiguous.ci2
+create_and_fill(store, "1d.contiguous.ci2", Complex{Int16}[1 - 1im, 2 - 2im];
+    shape=(2,),
+    chunks=(2,),
+    compressor=Zarr.NoCompressor(),
+)
+
 # 1d.contiguous.gzip.i2
 create_and_fill(store, "1d.contiguous.gzip.i2", Int16[1,2,3,4];
     shape=(4,),

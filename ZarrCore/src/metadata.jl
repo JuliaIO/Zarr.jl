@@ -1,4 +1,5 @@
 import Dates: Date, DateTime
+using Base64: base64decode, base64encode
 using DateTimes64: DateTime64, pydatetime_string, datetime_from_pystring 
 
 """NumPy array protocol type string (typestr) format
@@ -38,6 +39,9 @@ typestr(::Type{MaxLengthString{N,UInt8}}) where N = string('<', 'S', N)
 typestr(::Type{<:Array}) = "|O"
 typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
+# NumPy has no complex-integer typestr. A complex integer is the structured dtype of two fields named
+# `r` and `i`, the field names HDF5.jl reads as `Complex` for a compound type.
+typestr(::Type{Complex{T}}) where {T<:Signed} = Any[Any["r", typestr(T)], Any["i", typestr(T)]]
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
@@ -85,6 +89,18 @@ function typestr(s::AbstractString, filterlist=nothing)
     end
 end
 
+# A structured dtype reads only in the complex-integer form `typestr(::Type{<:Complex{<:Signed}})`
+# writes.
+function typestr(fields::AbstractVector, filterlist=nothing)
+    if length(fields) == 2 && all(f -> f isa AbstractVector && length(f) == 2, fields) &&
+            fields[1][1] == "r" && fields[2][1] == "i" && fields[1][2] == fields[2][2]
+        T = typestr(fields[1][2])
+        T <: Signed && return Complex{T}
+    end
+    throw(ArgumentError("structured dtype $(JSON.json(fields)) is not supported: the only structured " *
+        "dtype read is [[\"r\", T], [\"i\", T]] with T a signed integer, as Complex{T}"))
+end
+
 
 """Metadata configuration of the stored array
 
@@ -112,7 +128,7 @@ struct MetadataV2{T,N,C,F} <: AbstractMetadata{T,N,ChunkKeyEncoding}
     node_type::String
     shape::Base.RefValue{NTuple{N, Int}}
     chunks::NTuple{N, Int}
-    dtype::String  # structured data types not yet supported
+    dtype::Union{String, Vector{Any}}  # a Vector is a structured dtype; see `typestr`
     compressor::C
     fill_value::Union{T, Nothing}
     order::Char
@@ -272,6 +288,8 @@ end
 
 fill_value_encoding(v) = v
 fill_value_encoding(::Nothing)=nothing
+# The v2 spec encodes the fill value of a structured dtype as the Base64 of its bytes.
+fill_value_encoding(v::Complex{<:Signed}) = base64encode(reinterpret(UInt8, [v]))
 function fill_value_encoding(v::AbstractFloat)
     if isnan(v)
         "NaN"
@@ -292,6 +310,12 @@ fill_value_decoding(v::Number, T::Type{String}) = v == 0 ? "" : T(UInt8[v])
 fill_value_decoding(v, ::Type{ASCIIChar}) = v == "" ? nothing : v
 fill_value_decoding(v::Nothing, ::Type{ZarrCore.ASCIIChar}) = v
 fill_value_decoding(v::Vector, T::Type{<:Complex}) = T(v[1], v[2])
+function fill_value_decoding(v::AbstractString, T::Type{<:Complex{<:Signed}})
+    bytes = base64decode(v)
+    length(bytes) == sizeof(T) || throw(ArgumentError(
+        "fill value $(repr(v)) decodes to $(length(bytes)) bytes; a $T needs $(sizeof(T))"))
+    return only(reinterpret(T, bytes))
+end
 # Sometimes when translating between CF (climate and forecast) convention data
 # and Zarr groups, fill values are left as "negative integers" to encode unsigned
 # integers.  So, we have to convert to the signed type with the same number of bytes

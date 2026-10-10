@@ -300,6 +300,17 @@ end
         @test ZarrCore.typestr(Vector{Int64}) === "|O"
         @test ZarrCore.typestr(DateTime64{Day}) === "<M8[D]"
         @test ZarrCore.typestr(DateTime64{Nanosecond}) === "<M8[ns]"
+        @test ZarrCore.typestr(Complex{Int16}) == [["r", "<i2"], ["i", "<i2"]]
+        @test ZarrCore.typestr(Any[Any["r", "|i1"], Any["i", "|i1"]]) === Complex{Int8}
+        @test_throws "the only structured dtype read is" ZarrCore.typestr(Any[Any["r", "<f4"], Any["i", "<f4"]])
+        # v3: the `struct` data type, and its legacy `structured` name with [name, data_type] fields
+        legacy = Dict{String,Any}("name" => "structured",
+            "configuration" => Dict{String,Any}("fields" => [["r", "int32"], ["i", "int32"]]))
+        @test ZarrCore.typestr3(legacy) === Complex{Int32}
+        @test ZarrCore.typestr3(ZarrCore.typestr3(Complex{Int16})) === Complex{Int16}
+        point = Dict{String,Any}("name" => "struct", "configuration" => Dict{String,Any}(
+            "fields" => [Dict{String,Any}("name" => "x", "data_type" => "float32")]))
+        @test_throws "The only struct read" ZarrCore.typestr3(point)
     end
 
     @testset "Metadata struct and JSON representation" begin
@@ -375,6 +386,22 @@ end
         @test Zarr.fill_value_decoding(nothing, ZarrCore.ASCIIChar) === nothing
         @test Zarr.fill_value_decoding(Any[0.0, 0.0], ComplexF64) === ComplexF64(0.0, 0.0)
         @test Zarr.fill_value_decoding(Any[1.5, -2.5], ComplexF32) === ComplexF32(1.5, -2.5)
+        # v2 encodes a structured dtype's fill value as the Base64 of its bytes: 0x0001, 0xfffe
+        @test Zarr.fill_value_encoding(Complex{Int16}(1, -2)) == "AQD+/w=="
+        @test Zarr.fill_value_decoding("AQD+/w==", Complex{Int16}) === Complex{Int16}(1, -2)
+        # v3 encodes a struct fill value as an object keyed by field name
+        @test Zarr.fill_value_decoding(Dict("r" => 1, "i" => -2), Complex{Int16}) === Complex{Int16}(1, -2)
+    end
+
+    @testset "Complex integer arrays" begin
+        A = Complex{Int16}.(reshape(Int16.(1:12), 3, 4), reshape(Int16.(-12:-1), 3, 4))
+        for zarr_format in (2, 3)
+            z = zcreate(Complex{Int16}, 3, 4; chunks=(2, 3), zarr_format, fill_value=Complex{Int16}(7, -7))
+            z[:, 1:3] = A[:, 1:3]
+            @test z[:, 1:3] == A[:, 1:3]
+            @test all(==(Complex{Int16}(7, -7)), z[:, 4])
+            @test ZarrCore.Metadata(json(z.metadata), false) == z.metadata
+        end
     end
 end
 
