@@ -122,6 +122,18 @@ end
     @test decoded == data
 end
 
+@testset "ZlibV3Codec" begin
+    codec = Zarr.ZlibV3Codec(1)
+    data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
+    encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
+    @test encoded isa Vector{UInt8}
+    @test Zarr.Codecs.V3Codecs.codec_decode(codec, encoded) == data
+    # zarr-python's spelling, with the `numcodecs.` prefix
+    d = Dict{String,Any}("name" => "numcodecs.zlib", "configuration" => Dict{String,Any}("level" => 1))
+    @test Zarr.Codecs.V3Codecs.getCodec(d) == codec
+    @test JSON.lower(codec) == d
+end
+
 @testset "BloscV3Codec" begin
     codec = Zarr.BloscV3Codec("lz4", 5, 0, 0, 4)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
@@ -950,6 +962,10 @@ end
 
             # blosc compressed
             z = zopen(store; path="1d.contiguous.blosc.i2")
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # numcodecs.zlib, which zarr-python writes for a v2 zlib compressor
+            z = zopen(store; path="1d.contiguous.zlib.i2")
             @test z[:] == Int16[1, 2, 3, 4]
 
             # "raw" — actually zstd in modern Python zarr v3

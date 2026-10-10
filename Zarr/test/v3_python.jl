@@ -86,6 +86,17 @@ data_lookup = Dict(
     "b1" => [true, false, true, false],
 )
 
+# 1d.contiguous.zlib.i2
+create_and_fill(store;
+    name="1d.contiguous.zlib.i2",
+    dtype="int16",
+    shape=(4,),
+    chunks=(4,),
+    serializer=codecs.BytesCodec(endian="little"),
+    compressors=[pyimport("zarr.codecs.numcodecs").Zlib(level=1)],
+    data=[1,2,3,4],
+)
+
 # 1d.contiguous.{gzip,blosc,raw}.i2, 1d.contiguous.{gzip,blosc,raw}.string
 for comp in ("gzip", "blosc", "raw")
     compressors = compressors_lookup[comp]
