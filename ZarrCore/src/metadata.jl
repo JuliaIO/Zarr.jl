@@ -41,7 +41,7 @@ typestr(t::Type{<:DateTime64}) = pydatetime_string(t)
 typestr(::Type{<:AbstractString}) = "|O"
 # NumPy has no complex-integer typestr. A complex integer is the structured dtype of two fields named
 # `r` and `i`, the field names HDF5.jl reads as `Complex` for a compound type.
-typestr(::Type{Complex{T}}) where {T<:Signed} = Any[Any["r", typestr(T)], Any["i", typestr(T)]]
+typestr(::Type{Complex{T}}) where {T<:Signed} = Any[["r", typestr(T)], ["i", typestr(T)]]
 
 const typestr_regex = r"^([<|>])([tbiufcmMOSUV])(\d*)(\[\w+\])?$"
 const typemap = Dict{Tuple{Char, Int}, DataType}(
