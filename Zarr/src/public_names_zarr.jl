@@ -21,7 +21,7 @@ public Compressor, NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor
 
 # v3 codecs
 public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,
-    TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
+    TransposeCodec, GzipV3Codec, ZlibV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
     VLenUTF8V3Codec
 
 # Data type and fill value encoding

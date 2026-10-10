@@ -50,7 +50,7 @@ using Dates
         :FixedScaleOffsetFilter, :ShuffleFilter, :QuantizeFilter, :DeltaFilter]))
     @test all(isdefined.(Ref(Zarr), [:Compressor, :NoCompressor, :BloscCompressor, :ZlibCompressor, :ZstdCompressor]))
     @test all(isdefined.(Ref(Zarr), [:Codecs, :Codec, :V3Codec, :BytesCodec, :CRC32cCodec,
-        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :BloscV3Codec, :ZstdV3Codec,
+        :ShardingCodec, :TransposeCodec, :GzipV3Codec, :ZlibV3Codec, :BloscV3Codec, :ZstdV3Codec,
         :CRC32cV3Codec, :VLenUTF8V3Codec]))
     @test !isdefined(Zarr, :register!)
     for mod in (Zarr.ZarrBlosc, Zarr.ZarrZlib, Zarr.ZarrZstd, Zarr.ZarrHTTP,

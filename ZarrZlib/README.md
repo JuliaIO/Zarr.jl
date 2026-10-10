@@ -8,7 +8,8 @@ ZarrCore directly.
 - `ZarrZlib.ZlibCompressor(; clevel=-1)` (also `ZlibCompressor(level)`):
   the v2 `zlib` compressor. Levels are 0–9; `-1` selects the library default.
 - `ZarrZlib.GzipV3Codec(level=6)`: the v3 `gzip` codec, with levels 0–9.
-- `ZarrZlib.register!()`: registers v2 `zlib` and v3 `gzip` with ZarrCore.
+- `ZarrZlib.ZlibV3Codec(level=1)`: zarr-python's v3 `numcodecs.zlib` codec.
+- `ZarrZlib.register!()`: registers v2 `zlib` and v3 `gzip` and `numcodecs.zlib` with ZarrCore.
   This runs automatically unless ZarrCore's `RegisterAtInit` preference is disabled.
 
 These names are public but not exported. The v2 and v3 implementations use

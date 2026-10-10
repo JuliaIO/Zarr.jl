@@ -1,13 +1,13 @@
 """
     ZarrZlib
 
-Zlib v2 compressor and gzip v3 codec support.
+Zlib v2 compressor, and gzip and `numcodecs.zlib` v3 codec support.
 """
 module ZarrZlib
 
 import JSON # for JSON.lower
 
-using ChunkCodecLibZlib: ZlibEncodeOptions, GzipCodec, GzipEncodeOptions
+using ChunkCodecLibZlib: ZlibCodec, ZlibEncodeOptions, GzipCodec, GzipEncodeOptions
 using ChunkCodecCore: encode, decode, decode!
 
 # Qualify methods that extend ZarrCore or V3Codecs generics.
@@ -89,6 +89,33 @@ function V3Codecs.codec_decode(c::GzipV3Codec, encoded::Vector{UInt8})
     return decode(GzipCodec(), encoded)
 end
 
+# ## Zarr v3: `ZlibV3Codec`
+
+"""
+    ZlibV3Codec(level=1)
+
+zarr-python's `numcodecs.zlib` bytes->bytes codec, the v2 `zlib` compressor
+used in Zarr v3. It is not part of the v3 specification, but zarr-python writes
+it, and references to HDF5 data compressed with deflate need it.
+"""
+struct ZlibV3Codec <: V3Codec{:bytes, :bytes}
+    level::Int
+end
+ZlibV3Codec() = ZlibV3Codec(1)
+V3Codecs.name(::ZlibV3Codec) = "numcodecs.zlib"
+
+function JSON.lower(c::ZlibV3Codec)
+    Dict("name" => "numcodecs.zlib", "configuration" => Dict("level" => c.level))
+end
+
+function V3Codecs.codec_encode(c::ZlibV3Codec, data::Vector{UInt8})
+    return encode(ZlibEncodeOptions(; level=c.level), data)
+end
+
+function V3Codecs.codec_decode(c::ZlibV3Codec, encoded::Vector{UInt8})
+    return decode(ZlibCodec(), encoded)
+end
+
 # Cross-package registrations must run after precompilation.
 function __init__()
     ZarrCore.should_register_at_init() && register!()
@@ -98,7 +125,7 @@ end
     ZarrZlib.register!()
 
 Register the zlib compressor with ZarrCore under the Zarr v2 compressor name
-`"zlib"` and the Zarr v3 codec name `"gzip"`.
+`"zlib"` and the Zarr v3 codec names `"gzip"` and `"numcodecs.zlib"`.
 
 Registration runs automatically during package initialization when the
 ZarrCore `RegisterAtInit` preference is enabled (the default). When automatic
@@ -109,6 +136,10 @@ function register!()
     ZarrCore.compressortypes["zlib"] = ZlibCompressor
     V3Codecs.register_codec("gzip", GzipV3Codec) do config, ctx
         GzipV3Codec(get(config, "level", 6))
+    end
+    # `getCodec` strips the `numcodecs.` prefix before the lookup.
+    V3Codecs.register_codec("zlib", ZlibV3Codec) do config, ctx
+        ZlibV3Codec(get(config, "level", 1))
     end
 end
 
