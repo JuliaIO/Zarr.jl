@@ -802,6 +802,9 @@ end
 
         @testset "1D arrays" begin
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.gzip.i2"]))  == Int16[1, 2, 3, 4]
+            ci2 = np.array(g["1d.contiguous.ci2"])
+            @test pyconvert(Vector{Int16}, ci2["r"]) == Int16[1, 2]
+            @test pyconvert(Vector{Int16}, ci2["i"]) == Int16[-1, -2]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.blosc.i2"])) == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{Int16},   np.array(g["1d.contiguous.raw.i2"]))   == Int16[1, 2, 3, 4]
             @test pyconvert(Vector{String},   np.array(g["1d.contiguous.gzip.string"]))   == String["variable", "length", "utf8", "string"]
@@ -951,6 +954,10 @@ end
             # blosc compressed
             z = zopen(store; path="1d.contiguous.blosc.i2")
             @test z[:] == Int16[1, 2, 3, 4]
+
+            # complex integers as the struct data type
+            z = zopen(store; path="1d.contiguous.ci2")
+            @test z[:] == Complex{Int16}[1 - 1im, 2 - 2im]
 
             # "raw" — actually zstd in modern Python zarr v3
             z = zopen(store; path="1d.contiguous.raw.i2")

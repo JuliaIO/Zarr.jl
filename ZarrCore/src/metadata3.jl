@@ -21,6 +21,13 @@ function typestr3(::Type{MaxLengthString{N, UInt32}}) where {N}
         )
 end
 
+# A complex integer is the `struct` data type of two fields named `r` and `i`, as
+# in Zarr v2's structured dtype; see `typestr(::Type{<:Complex{<:Signed}})`.
+function typestr3(::Type{Complex{T}}) where {T<:Signed}
+    fields = [Dict{String, Any}("name" => name, "data_type" => typestr3(T)) for name in ("r", "i")]
+    return Dict{String, Any}("name" => "struct", "configuration" => Dict{String, Any}("fields" => fields))
+end
+
 # TODO: Check raw types
 function typestr3(::Type{NTuple{N,UInt8}}) where {N}
     return "r$(N*8)"
@@ -50,6 +57,16 @@ function parse_datatype3(d)
 
     if name == "fixed_length_utf32"
         return MaxLengthString{d["configuration"]["length_bytes"] ÷ 4, UInt32}
+    end
+    # `"structured"` is the legacy name of `"struct"`, whose fields are `[name, data_type]` pairs.
+    if name in ("struct", "structured")
+        fields = [f isa AbstractDict ? (f["name"], f["data_type"]) : (f[1], f[2]) for f in d["configuration"]["fields"]]
+        if length(fields) == 2 && first.(fields) == ["r", "i"] && fields[1][2] == fields[2][2]
+            T = get(typemap3, fields[1][2], Nothing)
+            T <: Signed && return Complex{T}
+        end
+        throw(ArgumentError("Unsupported Zarr v3 data_type: $d. The only struct read has fields " *
+            "\"r\" and \"i\" of one signed integer type, as Complex{T}"))
     end
     throw(ArgumentError("Unsupported Zarr v3 data_type: $d"))
 end
@@ -326,6 +343,11 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
     )
 end
 
+# A `struct` fill value is an object keyed by field name.
+fill_value_encoding3(v) = fill_value_encoding(v)
+fill_value_encoding3(v::Complex{<:Signed}) = Dict{String, Any}("r" => real(v), "i" => imag(v))
+fill_value_decoding(v::AbstractDict, T::Type{<:Complex{<:Signed}}) = T(v["r"], v["i"])
+
 function lower3(md::MetadataV3{T}) where T
     chunk_grid = Dict{String,Any}(
         "name" => "regular",
@@ -346,7 +368,7 @@ function lower3(md::MetadataV3{T}) where T
         "data_type" => typestr3(T),
         "chunk_grid" => chunk_grid,
         "chunk_key_encoding" => chunk_key_encoding,
-        "fill_value" => fill_value_encoding(md.fill_value),
+        "fill_value" => fill_value_encoding3(md.fill_value),
         "codecs" => codecs
     )
     # Optional per spec; omitted (not null) when all dimensions are unnamed.

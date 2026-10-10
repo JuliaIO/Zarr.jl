@@ -4,6 +4,7 @@ This changelog covers every package in this repository. Version headings follow 
 
 ## Unreleased
 
+- Complex integer arrays (`Complex{Int8}` to `Complex{Int64}`) can now be read and written: as the structured dtype `[["r", T], ["i", T]]` in Zarr v2, and as the `struct` data type with fields `r` and `i` in Zarr v3. [#361](https://github.com/JuliaIO/Zarr.jl/pull/361)
 - Zarr v3 arrays can now store dimension names. Pass `dimension_names=("x", "y")` to `zcreate` and read them back with `dimension_names(z)`, so arrays written by Zarr.jl open with named dimensions in xarray. Give names in Julia's dimension order, and use `nothing` for an unnamed dimension. [#345](https://github.com/JuliaIO/Zarr.jl/pull/345), fixes [#319](https://github.com/JuliaIO/Zarr.jl/issues/319)
 - `resize!` and `append!` now throw an error on read-only arrays instead of rewriting the stored metadata and deleting chunks. Resizing through a consolidated store now fails without changing the array, for both Zarr v2 and v3. [#342](https://github.com/JuliaIO/Zarr.jl/pull/342)
 - Integer arrays using `DeltaFilter` now round-trip correctly when values wrap around the type's limits, such as `Int8[-128, 127, -128]`. [#336](https://github.com/JuliaIO/Zarr.jl/pull/336), fixes [#335](https://github.com/JuliaIO/Zarr.jl/issues/335)

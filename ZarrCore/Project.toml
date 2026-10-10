@@ -4,6 +4,7 @@ version = "0.11.1"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 CRC32c = "8bf52ea8-c179-5cab-976a-9e18b702a9bc"
 DateTimes64 = "b342263e-b350-472a-b1a9-8dfd21b51589"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
@@ -14,6 +15,7 @@ Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Unicode = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
 [compat]
+Base64 = "1.10, 1.11"
 CRC32c = "1.10, 1.11"
 DateTimes64 = "1"
 DiskArrays = "0.4.21"

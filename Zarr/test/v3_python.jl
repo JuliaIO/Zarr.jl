@@ -86,6 +86,17 @@ data_lookup = Dict(
     "b1" => [true, false, true, false],
 )
 
+# 1d.contiguous.ci2: complex integers as the struct data type
+ci2 = np.dtype(pylist([("r", "<i2"), ("i", "<i2")]))
+create_and_fill(store;
+    name="1d.contiguous.ci2",
+    dtype=ci2,
+    shape=(2,),
+    chunks=(2,),
+    serializer=codecs.BytesCodec(endian="little"),
+    data=np.array(pylist([(1, -1), (2, -2)]), dtype=ci2),
+)
+
 # 1d.contiguous.{gzip,blosc,raw}.i2, 1d.contiguous.{gzip,blosc,raw}.string
 for comp in ("gzip", "blosc", "raw")
     compressors = compressors_lookup[comp]
