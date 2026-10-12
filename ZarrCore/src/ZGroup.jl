@@ -197,3 +197,5 @@ function consolidate_metadata(z::Union{ZArray,ZGroup})
   z.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
   consolidate_metadata(z.storage,z.path)
 end
+
+zarr_format(z::Union{ZArray, ZGroup}) = zarr_format(z.metadata)
