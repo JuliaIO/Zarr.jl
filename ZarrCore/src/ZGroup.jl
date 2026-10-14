@@ -198,4 +198,4 @@ function consolidate_metadata(z::Union{ZArray,ZGroup})
   consolidate_metadata(z.storage,z.path)
 end
 
-zarr_format(z::Union{ZArray, ZGroup}) = zarr_format(z.metadata)
+zarr_format(zgroup::ZGroup) = zgroup.zarr_format
