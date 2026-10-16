@@ -4,10 +4,12 @@ This changelog covers every package in this repository. Version headings follow 
 
 ## Unreleased
 
+## v0.11.2 - 2026-10-16
+
 - Zarr v3 arrays that zarr-python wrote with a zlib compressor, as the `numcodecs.zlib` codec, can now be read, and `ZarrZlib.ZlibV3Codec` writes that codec. [#360](https://github.com/JuliaIO/Zarr.jl/pull/360)
 - `zarr_format` is now supported for `ZGroup`, returning the group's Zarr format. [#359](https://github.com/JuliaIO/Zarr.jl/pull/359)
-- `ZarrCore` is bumped to 0.11.2 to release the `zarr_format(::ZGroup)` support.
-- `ZarrZlib` is bumped to 0.11.1 to release `ZlibV3Codec` and `numcodecs.zlib` support.
+- `ZarrCore` is bumped to 0.11.2 to release the `zarr_format(::ZGroup)` support. [#362](https://github.com/JuliaIO/Zarr.jl/pull/362)
+- `ZarrZlib` is bumped to 0.11.1 to release `ZlibV3Codec` and `numcodecs.zlib` support. [#362](https://github.com/JuliaIO/Zarr.jl/pull/362)
 
 ## v0.11.1 - 2026-10-07
 
