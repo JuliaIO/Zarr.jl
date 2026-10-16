@@ -273,6 +273,8 @@ end
 
     @test ZarrCore.is_zgroup(zv, store, "rootgroup")
     @test ZarrCore.is_zgroup(zv, store, "rootgroup/subgroup")
+    @test ZarrCore.zarr_format(g) == zv
+    @test ZarrCore.zarr_format(sg) == zv
     @test sg.attrs["a1"] == 5
     @test ispath(joinpath(store.folder, "rootgroup", "zarr.json"))
     @test ispath(joinpath(store.folder, "rootgroup", "subgroup", "zarr.json"))
