@@ -332,6 +332,31 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
       end
   end
 
+  @testset "consolidate_metadata v3 from the store root" begin
+    for s in (Zarr.DirectoryStore(mktempdir()), Zarr.DictStore())
+      g = zgroup(s, "", ZarrCore.ZarrFormat(3))
+      sub = zgroup(g, "sub", attrs=Dict("subatt" => 1))
+      zcreate(Int16, sub, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
+      cs = Zarr.consolidate_metadata(s, "", ZarrCore.ZarrFormat(3))
+      @test collect(keys(cs.cons)) == ["sub", "sub/arr"]
+      @test cs.cons["sub"]["attributes"] == Dict("subatt" => 1)
+      @test cs.cons["sub/arr"]["node_type"] == "array"
+    end
+  end
+
+  @testset "consolidate_metadata of a v3 group" begin
+    dir = mktempdir()
+    g = zgroup(Zarr.DirectoryStore(dir), "", ZarrCore.ZarrFormat(3))
+    zcreate(Int16, g, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
+    cs = Zarr.consolidate_metadata(g)
+    @test cs isa Zarr.ConsolidatedStore
+    @test !isfile(joinpath(dir, ".zmetadata"))
+    root = JSON.parsefile(joinpath(dir, "zarr.json"))
+    @test collect(keys(root["consolidated_metadata"]["metadata"])) == ["arr"]
+    g2 = zopen(dir, consolidated=true)
+    @test g2["arr"] isa ZArray
+  end
+
   @testset "write protection" begin
     s = Zarr.DictStore()
     g = zgroup(s)

@@ -195,7 +195,8 @@ end
 # `AbstractStore` method it forwards to and the rest of the HTTP backend.
 function consolidate_metadata(z::Union{ZArray,ZGroup})
   z.writeable || throw(ArgumentError("This Zarr group is not writeable. Please re-open in write mode to create an array"))
-  consolidate_metadata(z.storage,z.path)
+  # Zarr v3 defines consolidated metadata only for groups, arrays keep the v2 layout
+  z isa ZGroup ? consolidate_metadata(z.storage, z.path, zarr_format(z)) : consolidate_metadata(z.storage, z.path)
 end
 
 zarr_format(zgroup::ZGroup) = zgroup.zarr_format

@@ -162,7 +162,7 @@ function consolidate_metadata_v3(s::AbstractStore, d, prefix, root_prefix)
     end
   end
   foreach(subdirs(s, prefix)) do subname
-    consolidate_metadata_v3(s, d, string(prefix, "/", subname), root_prefix)
+    consolidate_metadata_v3(s, d, _concatpath(prefix, subname), root_prefix)
   end
   d
 end
@@ -180,6 +180,7 @@ function consolidate_metadata(s::AbstractStore, p)
   s[p, ".zmetadata"] = take!(buf)
   ConsolidatedStore(s, p, d)
 end
+consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{2}) = consolidate_metadata(s, p)
 function consolidate_metadata(s::AbstractStore, p, ::ZarrFormat{3})
   d = consolidate_metadata_v3(s, Dict{String,Any}(), p, p)
   # sort: by depth first, then case-folded name, like in https://github.com/zarr-developers/zarr-python/pull/3288
