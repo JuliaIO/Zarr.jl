@@ -6,6 +6,7 @@ This changelog covers every package in this repository. Version headings follow 
 
 - `consolidate_metadata(g)` of a Zarr v3 group now writes the consolidated metadata into the group's `zarr.json`. Previously it wrote a v2 `.zmetadata` file.
 - `consolidate_metadata(store, "", ZarrFormat(3))` now includes the children of the store root. Previously their paths started with `/`, so they were not found.
+- Fixed opening groups with a `CachingStore`.
 
 ## v0.11.2 - 2026-10-16
 

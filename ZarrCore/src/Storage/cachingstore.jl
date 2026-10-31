@@ -9,8 +9,7 @@ This is useful for large remote datasets where you want to avoid
 re-downloading data on every access, while still benefiting from
 cloud-hosted data.
 
-Like HTTPStore, this store requires consolidated metadata and will be
-wrapped in a ConsolidatedStore when opened via `zopen`.
+Wrap it in a ConsolidatedStore to cache consolidated metadata too.
 
 # Example
 ```julia
@@ -18,7 +17,7 @@ store = CachingStore(
     "https://storage.googleapis.com/some-zarr-store",
     "/path/to/local/cache"
 )
-g = zopen(store)  # automatically wraps in ConsolidatedStore
+g = zopen(store)
 ```
 """
 struct CachingStore{R<:AbstractStore,C<:AbstractStore} <: AbstractStore
@@ -51,9 +50,9 @@ Base.setindex!(s::CachingStore, v, k::AbstractString) = s.cache[k] = v
 # Delete from cache
 Base.delete!(s::CachingStore, k::AbstractString) = delete!(s.cache, k)
 
-# Delegate to cache for discovery (after consolidated metadata is cached)
-subdirs(s::CachingStore, p) = subdirs(s.cache, p)
-subkeys(s::CachingStore, p) = subkeys(s.cache, p)
+# Delegate to remote for discovery
+subdirs(s::CachingStore, p) = subdirs(s.remote, p)
+subkeys(s::CachingStore, p) = subkeys(s.remote, p)
 
 # Storage size from cache
 storagesize(s::CachingStore, p) = storagesize(s.cache, p)
