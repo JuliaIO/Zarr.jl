@@ -1,5 +1,4 @@
-"""
-    ZarrHTTP
+""" ZarrHTTP
 
 HTTP storage and serving support.
 """
@@ -14,12 +13,11 @@ using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore, DirectoryStore
 
 """
     HTTPStore
+    HTTPStore(url::String, [allowed_codes::Set{Int}]; headers)
 
 Read-only HTTP storage. Consolidated metadata is used when available.
 
-    HTTPStore(url, allowed_codes = Set((404,)); headers = Pair{String,String}[])
-
-`headers` are sent with every request, e.g. `["Authorization" => "Bearer \$token"]`.
+- `headers` a `Vector{Pair{String,String}}` sent with every request, e.g. `["Authorization" => "Bearer \$token"]`.
 """
 struct HTTPStore <: AbstractStore
     url::String
@@ -47,8 +45,8 @@ function Base.getindex(s::HTTPStore, k::String)
     end
 end
 
-function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, _)
-    http_store = HTTPStore(s)
+function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, create; kw...)
+    http_store = HTTPStore(s; kw...)
     try
         cs = ConsolidatedStore(http_store, "")
         return cs, ""

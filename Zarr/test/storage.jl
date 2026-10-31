@@ -434,6 +434,17 @@ end
     @test gh2["a"][:,:] == reshape(1:16, 4, 4)
     # Headers can hold credentials, so show must not print them
     @test sprint(show, hsh) == "HTTP Storage"
+    # Headers pass through the URL string constructors
+    gh3 = zopen(urlh; headers = ["Authorization" => "Bearer secret"])
+    @test gh3["a"][:,:] == reshape(1:16, 4, 4)
+    cache_dirh = mktempdir()
+    ch = Zarr.CachingStore(urlh, cache_dirh; headers = ["Authorization" => "Bearer secret"])
+    @test ch.remote.parent.headers == ["Authorization" => "Bearer secret"]
+    gh4 = zopen(Zarr.ConsolidatedStore(ch, ""))
+    @test gh4["a"][:,:] == reshape(1:16, 4, 4)
+    rm(cache_dirh, recursive=true)
+    # Stores without the keyword reject it rather than ignoring it
+    @test_throws MethodError zopen(mktempdir(); headers = ["a" => "b"])
     close(serverh)
   end
 
