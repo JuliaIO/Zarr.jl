@@ -120,23 +120,24 @@ function zopen(s::AbstractStore, mode="r";
 end
 
 """
-    zopen(p::String, mode="r")
+    zopen(p::String, mode="r"; zarr_format=:auto, consolidated=false, fill_as_missing=false, store_kw...)
 
-Open a zarr Array or group at disc path p.
+Open a zarr Array or group at disc path or URL p. Remaining keywords
+`store_kw` are passed to the store constructor, e.g. `headers` for an HTTPStore.
 """
-function zopen(s::String, mode="r"; kwargs...)
-  store, path = storefromstring(s,false)
-  zopen(store, mode; path=path, kwargs...)
+function zopen(s::String, mode="r"; zarr_format=:auto, consolidated=false, fill_as_missing=false, store_kw...)
+  store, path = storefromstring(s, false; store_kw...)
+  zopen(store, mode; zarr_format, consolidated, path, fill_as_missing)
 end
 
-function storefromstring(s, create=true)
+function storefromstring(s, create=true; kw...)
   for (r,t) in storageregexlist
     if match(r,s) !== nothing
-      return storefromstring(t,s,create)
+      return storefromstring(t,s,create; kw...)
     end
   end
   if create || isdir(s)
-    return DirectoryStore(s), ""
+    return DirectoryStore(s; kw...), ""
   else
     throw(ArgumentError("Path $s is not a directory."))
   end

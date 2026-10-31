@@ -16,7 +16,7 @@ All subtypes of `AbstractStore` must implement the following methods:
 - [`subdirs(d::AbstractStore, p::AbstractString)`](@ref subdirs)
 - [`subkeys(d::AbstractStore, p::AbstractString)`](@ref subkeys)
 - [`isinitialized(d::AbstractStore, p::AbstractString)`](@ref isinitialized)
-- [`storefromstring(::Type{<: AbstractStore}, s, _)`](@ref storefromstring)
+- [`storefromstring(::Type{<: AbstractStore}, s, _; kw...)`](@ref storefromstring): keywords are passed on to the store constructor
 - `Base.getindex(d::AbstractStore, i::AbstractString)`: return the data stored in key `i` as a Vector{UInt8}
 - `Base.setindex!(d::AbstractStore, v, i::AbstractString)`: write the values in `v` to the key `i` of the given store `d`
 

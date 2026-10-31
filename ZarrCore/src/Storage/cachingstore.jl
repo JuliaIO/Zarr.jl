@@ -25,8 +25,8 @@ struct CachingStore{R<:AbstractStore,C<:AbstractStore} <: AbstractStore
     cache::C
 end
 
-function CachingStore(url::AbstractString, cache_path::AbstractString)
-    CachingStore(first(storefromstring(url)), first(storefromstring(cache_path)))
+function CachingStore(url::AbstractString, cache_path::AbstractString; kw...)
+    CachingStore(first(storefromstring(url; kw...)), first(storefromstring(cache_path)))
 end
 
 function Base.getindex(s::CachingStore, k::AbstractString)
