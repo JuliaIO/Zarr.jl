@@ -621,6 +621,15 @@ end
   # Test show method
   @test sprint(show, caching_store) == "Caching Storage"
 
+  # Groups list their arrays from the remote, without a ConsolidatedStore
+  g4 = zopen(Zarr.CachingStore("http://127.0.0.1:$port", mktempdir()))
+  @test collect(keys(g4.arrays)) == ["a1"]
+  remote_dir = mktempdir()
+  gd = zgroup(remote_dir)
+  zcreate(Int, gd, "a2", 2, 2)
+  g5 = zopen(Zarr.CachingStore(DirectoryStore(remote_dir), DirectoryStore(mktempdir())))
+  @test collect(keys(g5.arrays)) == ["a2"]
+
   # Stop server
   close(server)
 
