@@ -1,5 +1,4 @@
-"""
-    ZarrHTTP
+""" ZarrHTTP
 
 HTTP storage and serving support.
 """
@@ -14,19 +13,24 @@ using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore, DirectoryStore
 
 """
     HTTPStore
+    HTTPStore(url::String, [allowed_codes::Set{Int}]; headers)
 
 Read-only HTTP storage. Consolidated metadata is used when available.
+
+- `headers` a `Vector{Pair{String,String}}` sent with every request, e.g. `["Authorization" => "Bearer \$token"]`.
 """
 struct HTTPStore <: AbstractStore
     url::String
     allowed_codes::Set{Int}
-    HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
+    headers::Vector{Pair{String,String}}
+    HTTPStore(url, allowed_codes = Set((404,)); headers = Pair{String,String}[]) =
+        new(url, allowed_codes, headers)
 end
 
 Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
 
 function Base.getindex(s::HTTPStore, k::String)
-    r = HTTP.request("GET", string(s.url, "/", k), status_exception = false)
+    r = HTTP.request("GET", string(s.url, "/", k), s.headers; status_exception = false)
     if r.status >= 300
         if r.status in s.allowed_codes
             nothing
@@ -41,8 +45,8 @@ function Base.getindex(s::HTTPStore, k::String)
     end
 end
 
-function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, _)
-    http_store = HTTPStore(s)
+function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, create; kw...)
+    http_store = HTTPStore(s; kw...)
     try
         cs = ConsolidatedStore(http_store, "")
         return cs, ""
