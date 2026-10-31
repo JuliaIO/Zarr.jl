@@ -416,6 +416,25 @@ end
     # ConsolidatedStore wrapping an HTTPStore should compose correctly
     cs = Zarr.ConsolidatedStore(hs, "", Dict{String,Any}())
     @test sprint(show, cs) == "Consolidated HTTP Storage"
+    @test isempty(hs.headers)
+  end
+  @testset "HTTPStore headers" begin
+    sh = Zarr.DictStore()
+    gh = zgroup(sh)
+    ah = zcreate(Int, gh, "a", 4, 4)
+    ah .= reshape(1:16, 4, 4)
+    handler = Zarr.ZarrHTTP.zarr_req_handler(sh, gh.path)
+    authed = req -> HTTP.header(req, "Authorization") == "Bearer secret" ?
+      handler(req) : HTTP.Response(401, "unauthorized")
+    serverh = HTTP.serve!(authed, "127.0.0.1", 0)
+    urlh = "http://127.0.0.1:$(serverh.bound_port)"
+    @test_throws "Received error code 401" Zarr.HTTPStore(urlh)[".zmetadata"]
+    hsh = Zarr.HTTPStore(urlh; headers = ["Authorization" => "Bearer secret"])
+    gh2 = zopen(Zarr.ConsolidatedStore(hsh, ""))
+    @test gh2["a"][:,:] == reshape(1:16, 4, 4)
+    # Headers can hold credentials, so show must not print them
+    @test sprint(show, hsh) == "HTTP Storage"
+    close(serverh)
   end
 
   @testset "missing_chunk_return_code! on HTTPStore" begin
