@@ -739,6 +739,67 @@ end
     @test any(k -> endswith(k, "img/001_000.raw"), keys(store.a))
 end
 
+@testset "ConstantChunkKeyEncoding" begin
+    C = Zarr.ConstantChunkKeyEncoding
+
+    # The key is returned for the (only) chunk at the origin, for any dimensionality,
+    # e.g. a single shard that is a foreign HDF5 or CZI file
+    for key in ("data.h5", "scan.czi", "sub/dir/shard.zarr.zip", "{0}/{*}")  # braces are literal
+        e = C(key)
+        for N in 0:3
+            @test Zarr.citostring(e, CartesianIndex(ntuple(_ -> 1, N))) == key
+            @test Zarr.validate_chunk_key_encoding(e, N, 1) === nothing
+        end
+        @test_throws ArgumentError Zarr.citostring(e, CartesianIndex(1, 2))  # not the only chunk
+        @test_throws ArgumentError Zarr.citostring(e, CartesianIndex(2))
+        @test_throws ArgumentError Zarr.validate_chunk_key_encoding(e, 2, 4)
+    end
+    @test Zarr.validate_chunk_key_encoding(C("data.h5"), 2, 0) === nothing  # empty array
+
+    # Lexical rules
+    @test_throws ArgumentError C("")
+    @test_throws ArgumentError C("/data.h5")
+    @test_throws ArgumentError C("../data.h5")
+    @test_throws ArgumentError C("a//b")
+    @test_throws ArgumentError C("dir/")
+    @test_throws ArgumentError C("a\\b")
+    @test_throws ArgumentError C("zarr.json")
+    @test_throws ArgumentError C("a/zarr.json")
+    @test C("data.h5") == C("data.h5")
+    @test C("data.h5") != C("other.h5")
+
+    # Metadata parsing and serialization
+    mkjson(cke, chunk_shape) = """{"zarr_format":3,"node_type":"array","shape":[4,4],"data_type":"int32",
+        "chunk_grid":{"name":"regular","configuration":{"chunk_shape":$chunk_shape}},
+        "chunk_key_encoding":$cke,
+        "fill_value":0,"codecs":[{"name":"bytes","configuration":{"endian":"little"}}]}"""
+    cke_json = """{"name":"constant","configuration":{"key":"data.h5"}}"""
+    md = ZarrCore.Metadata(mkjson(cke_json, "[4,4]"), false)
+    @test md.chunk_key_encoding isa C
+    @test md.chunk_key_encoding == C("data.h5")
+    @test Zarr.citostring(md.chunk_key_encoding, CartesianIndex(1, 1)) == "data.h5"
+    @test JSON.lower(md)["chunk_key_encoding"] ==
+        Dict("name" => "constant", "configuration" => Dict("key" => "data.h5"))
+    @test ZarrCore.parse_chunk_key_encoding(ZarrCore.lower_chunk_key_encoding(C("a/b.h5"))) == C("a/b.h5")
+    # more than one chunk is rejected when the array is opened
+    @test_throws ArgumentError ZarrCore.Metadata(mkjson(cke_json, "[2,2]"), false)
+    @test_throws ArgumentError ZarrCore.Metadata(mkjson("""{"name":"constant","configuration":{}}""", "[4,4]"), false)
+    @test_throws ArgumentError ZarrCore.Metadata(mkjson("""{"name":"constant"}""", "[4,4]"), false)
+    @test_throws ArgumentError ZarrCore.Metadata(
+        mkjson("""{"name":"constant","configuration":{"key":"/abs"}}""", "[4,4]"), false)
+
+    # Single-shard ZArray round-trip stored under the fixed key
+    store = Zarr.DictStore()
+    pipeline = ZarrCore.V3Pipeline((), Zarr.Codecs.V3Codecs.BytesCodec(), ())
+    cke = C("single/data.bin")
+    md = ZarrCore.MetadataV3{Int32,2,typeof(pipeline),typeof(cke)}(
+        3, "array", (4,4), (4,4), "int32", pipeline, Int32(0), cke)
+    z = Zarr.ZArray(md, store, "", Dict(), true)
+    z[:,:] = reshape(Int32.(1:16), 4, 4)
+    @test z[:,:] == reshape(Int32.(1:16), 4, 4)
+    @test "single/data.bin" in keys(store.a)
+end
+
 @testset "V3 lower3 extended codecs" begin
     # ZstdV3Codec serialization
     json_zstd = """{"zarr_format":3,"node_type":"array","shape":[4],"data_type":"int32",

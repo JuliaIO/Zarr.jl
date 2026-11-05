@@ -72,6 +72,8 @@ values of the chunk coordinate, which is expressed in Zarr (row-major) order:
 - `{1:05}` left-pads the value with zeros to a minimum width of 5
 - `{{` and `}}` are literal braces
 
+For a single chunk stored under a fixed key, see [`ConstantChunkKeyEncoding`](@ref).
+
 A chunk coordinate length the template cannot encode (see [`validate_template`](@ref))
 raises an `ArgumentError`.
 
@@ -193,6 +195,16 @@ function validate_template(e::TemplateChunkKeyEncoding, N::Integer)
     return nothing
 end
 
+"""
+    validate_chunk_key_encoding(e::AbstractChunkKeyEncoding, ndims::Integer, nchunks::Integer)
+
+Throw an `ArgumentError` if `e` cannot address an array with `ndims` dimensions and
+`nchunks` chunks in total. Called when array metadata is parsed so that incongruent
+metadata is rejected when the array is opened. The default method accepts everything.
+"""
+validate_chunk_key_encoding(::AbstractChunkKeyEncoding, ::Integer, ::Integer) = nothing
+validate_chunk_key_encoding(e::TemplateChunkKeyEncoding, N::Integer, ::Integer) = validate_template(e, N)
+
 _template_pad(v::Integer, w::Int) = lpad(string(v), w, '0')
 
 function citostring(e::TemplateChunkKeyEncoding, i::CartesianIndex{N}) where N
@@ -224,6 +236,45 @@ function lower_chunk_key_encoding(e::TemplateChunkKeyEncoding)
     e.separator === nothing || (config["separator"] = e.separator)
     Dict{String,Any}("name" => "template", "configuration" => config)
 end
+
+"""
+    ConstantChunkKeyEncoding(key::AbstractString)
+
+Chunk key encoding that stores the single chunk of an array under a fixed `key`,
+independent of the chunk coordinate. It is meant for arrays consisting of exactly one
+chunk or shard stored as one file, which may be a foreign file such as HDF5 or CZI.
+
+The key is taken literally (no interpolation, braces are not special). It must not begin
+or end with `/` and must not contain `..`, `\\`, `\\0`, `//` or `zarr.json`.
+
+Only the chunk at the origin can be addressed; any other chunk raises an `ArgumentError`,
+and [`validate_chunk_key_encoding`](@ref) rejects arrays with more than one chunk when
+metadata is parsed. For arrays with several chunks use [`TemplateChunkKeyEncoding`](@ref).
+"""
+struct ConstantChunkKeyEncoding <: AbstractChunkKeyEncoding
+    key::String
+    function ConstantChunkKeyEncoding(key::AbstractString)
+        isempty(key) && throw(ArgumentError("constant chunk key encoding requires a non-empty key"))
+        _check_chunk_key_literal(key, "constant chunk key \"$key\"")
+        endswith(key, '/') && throw(ArgumentError("constant chunk key \"$key\" must not end with '/'"))
+        new(String(key))
+    end
+end
+
+function validate_chunk_key_encoding(e::ConstantChunkKeyEncoding, ::Integer, nchunks::Integer)
+    nchunks <= 1 || throw(ArgumentError(
+        "constant chunk key \"$(e.key)\" can only address a single chunk, but the array has $nchunks chunks"))
+    return nothing
+end
+
+function citostring(e::ConstantChunkKeyEncoding, i::CartesianIndex)
+    all(isone, Tuple(i)) || throw(ArgumentError(
+        "constant chunk key \"$(e.key)\" can only address the single chunk at the origin, not chunk $(reverse((i - oneunit(i)).I))"))
+    return e.key
+end
+
+lower_chunk_key_encoding(e::ConstantChunkKeyEncoding) =
+    Dict{String,Any}("name" => "constant", "configuration" => Dict{String,Any}("key" => e.key))
 
 """Serialize an `AbstractChunkKeyEncoding` to a JSON-compatible dict."""
 function lower_chunk_key_encoding(e::ChunkKeyEncoding)
@@ -317,6 +368,11 @@ register_chunk_key_encoding("template", TemplateChunkKeyEncoding) do config
     fmt = get(config, "format", get(config, "template", nothing))
     fmt === nothing && throw(ArgumentError("template chunk key encoding requires a \"format\" configuration field"))
     TemplateChunkKeyEncoding(fmt, get(config, "separator", nothing))
+end
+
+register_chunk_key_encoding("constant", ConstantChunkKeyEncoding) do config
+    haskey(config, "key") || throw(ArgumentError("constant chunk key encoding requires a \"key\" configuration field"))
+    ConstantChunkKeyEncoding(config["key"])
 end
 
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s
