@@ -47,6 +47,184 @@ SuffixChunkKeyEncoding(suffix::String; sep::Char='/', prefix::Bool=true) =
 @inline citostring(e::SuffixChunkKeyEncoding, i::CartesianIndex) =
     citostring(e.base_encoding, i) * e.suffix
 
+"""
+A single `{...}` expression of a [`TemplateChunkKeyEncoding`](@ref) format string.
+`index === nothing` denotes the catch-all `{*}`; otherwise `index` is the 0-based
+(or, when negative, from-the-end) position into the Zarr (row-major) chunk coordinate.
+`width` is the minimum zero-padded width (`0` for no padding).
+"""
+struct TemplateExpr
+    index::Union{Int,Nothing}
+    width::Int
+end
+
+"""
+    TemplateChunkKeyEncoding(format::AbstractString, separator=nothing)
+
+Chunk key encoding following the zarr-extensions
+[`template`](https://github.com/zarr-developers/zarr-extensions/tree/main/chunk-key-encodings/template)
+specification. The `format` string contains `{}` expressions that are replaced by
+values of the chunk coordinate, which is expressed in Zarr (row-major) order:
+
+- `{0}`, `{1}`, … index the coordinate from the start; `{-1}`, `{-2}`, … from the end
+- `{*}` inserts all coordinate values not used by another expression, joined by `separator`
+  (required if `{*}` is present, at most one `{*}` is allowed)
+- `{1:05}` left-pads the value with zeros to a minimum width of 5
+- `{{` and `}}` are literal braces
+
+A chunk coordinate length the template cannot encode (see [`validate_template`](@ref))
+raises an `ArgumentError`.
+
+# Examples
+```julia
+e = TemplateChunkKeyEncoding("c/{*}", "/")
+citostring(e, CartesianIndex(3, 2, 1))  # "c/0/1/2"
+```
+"""
+struct TemplateChunkKeyEncoding <: AbstractChunkKeyEncoding
+    format::String
+    separator::Union{String,Nothing}
+    tokens::Vector{Union{String,TemplateExpr}}
+    function TemplateChunkKeyEncoding(format::AbstractString, separator::Union{AbstractString,Nothing}=nothing)
+        tokens = _parse_template(format)
+        nstar = count(t -> t isa TemplateExpr && t.index === nothing, tokens)
+        nstar <= 1 || throw(ArgumentError("template chunk key encoding allows at most one {*}, got $nstar in \"$format\""))
+        if nstar == 1 && separator === nothing
+            throw(ArgumentError("template chunk key encoding with {*} requires a `separator`: \"$format\""))
+        end
+        new(String(format), separator === nothing ? nothing : String(separator), tokens)
+    end
+end
+
+Base.:(==)(a::TemplateChunkKeyEncoding, b::TemplateChunkKeyEncoding) =
+    a.format == b.format && a.separator == b.separator
+Base.hash(a::TemplateChunkKeyEncoding, h::UInt) =
+    hash(a.separator, hash(a.format, hash(:TemplateChunkKeyEncoding, h)))
+
+const _TEMPLATE_EXPR_REGEX = r"^(\*|0|-?[1-9][0-9]*)(?::0([1-9][0-9]*))?$"
+
+function _parse_template(fmt::AbstractString)
+    tokens = Union{String,TemplateExpr}[]
+    lit = IOBuffer()        # pending literal text (unescaped)
+    skeleton = IOBuffer()   # literal text with 'x' standing in for each expression
+    flush_literal() = position(lit) > 0 && push!(tokens, String(take!(lit)))
+    i, n = firstindex(fmt), lastindex(fmt)
+    while i <= n
+        c = fmt[i]
+        j = nextind(fmt, i)
+        if c == '{'
+            if j <= n && fmt[j] == '{'
+                write(lit, '{'); write(skeleton, '{')
+                i = nextind(fmt, j)
+            else
+                k = findnext('}', fmt, j)
+                k === nothing && throw(ArgumentError("unclosed '{' in template \"$fmt\""))
+                body = SubString(fmt, j, prevind(fmt, k))
+                m = match(_TEMPLATE_EXPR_REGEX, body)
+                m === nothing && throw(ArgumentError("invalid template expression {$body} in \"$fmt\""))
+                flush_literal()
+                idx = m.captures[1] == "*" ? nothing : parse(Int, m.captures[1])
+                width = m.captures[2] === nothing ? 0 : parse(Int, m.captures[2])
+                push!(tokens, TemplateExpr(idx, width))
+                write(skeleton, 'x')
+                i = nextind(fmt, k)
+            end
+        elseif c == '}'
+            (j <= n && fmt[j] == '}') ||
+                throw(ArgumentError("unmatched '}' in template \"$fmt\" (use '}}' for a literal brace)"))
+            write(lit, '}'); write(skeleton, '}')
+            i = nextind(fmt, j)
+        else
+            write(lit, c); write(skeleton, c)
+            i = j
+        end
+    end
+    flush_literal()
+    any(t -> t isa TemplateExpr, tokens) ||
+        throw(ArgumentError("template \"$fmt\" must contain at least one {} expression"))
+    _check_chunk_key_literal(String(take!(skeleton)), "template \"$fmt\"")
+    return tokens
+end
+
+# Lexical rules shared by the literal parts of template keys and by constant keys.
+function _check_chunk_key_literal(s::AbstractString, what::AbstractString)
+    startswith(s, '/') && throw(ArgumentError("$what must not begin with '/'"))
+    for bad in ("..", "\\", "\0", "//", "zarr.json")
+        occursin(bad, s) && throw(ArgumentError("$what must not contain $(repr(bad))"))
+    end
+    return nothing
+end
+
+# Validate the template against a coordinate of length `N`; returns a BitVector marking
+# which coordinate positions are referenced by explicit (non-catch-all) expressions.
+function _template_used(e::TemplateChunkKeyEncoding, N::Int)
+    used = falses(N)
+    nstar = 0
+    for t in e.tokens
+        t isa TemplateExpr || continue
+        if t.index === nothing
+            nstar += 1
+            continue
+        end
+        p = t.index >= 0 ? t.index + 1 : N + t.index + 1
+        1 <= p <= N || throw(ArgumentError(
+            "index {$(t.index)} out of range for a chunk coordinate of length $N in template \"$(e.format)\""))
+        used[p] && throw(ArgumentError(
+            "multiple expressions resolve to coordinate position $(p-1) in template \"$(e.format)\" for length $N"))
+        used[p] = true
+    end
+    if nstar == 0
+        all(used) || throw(ArgumentError(
+            "template \"$(e.format)\" does not cover all $N chunk coordinate values (add a {*}?)"))
+    elseif all(used)
+        throw(ArgumentError(
+            "{*} in template \"$(e.format)\" would be populated by 0 values for a chunk coordinate of length $N"))
+    end
+    return used
+end
+
+"""
+    validate_template(e::TemplateChunkKeyEncoding, ndims::Integer)
+
+Throw an `ArgumentError` if the template cannot encode chunk coordinates of length `ndims`.
+"""
+function validate_template(e::TemplateChunkKeyEncoding, N::Integer)
+    _template_used(e, Int(N))
+    return nothing
+end
+
+_template_pad(v::Integer, w::Int) = lpad(string(v), w, '0')
+
+function citostring(e::TemplateChunkKeyEncoding, i::CartesianIndex{N}) where N
+    # Template indices refer to the Zarr (row-major) coordinate
+    coord = reverse((i - oneunit(i)).I)
+    used = _template_used(e, N)
+    io = IOBuffer()
+    for t in e.tokens
+        if t isa String
+            write(io, t)
+        elseif t.index === nothing
+            isfirst = true
+            for k in 1:N
+                used[k] && continue
+                isfirst || write(io, e.separator)
+                isfirst = false
+                write(io, _template_pad(coord[k], t.width))
+            end
+        else
+            p = t.index >= 0 ? t.index + 1 : N + t.index + 1
+            write(io, _template_pad(coord[p], t.width))
+        end
+    end
+    return String(take!(io))
+end
+
+function lower_chunk_key_encoding(e::TemplateChunkKeyEncoding)
+    config = Dict{String,Any}("format" => e.format)
+    e.separator === nothing || (config["separator"] = e.separator)
+    Dict{String,Any}("name" => "template", "configuration" => config)
+end
+
 """Serialize an `AbstractChunkKeyEncoding` to a JSON-compatible dict."""
 function lower_chunk_key_encoding(e::ChunkKeyEncoding)
     Dict{String,Any}(
@@ -132,6 +310,13 @@ register_chunk_key_encoding("suffix", SuffixChunkKeyEncoding) do config
     suffix_str = config["suffix"]
     base = parse_chunk_key_encoding(config["base_encoding"])
     SuffixChunkKeyEncoding(suffix_str, base)
+end
+
+register_chunk_key_encoding("template", TemplateChunkKeyEncoding) do config
+    # The zarr-extensions schema names this field `format`; the README table says `template`.
+    fmt = get(config, "format", get(config, "template", nothing))
+    fmt === nothing && throw(ArgumentError("template chunk key encoding requires a \"format\" configuration field"))
+    TemplateChunkKeyEncoding(fmt, get(config, "separator", nothing))
 end
 
 _concatpath(p,s) = isempty(p) ? s : rstrip(p,'/') * '/' * s

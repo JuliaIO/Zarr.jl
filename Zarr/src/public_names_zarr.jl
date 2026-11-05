@@ -10,7 +10,7 @@ public consolidate_metadata, writezip, missing_chunk_return_code!,
     gcs_credentials
 
 # Chunk key encodings and the registry used to add new ones.
-public ChunkKeyEncoding, SuffixChunkKeyEncoding
+public ChunkKeyEncoding, SuffixChunkKeyEncoding, TemplateChunkKeyEncoding
 
 # Filters and the interface a new filter has to implement, see `?Filter`.
 public Filter, VLenArrayFilter, VLenUTF8Filter, Fletcher32Filter,
