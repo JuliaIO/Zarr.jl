@@ -19,7 +19,8 @@ public subdirs, subkeys, isinitialized, storefromstring,
 
 # Chunk key encodings and the registry used to add new ones.
 public AbstractChunkKeyEncoding, ChunkKeyEncoding, SuffixChunkKeyEncoding,
-    citostring, register_chunk_key_encoding, parse_chunk_key_encoding,
+    TemplateChunkKeyEncoding, validate_template, ConstantChunkKeyEncoding,
+    validate_chunk_key_encoding, citostring, register_chunk_key_encoding, parse_chunk_key_encoding,
     lower_chunk_key_encoding
 
 # Filters and the interface a new filter has to implement, see `?Filter`.

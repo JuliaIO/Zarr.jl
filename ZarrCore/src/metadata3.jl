@@ -274,6 +274,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     TU = (fv === nothing || !fill_as_missing) ? T : Union{T,Missing}
 
     chunk_key_encoding = parse_chunk_key_encoding(chunk_key_encoding)
+    validate_chunk_key_encoding(chunk_key_encoding, N, prod(cld.(shape, chunks); init=1))
     E = typeof(chunk_key_encoding)
 
     # Dimension names: optional, C order in the file (reversed here like shape and

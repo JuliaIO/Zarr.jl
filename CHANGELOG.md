@@ -8,6 +8,8 @@ This changelog covers every package in this repository. Version headings follow 
 - `consolidate_metadata(store, "", ZarrFormat(3))` now includes the children of the store root. Previously their paths started with `/`, so they were not found.
 - Fixed opening groups with a `CachingStore`.
 - `HTTPStore` adds a `headers` keyword to add custom headers to requests.
+- Add `TemplateChunkKeyEncoding` implementing the zarr-extensions [`template`](https://github.com/zarr-developers/zarr-extensions/tree/main/chunk-key-encodings/template) chunk key encoding.
+- Add `ConstantChunkKeyEncoding` (`constant` chunk key encoding) storing the single chunk of an array under a fixed key, e.g. a foreign HDF5 or CZI file.
 
 ## v0.11.2 - 2026-10-16
 
