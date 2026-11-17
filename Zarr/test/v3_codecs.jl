@@ -1397,4 +1397,17 @@ end
     @test_throws ArgumentError zcreate(Float32, Zarr.DictStore(), 8, 6; zarr_format=3, codecs=(V.CRC32cV3Codec(),))
 end
 
+@testset "ShardingCodec constructor rejects variable-size index codecs" begin
+    V3 = Zarr.Codecs.V3Codecs
+    bytes = V3.BytesCodec()
+    blosc = Zarr.BloscV3Codec("lz4", 5, 0, 0, 4)
+    bad_index = V3.V3Pipeline((), bytes, (blosc,))
+    inner = V3.V3Pipeline((), bytes, ())
+    @test_throws ArgumentError V3.ShardingCodec((2,), inner, bad_index, :end)
+    # A nested shard with a bad index pipeline cannot be constructed either
+    @test_throws ArgumentError V3.V3Pipeline((), V3.ShardingCodec((1,), inner, bad_index, :end), ())
+    good = V3.V3Pipeline((), bytes, ())
+    @test V3.ShardingCodec((2,), inner, good, :end) isa V3.ShardingCodec
+end
+
 end # V3 Codecs

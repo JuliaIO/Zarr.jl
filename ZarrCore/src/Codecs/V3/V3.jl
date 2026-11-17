@@ -168,6 +168,13 @@ struct ShardingCodec{N, P1<:AbstractCodecPipeline, P2<:AbstractCodecPipeline} <:
     codecs::P1
     index_codecs::P2
     index_location::Symbol
+    function ShardingCodec(chunk_shape::NTuple{N,Int}, codecs::P1, index_codecs::P2,
+            index_location::Symbol) where {N, P1<:AbstractCodecPipeline, P2<:AbstractCodecPipeline}
+        # Enforce the fixed-size index invariant for every construction path
+        # (JSON parsing, explicit `codecs=`, nested shards).
+        index_codecs isa V3Pipeline && validate_index_pipeline(index_codecs)
+        new{N,P1,P2}(chunk_shape, codecs, index_codecs, index_location)
+    end
 end
 name(::ShardingCodec) = "sharding_indexed"
 
@@ -210,7 +217,6 @@ register_codec("sharding_indexed", ShardingCodec) do config, ctx
     # Index encodes UInt64 offset/nbytes pairs, so use a UInt64-specific context
     index_ctx      = (elsize = sizeof(UInt64),)
     index_pipeline = getCodec(config["index_codecs"], index_ctx)
-    validate_index_pipeline(index_pipeline)
     index_location = Symbol(get(config, "index_location", "end"))
     ShardingCodec(chunk_shape, data_pipeline, index_pipeline, index_location)
 end
