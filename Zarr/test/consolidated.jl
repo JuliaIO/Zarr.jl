@@ -332,6 +332,31 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
       end
   end
 
+  @testset "consolidate_metadata v3 from the store root" begin
+    for s in (Zarr.DirectoryStore(mktempdir()), Zarr.DictStore())
+      g = zgroup(s, "", ZarrCore.ZarrFormat(3))
+      sub = zgroup(g, "sub", attrs=Dict("subatt" => 1))
+      zcreate(Int16, sub, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
+      cs = Zarr.consolidate_metadata(s, "", ZarrCore.ZarrFormat(3))
+      @test collect(keys(cs.cons)) == ["sub", "sub/arr"]
+      @test cs.cons["sub"]["attributes"] == Dict("subatt" => 1)
+      @test cs.cons["sub/arr"]["node_type"] == "array"
+    end
+  end
+
+  @testset "consolidate_metadata of a v3 group" begin
+    dir = mktempdir()
+    g = zgroup(Zarr.DirectoryStore(dir), "", ZarrCore.ZarrFormat(3))
+    zcreate(Int16, g, "arr", 4, chunks=(2,), compressor=Zarr.NoCompressor())
+    cs = Zarr.consolidate_metadata(g)
+    @test cs isa Zarr.ConsolidatedStore
+    @test !isfile(joinpath(dir, ".zmetadata"))
+    root = JSON.parsefile(joinpath(dir, "zarr.json"))
+    @test collect(keys(root["consolidated_metadata"]["metadata"])) == ["arr"]
+    g2 = zopen(dir, consolidated=true)
+    @test g2["arr"] isa ZArray
+  end
+
   @testset "write protection" begin
     s = Zarr.DictStore()
     g = zgroup(s)
@@ -407,6 +432,34 @@ path_v3_julia = joinpath(@__DIR__, "v3_julia", "data.zarr")
     @test g2.attrs == Dict("groupatt" => 5)
     @test g2["a1"].attrs == Dict("arratt" => 2.5)
     @test g2["a1"][:,:] == reshape(1:200, 10, 20)
+  end
+
+  @testset "resize! through a ConsolidatedStore changes nothing" begin
+    # v2
+    dir = joinpath(mktempdir(), "v2.zarr")
+    g = zgroup(dir)
+    a = zcreate(Int, g, "a", 4, 6, chunks=(2, 3), fill_value=0)
+    a[:, :] = reshape(1:24, 4, 6)
+    Zarr.consolidate_metadata(g)
+    chunkfiles = sort(readdir(joinpath(dir, "a")))
+    z = zopen(dir, "w", consolidated=true)["a"]
+    @test_throws ArgumentError resize!(z, 2, 6)
+    @test_throws ArgumentError resize!(z, 6, 6)
+    @test size(z) == (4, 6)
+    @test sort(readdir(joinpath(dir, "a"))) == chunkfiles
+    @test zopen(dir)["a"][:, :] == reshape(1:24, 4, 6)
+
+    # v3: the array's own zarr.json must not drift from the consolidated copy
+    dir = joinpath(mktempdir(), "v3.zarr")
+    cp(joinpath(path_v3_julia, "consolidated"), dir)
+    name = "1d.chunked.i2"
+    before = zopen(dir)[name][:]
+    z = zopen(dir, "w", consolidated=true)[name]
+    @test_throws ArgumentError resize!(z, length(before) - 2)
+    @test_throws ArgumentError resize!(z, length(before) + 4)
+    @test size(z) == size(before)
+    @test zopen(dir)[name][:] == before
+    @test zopen(dir, consolidated=true)[name][:] == before
   end
 
 end

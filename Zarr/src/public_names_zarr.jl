@@ -1,7 +1,7 @@
 # User-facing public API. Extension APIs remain public in their defining package.
 # Parsed by `Zarr` on Julia 1.10; keep only `public` statements and comments.
 
-public zname
+public zname, dimension_names
 
 # Stores
 public DictStore, HTTPStore, ZipStore, CachingStore, ConsolidatedStore
@@ -21,7 +21,7 @@ public Compressor, NoCompressor, BloscCompressor, ZlibCompressor, ZstdCompressor
 
 # v3 codecs
 public Codecs, Codec, V3Codec, BytesCodec, CRC32cCodec, ShardingCodec,
-    TransposeCodec, GzipV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
+    TransposeCodec, GzipV3Codec, ZlibV3Codec, BloscV3Codec, ZstdV3Codec, CRC32cV3Codec,
     VLenUTF8V3Codec
 
 # Data type and fill value encoding

@@ -1,5 +1,4 @@
-"""
-    ZarrHTTP
+""" ZarrHTTP
 
 HTTP storage and serving support.
 """
@@ -9,24 +8,29 @@ using HTTP: HTTP
 
 # Qualify methods that extend ZarrCore generics.
 import ZarrCore
-using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore,
+using ZarrCore: AbstractStore, ZArray, ZGroup, ConsolidatedStore, DirectoryStore, CachingStore,
     ConcurrentRead, concurrent_io_tasks, consolidate_metadata, storageregexlist
 
 """
     HTTPStore
+    HTTPStore(url::String, [allowed_codes::Set{Int}]; headers)
 
 Read-only HTTP storage. Consolidated metadata is used when available.
+
+- `headers` a `Vector{Pair{String,String}}` sent with every request, e.g. `["Authorization" => "Bearer \$token"]`.
 """
 struct HTTPStore <: AbstractStore
     url::String
     allowed_codes::Set{Int}
-    HTTPStore(url, allowed_codes = Set((404,))) = new(url, allowed_codes)
+    headers::Vector{Pair{String,String}}
+    HTTPStore(url, allowed_codes = Set((404,)); headers = Pair{String,String}[]) =
+        new(url, allowed_codes, headers)
 end
 
 Base.show(io::IO, ::HTTPStore) = print(io, "HTTP Storage")
 
 function Base.getindex(s::HTTPStore, k::String)
-    r = HTTP.request("GET", string(s.url, "/", k), status_exception = false)
+    r = HTTP.request("GET", string(s.url, "/", k), s.headers; status_exception = false)
     if r.status >= 300
         if r.status in s.allowed_codes
             nothing
@@ -41,8 +45,8 @@ function Base.getindex(s::HTTPStore, k::String)
     end
 end
 
-function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, _)
-    http_store = HTTPStore(s)
+function ZarrCore.storefromstring(::Type{<:HTTPStore}, s, create; kw...)
+    http_store = HTTPStore(s; kw...)
     try
         cs = ConsolidatedStore(http_store, "")
         return cs, ""
@@ -63,15 +67,61 @@ ZarrCore.store_read_strategy(::HTTPStore) = ConcurrentRead(concurrent_io_tasks[]
 ZarrCore.has_configurable_missing_chunks(::HTTPStore) = true
 
 
+# Reason to refuse serving key `k` below path `p` of store `s`, or `nothing`.
+function invalid_key_reason(s::AbstractStore, p, k)
+  if ".." in split(k, ('/','\\'))
+    return "keys must not contain \"..\" path segments, since they could address data outside the served path"
+  end
+  outside_store_reason(s, p, k)
+end
+
+# Store-specific check that the key stays inside what the store serves.
+outside_store_reason(::AbstractStore, p, k) = nothing
+function outside_store_reason(s::DirectoryStore, p, k)
+  # Check both lexical paths and existing symlink targets against the served
+  # directory. Missing files retain the handler's normal not-found response.
+  root = abspath(joinpath(s.folder, p))
+  path = abspath(joinpath(s.folder, ZarrCore._concatpath(p, k)))
+  reason = "the key resolves to a file outside the served directory"
+  rel = relpath(path, root)
+  (isabspath(rel) || first(splitpath(rel)) == "..") && return reason
+  ispath(path) || return nothing
+  rel = relpath(realpath(path), realpath(root))
+  (isabspath(rel) || first(splitpath(rel)) == "..") ? reason : nothing
+end
+outside_store_reason(s::ConsolidatedStore, p, k) = outside_store_reason(s.parent, p, k)
+function outside_store_reason(s::CachingStore, p, k)
+  reason = outside_store_reason(s.cache, p, k)
+  reason === nothing ? outside_store_reason(s.remote, p, k) : reason
+end
+
+# Apply the same key boundary while discovering and reading metadata to serve.
+struct ServingStore{S<:AbstractStore} <: AbstractStore
+  parent::S
+end
+function Base.getindex(s::ServingStore, k::String)
+  invalid_key_reason(s.parent, "", k) === nothing ? s.parent[k] : nothing
+end
+Base.setindex!(s::ServingStore, value, k::String) = s.parent[k] = value
+function ZarrCore.subdirs(s::ServingStore, p)
+  filter(ZarrCore.subdirs(s.parent, p)) do name
+    invalid_key_reason(s.parent, "", ZarrCore._concatpath(p, name)) === nothing
+  end
+end
+
 # Serve a store through HTTP.
 function zarr_req_handler(s::AbstractStore, p, notfound = 404)
   if s[p,".zmetadata"] === nothing
-    consolidate_metadata(s)
+    consolidate_metadata(ServingStore(s))
   end
   request -> begin
     k = request.target
-    k = lstrip(k,'/')
-    contains("..",k) && return nothing
+    # Stores such as DirectoryStore only index by String, not SubString.
+    k = String(lstrip(k,'/'))
+    reason = invalid_key_reason(s, p, k)
+    if reason !== nothing
+      return HTTP.Response(400, "Error: Invalid request target \"$(request.target)\": $reason")
+    end
     r = s[p,k]
     try
       if r ===  nothing

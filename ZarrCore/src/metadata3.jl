@@ -72,16 +72,35 @@ struct MetadataV3{T,N,P<:AbstractCodecPipeline,E<:AbstractChunkKeyEncoding} <: A
     pipeline::P
     fill_value::Union{T, Nothing}
     chunk_key_encoding::E
-    function MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding) where {T2,N,P,E}
+    # Julia (column-major) order, i.e. dimension_names[i] names size(A, i); `nothing`
+    # marks an unnamed dimension. Reversed to C order when written to zarr.json.
+    dimension_names::Union{Nothing, NTuple{N, Union{Nothing, String}}}
+    function MetadataV3{T2,N,P,E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding, dimension_names=nothing) where {T2,N,P,E}
         zarr_format == 3 || throw(ArgumentError("MetadataV3 only functions if zarr_format == 3"))
         #Do some sanity checks to make sure we have a sane array
         any(<(0), shape) && throw(ArgumentError("Size must be positive"))
         any(<(1), chunks) && throw(ArgumentError("Chunk size must be >= 1 along each dimension"))
-        new{T2,N,P,E}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+        new{T2,N,P,E}(zarr_format, node_type, Base.RefValue{NTuple{N,Int}}(shape), chunks, dtype, pipeline, fill_value, chunk_key_encoding,
+            parse_dimension_names(dimension_names, N))
     end
 end
 MetadataV3{T2,N,P}(args...) where {T2,N,P} = MetadataV3{T2,N,P,ChunkKeyEncoding}(args...)
 zarr_format(::MetadataV3) = ZarrFormat(Val(3))
+
+"""
+    parse_dimension_names(names, N)
+
+Normalize the `dimension_names` of an `N`-dimensional array to either `nothing`
+(all dimensions unnamed) or an `NTuple{N,Union{Nothing,String}}` in which `nothing`
+marks an unnamed dimension, as allowed by the Zarr v3 specification. `names` may be
+any indexable collection of strings and `nothing`s with exactly `N` entries.
+"""
+parse_dimension_names(::Nothing, N) = nothing
+function parse_dimension_names(names, N)
+    names isa AbstractString && throw(ArgumentError("dimension_names must be a collection of names, not the single string $(repr(names))"))
+    length(names) == N || throw(ArgumentError("dimension_names must have one entry per dimension, got $(length(names)) names for $N dimensions"))
+    return ntuple(i -> (n = names[i]; isnothing(n) ? nothing : String(n)), N)
+end
 
 """
 Convenience constructor for MetadataV3 that builds the codec pipeline from
@@ -99,13 +118,14 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
         endian::Symbol=:little,
         compressor=default_compressor(),
         codecs=nothing,
-        chunk_key_encoding::E=ChunkKeyEncoding('/', true)
+        chunk_key_encoding::E=ChunkKeyEncoding('/', true),
+        dimension_names=nothing
     ) where {T2, N, E}
     if codecs !== nothing
         (compressor == default_compressor() && order == 'C' && endian == :little) ||
             throw(ArgumentError("`codecs` cannot be combined with `compressor`, `order`, or `endian`"))
         pipeline = Codecs.V3Codecs._codecs_to_v3pipeline(collect(Codecs.V3Codecs.V3Codec, codecs))
-        return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+        return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding, dimension_names)
     end
     T_base = Base.nonmissingtype(T2)
     array_array_codecs = if order == 'F'
@@ -122,7 +142,7 @@ function MetadataV3{T2,N}(zarr_format, node_type, shape::NTuple{N,Int}, chunks::
     end
     bytes_bytes_codecs = v2_to_v3_codecs(compressor, typesize)
     pipeline = V3Pipeline(array_array_codecs, array_bytes_codec, bytes_bytes_codecs)
-    return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding)
+    return MetadataV3{T2,N,typeof(pipeline),E}(zarr_format, node_type, shape, chunks, dtype, pipeline, fill_value, chunk_key_encoding, dimension_names)
 end
 
 function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
@@ -133,7 +153,8 @@ function Base.:(==)(m1::MetadataV3, m2::MetadataV3)
   m1.dtype == m2.dtype &&
   m1.fill_value == m2.fill_value &&
   m1.pipeline == m2.pipeline &&
-  m1.chunk_key_encoding == m2.chunk_key_encoding
+  m1.chunk_key_encoding == m2.chunk_key_encoding &&
+  m1.dimension_names == m2.dimension_names
 end
 
 """
@@ -267,6 +288,12 @@ function Metadata3(d::AbstractDict, fill_as_missing)
     chunk_key_encoding = parse_chunk_key_encoding(chunk_key_encoding)
     E = typeof(chunk_key_encoding)
 
+    # Dimension names: optional, C order in the file (reversed here like shape and
+    # chunks; the constructor checks the length). A top-level `null` is tolerated
+    # and treated like an absent key (all dimensions unnamed).
+    dimension_names = get(d, "dimension_names", nothing)
+    isnothing(dimension_names) || (dimension_names = reverse(dimension_names))
+
     MetadataV3{TU, N, typeof(pipeline), E}(
         zarr_format,
         node_type,
@@ -276,6 +303,7 @@ function Metadata3(d::AbstractDict, fill_as_missing)
         pipeline,
         fv,
         chunk_key_encoding,
+        dimension_names,
     )
 end
 
@@ -289,7 +317,8 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         filters=nothing,
         codecs=nothing,
         fill_as_missing = false,
-        dimension_separator::Char = '/'
+        dimension_separator::Char = '/',
+        dimension_names=nothing
     ) where {T, N}
     T2 = (fill_value === nothing || !fill_as_missing) ? T : Union{T,Missing}
     if fill_value === nothing
@@ -306,7 +335,8 @@ function Metadata3(A::AbstractArray{T, N}, chunks::NTuple{N, Int};
         endian=endian,
         compressor=compressor,
         codecs=codecs,
-        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, true)
+        chunk_key_encoding=ChunkKeyEncoding(dimension_separator, true),
+        dimension_names=dimension_names
     )
 end
 
@@ -323,7 +353,7 @@ function lower3(md::MetadataV3{T}) where T
 
     codecs = Codecs.V3Codecs._pipeline_to_codec_list(md.pipeline)
 
-    Dict{String, Any}(
+    d = Dict{String, Any}(
         "zarr_format" => Int(md.zarr_format),
         "node_type" => md.node_type,
         "shape" => md.shape[] |> reverse,
@@ -333,6 +363,9 @@ function lower3(md::MetadataV3{T}) where T
         "fill_value" => fill_value_encoding(md.fill_value),
         "codecs" => codecs
     )
+    # Optional per spec; omitted (not null) when all dimensions are unnamed.
+    isnothing(md.dimension_names) || (d["dimension_names"] = collect(Union{Nothing, String}, reverse(md.dimension_names)))
+    return d
 end
 
 function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
@@ -344,7 +377,8 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         filters::F=nothing,
         codecs=nothing,
         fill_as_missing = false,
-        chunk_key_encoding::E=ChunkKeyEncoding('/', true)
+        chunk_key_encoding::E=ChunkKeyEncoding('/', true),
+        dimension_names=nothing
     ) where {T, N, C, F, E}
     return Metadata3(A, chunks;
         node_type=node_type,
@@ -355,7 +389,8 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{3};
         filters=filters,
         codecs=codecs,
         fill_as_missing=fill_as_missing,
-        dimension_separator=chunk_key_encoding.sep
+        dimension_separator=chunk_key_encoding.sep,
+        dimension_names=dimension_names
     )
 end
 

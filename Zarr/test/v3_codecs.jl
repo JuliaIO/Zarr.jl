@@ -122,6 +122,18 @@ end
     @test decoded == data
 end
 
+@testset "ZlibV3Codec" begin
+    codec = Zarr.ZlibV3Codec(1)
+    data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
+    encoded = Zarr.Codecs.V3Codecs.codec_encode(codec, data)
+    @test encoded isa Vector{UInt8}
+    @test Zarr.Codecs.V3Codecs.codec_decode(codec, encoded) == data
+    # zarr-python's spelling, with the `numcodecs.` prefix
+    d = Dict{String,Any}("name" => "numcodecs.zlib", "configuration" => Dict{String,Any}("level" => 1))
+    @test Zarr.Codecs.V3Codecs.getCodec(d) == codec
+    @test JSON.lower(codec) == d
+end
+
 @testset "BloscV3Codec" begin
     codec = Zarr.BloscV3Codec("lz4", 5, 0, 0, 4)
     data = reinterpret(UInt8, Int32[1, 2, 3, 4]) |> collect
@@ -771,6 +783,12 @@ end
         z2 = zopen(store; path="2d.chunked.i2")
         @test z2[:, :] == Int16[1 2; 3 4]
 
+        # dimension_names: zarr.json holds [null, "x"], Julia sees ("x", nothing)
+        z = zopen(store; path="2d.contiguous.named.i2")
+        @test Zarr.dimension_names(z) === ("x", nothing)
+        @test z[:, :] == Int16[1 2; 3 4]
+        @test Zarr.dimension_names(z2) === nothing
+
         # Sharded with index_location=:start — round-trips through Julia
         z = zopen(store; path="1d.chunked.compressed.sharded.indexstart.i2")
         @test z[:] == Int16[10, 20, 30, 40]
@@ -818,6 +836,10 @@ end
 
             arr2d_chunked = pyconvert(Matrix{Int16}, np.array(g["2d.chunked.i2"]))
             @test arr2d_chunked == Int16[1 3; 2 4]
+
+            # dimension_names written by Julia are seen in the file's C order
+            @test pyconvert(Any, g["2d.contiguous.named.i2"].metadata.dimension_names) == (nothing, "x")
+            @test pyconvert(Any, g["2d.contiguous.i2"].metadata.dimension_names) === nothing
         end
 
         @testset "3D arrays" begin
@@ -922,6 +944,15 @@ end
     else
         store = Zarr.DirectoryStore(fixture_path)
 
+        @testset "dimension_names" begin
+            # written by zarr-python as (None, "x"), read in Julia order;
+            # the C-order data [[1,2],[3,4]] is the transpose in Julia
+            z = zopen(store; path="2d.contiguous.named.i2")
+            @test Zarr.dimension_names(z) === ("x", nothing)
+            @test z[:, :] == Int16[1 3; 2 4]
+            @test Zarr.dimension_names(zopen(store; path="2d.contiguous.i2")) === nothing
+        end
+
         @testset "1D contiguous arrays" begin
             # gzip compressed
             z = zopen(store; path="1d.contiguous.gzip.i2")
@@ -931,6 +962,10 @@ end
 
             # blosc compressed
             z = zopen(store; path="1d.contiguous.blosc.i2")
+            @test z[:] == Int16[1, 2, 3, 4]
+
+            # numcodecs.zlib, which zarr-python writes for a v2 zlib compressor
+            z = zopen(store; path="1d.contiguous.zlib.i2")
             @test z[:] == Int16[1, 2, 3, 4]
 
             # "raw" — actually zstd in modern Python zarr v3

@@ -1,17 +1,42 @@
 # Changelog
 
+This changelog covers every package in this repository. Version headings follow `Zarr.jl` releases.
+
 ## Unreleased
-- Move all packages to sibling top-level directories and make the root project workspace-only.
-- Move code to ZarrCore.jl with low dependencies
-- Move HTTP, GCS, S3, and ZIP backends into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`.
-- Move Blosc, zlib, and Zstandard support into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`; each provides its v2 compressor and v3 codec.
-- Loading `ZarrBlosc` makes `default_compressor()` return `BloscCompressor()`; bare `ZarrCore` returns `NoCompressor()`.
-- Register external compressors, codecs, and URL stores at load time. URL patterns are matched by specificity.
-- AWSS3 remains an optional dependency of `ZarrS3`.
-- Make `missing_chunk_return_code!` and `gcs_credentials` public. Stop exposing
-  `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` through `Zarr`.
-- Declare an explicit public API [#317](https://github.com/JuliaIO/Zarr.jl/pull/317). Every store, codec, filter and compressor type, and every documented extension point, is now `public`; the set of exported names is unchanged. Internals (`Metadata`, `ZarrFormat`, `is_zarray`, `is_zgroup`, `normalize_path`, `MaxLengthString`, ...) are no longer reachable as `Zarr.x` and must be accessed via `Zarr.ZarrCore.x`
-- Fixed `fill_as_missing=true` on zarr v3 arrays, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}` when decoding an initialized chunk.
+
+- `consolidate_metadata(g)` of a Zarr v3 group now writes the consolidated metadata into the group's `zarr.json`. Previously it wrote a v2 `.zmetadata` file.
+- `consolidate_metadata(store, "", ZarrFormat(3))` now includes the children of the store root. Previously their paths started with `/`, so they were not found.
+- Fixed opening groups with a `CachingStore`.
+- `HTTPStore` adds a `headers` keyword to add custom headers to requests.
+- `zcreate` adds a `codecs` keyword (Zarr v3 only) to supply an explicit codec pipeline. `ShardingCodec` now validates in its constructor that its index codecs are fixed-size.
+
+## v0.11.2 - 2026-10-16
+
+- Zarr v3 arrays that zarr-python wrote with a zlib compressor, as the `numcodecs.zlib` codec, can now be read, and `ZarrZlib.ZlibV3Codec` writes that codec. [#360](https://github.com/JuliaIO/Zarr.jl/pull/360)
+- `zarr_format` is now supported for `ZGroup`, returning the group's Zarr format. [#359](https://github.com/JuliaIO/Zarr.jl/pull/359)
+- `ZarrCore` is bumped to 0.11.2 to release the `zarr_format(::ZGroup)` support. [#362](https://github.com/JuliaIO/Zarr.jl/pull/362)
+- `ZarrZlib` is bumped to 0.11.1 to release `ZlibV3Codec` and `numcodecs.zlib` support. [#362](https://github.com/JuliaIO/Zarr.jl/pull/362)
+
+## v0.11.1 - 2026-10-07
+
+- Zarr v3 arrays can now store dimension names. Pass `dimension_names=("x", "y")` to `zcreate` and read them back with `dimension_names(z)`, so arrays written by Zarr.jl open with named dimensions in xarray. Give names in Julia's dimension order, and use `nothing` for an unnamed dimension. [#345](https://github.com/JuliaIO/Zarr.jl/pull/345), fixes [#319](https://github.com/JuliaIO/Zarr.jl/issues/319)
+- `resize!` and `append!` now throw an error on read-only arrays instead of rewriting the stored metadata and deleting chunks. Resizing through a consolidated store now fails without changing the array, for both Zarr v2 and v3. [#342](https://github.com/JuliaIO/Zarr.jl/pull/342)
+- Integer arrays using `DeltaFilter` now round-trip correctly when values wrap around the type's limits, such as `Int8[-128, 127, -128]`. [#336](https://github.com/JuliaIO/Zarr.jl/pull/336), fixes [#335](https://github.com/JuliaIO/Zarr.jl/issues/335)
+- Zarr v2 arrays that use the `shuffle` or `fletcher32` filter with element types wider than one byte can now be read. Previously they could be written, but reading them threw a `BoundsError`. [#354](https://github.com/JuliaIO/Zarr.jl/pull/354)
+- `ZarrHTTP` can now serve a `DirectoryStore` from its root path. It also rejects requests for files outside the served directory, including `..` paths and symlinks that point elsewhere, with a `400` response that explains why. [#344](https://github.com/JuliaIO/Zarr.jl/pull/344)
+- `ZarrCore` is bumped to 0.11.1 to release the `ZarrCore` changes above. [#356](https://github.com/JuliaIO/Zarr.jl/pull/356)
+
+## v0.11.0 - 2026-10-06
+
+Zarr.jl is now split into several smaller packages. `using Zarr` still loads all of them, so most code needs no changes.
+
+- The core array, group, metadata, and storage code now lives in the new lightweight `ZarrCore` package. [#317](https://github.com/JuliaIO/Zarr.jl/pull/317)
+- The HTTP, GCS, S3, and ZIP storage backends moved into `ZarrHTTP`, `ZarrGCS`, `ZarrS3`, and `ZarrZip`. AWSS3 is still an optional dependency of `ZarrS3`. [#330](https://github.com/JuliaIO/Zarr.jl/pull/330)
+- Blosc, zlib, and Zstandard support moved into `ZarrBlosc`, `ZarrZlib`, and `ZarrZstd`. Each package provides both the Zarr v2 compressor and the Zarr v3 codec. Blosc is the default compressor when `ZarrBlosc` is loaded; with `ZarrCore` alone, data is stored uncompressed by default. [#330](https://github.com/JuliaIO/Zarr.jl/pull/330)
+- Compressors, codecs, and URL-based stores register themselves when their package loads. If several URL patterns match, the most specific one is used. To turn off automatic registration, set `RegisterAtInit = false` for `ZarrCore` in `LocalPreferences.toml` and call each package's `register!()` yourself. [#330](https://github.com/JuliaIO/Zarr.jl/pull/330)
+- Zarr.jl now declares an explicit public API. Exported names are unchanged. Store, codec, filter, and compressor types, documented extension points, `missing_chunk_return_code!`, and `gcs_credentials` are public. Internal names such as `Metadata` and `ZarrFormat` are no longer available as `Zarr.x`; use `Zarr.ZarrCore.x` instead. `DateTime64`, `PermanentZarrCache`, `BloscCodec`, and `GzipCodec` are no longer accessible through `Zarr`. [#317](https://github.com/JuliaIO/Zarr.jl/pull/317), [#330](https://github.com/JuliaIO/Zarr.jl/pull/330)
+- Fixed reading Zarr v3 arrays opened with `fill_as_missing=true`, which threw `cannot reinterpret UInt8 as Union{Missing,Float64}`. [#333](https://github.com/JuliaIO/Zarr.jl/pull/333)
+- For contributors: each package now lives in its own top-level directory, and the root project is a Julia workspace. [#339](https://github.com/JuliaIO/Zarr.jl/pull/339)
 
 ## v0.10.2 - 2026-08-19
 

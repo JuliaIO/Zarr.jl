@@ -15,6 +15,7 @@
     codec_types = Dict(
         "blosc" => Zarr.BloscV3Codec,
         "gzip" => Zarr.GzipV3Codec,
+        "zlib" => Zarr.ZlibV3Codec,
         "zstd" => Zarr.ZstdV3Codec,
     )
     url_types = Dict(

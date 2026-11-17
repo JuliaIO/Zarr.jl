@@ -1,6 +1,6 @@
 name = "ZarrZlib"
 uuid = "5ee7c756-6ac8-46ad-a53f-994846513443"
-version = "0.11.0"
+version = "0.11.1"
 authors = ["Fabian Gans <fgans@bgc-jena.mpg.de>"]
 
 [deps]
