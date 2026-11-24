@@ -177,10 +177,12 @@ function Metadata(A::AbstractArray{T,N}, chunks::NTuple{N,Int}, ::ZarrFormat{2};
         fill_value::Union{T, Nothing}=nothing,
         order::Char='C',
         filters::F=nothing,
+        codecs=nothing,
         fill_as_missing = false,
         chunk_key_encoding=ChunkKeyEncoding('.', false),
         dimension_names=nothing
     ) where {T, N, C, F}
+    codecs === nothing || throw(ArgumentError("`codecs` is only supported for Zarr v3; use `compressor` and `filters` for v2"))
     isnothing(dimension_names) || throw(ArgumentError(
         "dimension_names is a Zarr v3 metadata field and has no equivalent in Zarr v2; " *
         "use zarr_format=3, or store them as an attribute (xarray uses `_ARRAY_DIMENSIONS`)"))

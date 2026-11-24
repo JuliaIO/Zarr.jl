@@ -8,6 +8,7 @@ This changelog covers every package in this repository. Version headings follow 
 - `consolidate_metadata(store, "", ZarrFormat(3))` now includes the children of the store root. Previously their paths started with `/`, so they were not found.
 - Fixed opening groups with a `CachingStore`.
 - `HTTPStore` adds a `headers` keyword to add custom headers to requests.
+- `zcreate` adds a `codecs` keyword (Zarr v3 only) to supply an explicit codec pipeline. `ShardingCodec` now validates in its constructor that its index codecs are fixed-size.
 
 ## v0.11.2 - 2026-10-16
 
